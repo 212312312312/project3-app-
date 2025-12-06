@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <fragment
+        android:id="@+id/map"
+        android:name="com.google.android.gms.maps.SupportMapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/btn_back_card"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="6dp"
+        app:cardBackgroundColor="@color/card_background"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground">
+
+        <ImageView
+            android:id="@+id/btn_back"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="12dp"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="@color/text_primary"/>
+    </androidx.cardview.widget.CardView>
+
+    <ImageView
+        android:id="@+id/pin_shadow"
+        android:layout_width="32dp"
+        android:layout_height="16dp"
+        android:src="@drawable/ic_pin_shadow"
+        android:layout_centerInParent="true"
+        android:alpha="0.5"
+        android:layout_marginTop="4dp"/>
+
+    <ImageView
+        android:id="@+id/center_pin"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:src="@drawable/ic_avatar_custom" 
+        android:layout_centerInParent="true"
+        android:translationY="-32dp" 
+        android:elevation="4dp"
+        app:tint="@color/taxi_yellow"/> 
+
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="@color/card_background">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ОБРАНА ТОЧКА"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/tv_address_result"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Пошук адреси..."
+                android:textSize="18sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:layout_marginTop="4dp"
+                android:maxLines="2"
+                android:ellipsize="end"/>
+
+            <Button
+                android:id="@+id/btn_confirm_location"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Підтвердити адресу"
+                android:layout_marginTop="16dp"
+                android:textColor="@color/taxi_text_dark"
+                android:textStyle="bold"
+                android:backgroundTint="@color/taxi_yellow"/>
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</RelativeLayout>

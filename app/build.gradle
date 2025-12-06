@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'kotlin-kapt'
+}
+
+android {
+    namespace 'com.taxiapp.client'
+    compileSdk {
+        version = release(36)
+    }
+
+    defaultConfig {
+        applicationId "com.taxiapp.client"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+}
+
+dependencies {
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+    implementation libs.androidx.core.ktx
+    implementation libs.androidx.appcompat
+    implementation libs.material // Это уже было
+    implementation libs.androidx.activity
+    implementation libs.androidx.constraintlayout
+    implementation libs.google.maps.services
+    // --- НАШИ НОВЫЕ СТРОКИ (используем псевдонимы из toml) ---
+    implementation libs.google.material
+    implementation libs.squareup.retrofit
+    implementation libs.squareup.retrofit.converter.gson
+    implementation libs.google.gms.maps
+    implementation libs.google.libraries.places
+    implementation libs.google.maps.utils
+    implementation libs.androidx.recyclerview
+    implementation libs.google.glide
+    implementation 'com.google.android.gms:play-services-location:21.1.0'
+    annotationProcessor libs.google.glide.compiler
+
+    testImplementation libs.junit
+    androidTestImplementation libs.androidx.junit
+    androidTestImplementation libs.androidx.espresso.core
+}

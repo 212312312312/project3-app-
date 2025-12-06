@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    android:layout_marginHorizontal="4dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="4dp"
+    app:cardBackgroundColor="?attr/colorSurface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginEnd="16dp">
+
+            <TextView
+                android:id="@+id/tv_promo_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Активний Райдер"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"/>
+
+            <TextView
+                android:id="@+id/tv_promo_desc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Зроби 5 поїздок"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="4dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="12dp">
+                
+                <ProgressBar
+                    android:id="@+id/pb_promo_progress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="8dp"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progress="60"
+                    android:progressDrawable="@drawable/bg_progress_rounded" /> 
+                    <TextView
+                    android:id="@+id/tv_promo_progress_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="3/5"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/taxi_yellow"
+                    android:layout_marginStart="12dp"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            app:cardCornerRadius="32dp"
+            app:cardBackgroundColor="@color/taxi_yellow"
+            app:cardElevation="0dp">
+            
+            <TextView
+                android:id="@+id/tv_discount_percent"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="15%"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/taxi_text_dark"
+                android:gravity="center"/>
+        </androidx.cardview.widget.CardView>
+
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

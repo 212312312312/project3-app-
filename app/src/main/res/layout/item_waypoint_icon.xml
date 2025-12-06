@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="48dp"
+    android:layout_height="51dp">
+
+    <View android:layout_width="2dp" android:layout_height="19dp" android:layout_gravity="top|center_horizontal" android:background="@drawable/bg_dotted_line" android:layerType="software"/>
+    <View android:layout_width="2dp" android:layout_height="19dp" android:layout_gravity="bottom|center_horizontal" android:background="@drawable/bg_dotted_line" android:layerType="software"/>
+    <ImageView android:layout_width="12dp" android:layout_height="12dp" android:layout_gravity="center" android:src="@drawable/ic_marker_waypoint"/> 
+</FrameLayout>

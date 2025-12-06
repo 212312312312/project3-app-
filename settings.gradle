@@ -1,0 +1,17 @@
+pluginManagement {
+    repositories {
+        google() // <-- Убедитесь, что это ЕСТЬ
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google() // <-- И ЭТО САМОЕ ВАЖНОЕ
+        mavenCentral()
+    }
+}
+
+rootProject.name = "Client-App"
+include ':app'

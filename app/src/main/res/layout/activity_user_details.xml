@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/page_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="40dp">
+            
+            <ImageView
+                android:id="@+id/btn_back"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_menu_revert"
+                app:tint="@color/text_primary"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Мій профіль"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_centerInParent="true"/>
+        </RelativeLayout>
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:layout_gravity="center_horizontal"
+            app:cardCornerRadius="50dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="#E0E0E0"
+            android:layout_marginBottom="24dp">
+            
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_avatar_placeholder"
+                android:padding="20dp"
+                app:tint="#9E9E9E"/>
+        </androidx.cardview.widget.CardView>
+
+        <EditText
+            android:id="@+id/et_user_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@null"
+            android:hint="Ваше ім'я"
+            android:text="Райдер"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp"
+            android:inputType="textPersonName|textCapWords"/>
+
+        <TextView
+            android:id="@+id/tv_user_phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="+380 XX XXX XX XX"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp"
+            android:gravity="center"/>
+
+        <Space 
+            android:layout_width="match_parent" 
+            android:layout_height="0dp" 
+            android:layout_weight="1"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_logout"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="Вийти з акаунту"
+            android:backgroundTint="@android:color/transparent"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            app:cornerRadius="16dp"
+            app:strokeWidth="0dp"
+            android:stateListAnimator="@null"/>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E0E0E0"
+            android:layout_marginHorizontal="24dp"
+            android:layout_marginVertical="4dp"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_delete_account"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="Видалити акаунт"
+            android:backgroundTint="@android:color/transparent"
+            android:textColor="#FF5252"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            app:cornerRadius="16dp"
+            app:strokeWidth="0dp"
+            android:stateListAnimator="@null"
+            android:layout_marginBottom="16dp"/>
+
+    </LinearLayout>
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/custom_toast_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|top" 
+        android:layout_marginTop="60dp"
+        
+        app:cardBackgroundColor="@color/toast_background"
+        app:cardCornerRadius="30dp"
+        app:cardElevation="20dp"
+        
+        android:outlineSpotShadowColor="@color/toast_shadow"
+        android:outlineAmbientShadowColor="@color/toast_shadow"
+        tools:targetApi="p"
+        
+        android:visibility="invisible"
+        android:translationY="-200dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="16dp"
+            android:paddingHorizontal="28dp"
+            android:minWidth="200dp">
+
+            <ImageView
+                android:id="@+id/iv_toast_icon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_alert_circle"
+                app:tint="@color/taxi_yellow"/>
+
+            <TextView
+                android:id="@+id/tv_toast_message"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="Повідомлення"
+                android:textColor="@color/toast_text"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:maxWidth="300dp"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+</FrameLayout>

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" 
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="match_parent"
+            android:background="@color/unified_column_bg"> <View
+                android:layout_width="2dp"
+                android:layout_height="25dp"
+                android:layout_gravity="top|center_horizontal"
+                android:background="@drawable/bg_dotted_line"
+                android:layerType="software"/>
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="25dp"
+                android:layout_gravity="bottom|center_horizontal"
+                android:background="@drawable/bg_dotted_line"
+                android:layerType="software"/>
+
+            <ImageView
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_marker_waypoint"/>
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_input_unified"
+            android:addStatesFromChildren="true">
+
+            <EditText
+                android:id="@+id/et_waypoint"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@null"
+                android:paddingHorizontal="12dp"
+                android:hint="Зупинка"
+                android:textColorHint="@color/text_hint"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:imeOptions="actionNext"
+                android:inputType="textNoSuggestions"/>
+
+            <ImageView
+                android:id="@+id/btn_remove_waypoint"
+                android:layout_width="48dp"
+                android:layout_height="50dp"
+                android:src="@drawable/ic_close_small"
+                android:padding="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                app:tint="?attr/colorOnSurface"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</LinearLayout>

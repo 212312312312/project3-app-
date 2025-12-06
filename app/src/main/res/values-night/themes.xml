@@ -1,0 +1,21 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.ClientApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#FACC15</item> <item name="colorPrimaryVariant">#EAB308</item>
+        <item name="colorOnPrimary">#222426</item>
+
+        <item name="android:windowBackground">#222426</item>
+        <item name="colorSurface">#2C2E30</item> <item name="colorOnSurface">#F3F4F6</item> <item name="android:statusBarColor">#222426</item>
+        <item name="android:windowLightStatusBar">false</item> </style>
+
+    <style name="OtpBox">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/bg_otp_box</item>
+        <item name="android:gravity">center</item>
+        <item name="android:inputType">number</item>
+        <item name="android:maxLength">1</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">#FFFFFF</item> </style>
+</resources>
