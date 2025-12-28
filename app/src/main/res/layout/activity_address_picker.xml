@@ -40,6 +40,7 @@
                     android:orientation="vertical">
 
                     <LinearLayout
+                        android:id="@+id/container_origin_layout"
                         android:layout_width="match_parent"
                         android:layout_height="50dp"
                         android:orientation="horizontal">
@@ -102,6 +103,7 @@
                                 android:layerType="software"/>
                                 
                             <ImageView
+                                android:id="@+id/iv_dest_icon"
                                 android:layout_width="16dp"
                                 android:layout_height="16dp"
                                 android:src="@drawable/ic_marker_to"

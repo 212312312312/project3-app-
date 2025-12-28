@@ -114,12 +114,17 @@ class FavoriteAddressesActivity : AppCompatActivity() {
 
     private fun openPicker() {
         val intent = Intent(this, AddressPickerActivity::class.java)
-        // Тут isOrigin=false (тобто "Куди"), але це не важливо, бо ми просто беремо адресу
-        intent.putExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, false)
-        // Ховаємо кнопку "Моє місцезнаходження" (для дому це не треба)
+
+        // --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
+        // Передаем правильный режим
+        if (isEditingHome) {
+            intent.putExtra(AddressPickerActivity.EXTRA_PICKER_MODE, AddressPickerActivity.MODE_SAVE_HOME)
+        } else {
+            intent.putExtra(AddressPickerActivity.EXTRA_PICKER_MODE, AddressPickerActivity.MODE_SAVE_WORK)
+        }
+
         intent.putExtra(AddressPickerActivity.EXTRA_HIDE_MY_LOCATION, true)
 
-        // Передаємо місто для фокусу карти
         val currentCity = sessionManager.fetchUserCity()
         if (currentCity != null) {
             intent.putExtra("city_lat", currentCity.lat)

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@drawable/rounded_dialog_bg">
+
+    <TextView
+        android:id="@+id/tv_sheet_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Назва акції"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="@color/text_primary" 
+        android:gravity="center"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/tv_sheet_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Опис завдання"
+        android:textSize="16sp"
+        android:textColor="#808080"
+        android:gravity="center"
+        android:layout_marginBottom="24dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/rounded_dialog_bg"
+        android:backgroundTint="@color/menu_background_color" 
+        android:padding="16dp"
+        android:layout_marginBottom="24dp"
+        android:weightSum="2"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+            
+            <TextView 
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ваша знижка" 
+                android:textSize="13sp" 
+                android:textColor="@color/text_primary"
+                android:alpha="0.6"/>
+            
+            <TextView 
+                android:id="@+id/tv_sheet_percent" 
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="15%" 
+                android:textSize="26sp" 
+                android:textStyle="bold" 
+                android:textColor="@color/text_primary"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView 
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Не більше ніж" 
+                android:textSize="13sp" 
+                android:textColor="@color/text_primary"
+                android:alpha="0.6"/>
+                
+            <TextView 
+                android:id="@+id/tv_sheet_limit" 
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="без ліміту" 
+                android:textSize="26sp" 
+                android:textStyle="bold" 
+                android:textColor="@color/text_primary"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_sheet_expires"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Діє до: Безстроково"
+        android:textSize="14sp"
+        android:textColor="#808080"
+        android:gravity="center"
+        android:layout_marginBottom="24dp"/>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_sheet_close"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Зрозуміло"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@color/text_primary"
+        android:minHeight="56dp"
+        app:backgroundTint="@color/menu_background_color"
+        app:cornerRadius="16dp"
+        app:elevation="0dp"
+        app:strokeWidth="0dp"/> 
+
+</LinearLayout>

@@ -1,8 +1,8 @@
 package com.taxiapp.client
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
+import android.graphics.Color
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
@@ -18,10 +18,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
+import com.google.firebase.messaging.FirebaseMessaging
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.MessageResponse
 import com.taxiapp.client.network.dto.LoginResponseDto
@@ -48,11 +48,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnVerify: Button
     private lateinit var tvSmsSubtitle: TextView
     private lateinit var tvResendCode: TextView
-    
-    // Ячейки кода
     private lateinit var otpEdits: List<EditText>
 
-    // --- ЗМІННІ ДЛЯ КАСТОМНОГО ПОВІДОМЛЕННЯ ---
+    // Toast
     private lateinit var customToastContainer: CardView
     private lateinit var tvToastMessage: TextView
     private lateinit var ivToastIcon: ImageView
@@ -65,20 +63,20 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        try { ViewUtils.makeImmersive(this) } catch (e: Exception) { e.printStackTrace() }
-        
         sessionManager = SessionManager(applicationContext)
+        
+        // Якщо користувач вже залогінений -> відразу додому
         if (sessionManager.fetchAuthToken() != null) {
+            updateFcmTokenOnServer()
             goToHomeActivity()
             return
         }
 
         setContentView(R.layout.activity_main)
+        try { ViewUtils.makeImmersive(this) } catch (e: Exception) { e.printStackTrace() }
 
-        // Инициализация View
         initUI()
 
-        // 1. Кнопка "Продолжить"
         btnGetCode.setOnClickListener {
             val rawNumber = etPhoneNumber.text.toString()
             if (rawNumber.length != 9) {
@@ -89,7 +87,6 @@ class MainActivity : AppCompatActivity() {
             requestSms(fullPhoneNumber)
         }
         
-        // 2. Кнопка "Войти" (SMS)
         btnVerify.setOnClickListener {
             val code = otpEdits.joinToString("") { it.text.toString() }
             if (code.length != 6) {
@@ -99,37 +96,75 @@ class MainActivity : AppCompatActivity() {
             verifySms(fullPhoneNumber, code)
         }
         
-        // 3. Повторная отправка
-        tvResendCode.setOnClickListener {
-            requestSms(fullPhoneNumber) 
-        }
+        tvResendCode.setOnClickListener { requestSms(fullPhoneNumber) }
         
         setupOtpInputs()
     }
+    
+    private fun verifySms(phone: String, code: String) {
+        setLoading(true)
+        val request = SmsVerifyDto(phoneNumber = phone, code = code)
+        
+        ApiClient.instance.verifySmsCode(request).enqueue(object : Callback<LoginResponseDto> {
+            override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
+                setLoading(false)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    val token = body?.token
+                    if (token != null) {
+                        sessionManager.saveAuthToken(token)
+                        sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
+                        resendTimer?.cancel()
+                        updateFcmTokenOnServer()
+                        
+                        // Просто перевіряємо, куди йти. Ніяких діалогів тут.
+                        checkWhereToGo(body.isNewUser)
+                    } else {
+                        showToast("Помилка сервера")
+                    }
+                } else {
+                    showToast("Невірний код")
+                    otpEdits.forEach { it.text.clear() }
+                    otpEdits[0].requestFocus()
+                }
+            }
+            override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
+                setLoading(false)
+                showToast("Помилка мережі: ${t.message}")
+            }
+        })
+    }
+
+    private fun checkWhereToGo(isNewUser: Boolean) {
+        if (isNewUser) {
+            goToAgreementActivity()
+        } else {
+            goToHomeActivity()
+        }
+    }
+    
+    // ... (initUI, onDestroy, startResendTimer, setupOtpInputs, requestSms, updateFcmTokenOnServer, showSmsScreen, setLoading, goToHomeActivity, goToAgreementActivity, showTopMessage, hideTopMessage, showToast)
+    // Весь цей код залишається таким самим, як був у попередній версії, я його скоротив для зручності читання,
+    // але переконайтеся, що ви не видалили методи initUI та інші допоміжні функції.
     
     private fun initUI() {
         layoutPhone = findViewById(R.id.layout_phone_input)
         layoutSms = findViewById(R.id.layout_sms_verify)
         progressBar = findViewById(R.id.progress_bar)
-        
         etPhoneNumber = findViewById(R.id.et_phone_number)
         btnGetCode = findViewById(R.id.btn_get_code)
-        
         btnVerify = findViewById(R.id.btn_verify)
         tvSmsSubtitle = findViewById(R.id.tv_sms_subtitle)
         tvResendCode = findViewById(R.id.tv_resend_code)
-
         otpEdits = listOf(
             findViewById(R.id.otp_1), findViewById(R.id.otp_2), findViewById(R.id.otp_3),
             findViewById(R.id.otp_4), findViewById(R.id.otp_5), findViewById(R.id.otp_6)
         )
-
-        // --- ІНІЦІАЛІЗАЦІЯ ПОВІДОМЛЕННЯ ---
         customToastContainer = findViewById(R.id.custom_toast_container)
         tvToastMessage = findViewById(R.id.tv_toast_message)
         ivToastIcon = findViewById(R.id.iv_toast_icon)
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
         resendTimer?.cancel()
@@ -145,7 +180,6 @@ class MainActivity : AppCompatActivity() {
                 val seconds = millisUntilFinished / 1000
                 tvResendCode.text = "Відправити повторно через $seconds"
             }
-
             override fun onFinish() {
                 tvResendCode.text = "Відправити повторно"
                 tvResendCode.isClickable = true
@@ -183,7 +217,6 @@ class MainActivity : AppCompatActivity() {
     private fun requestSms(phone: String) {
         setLoading(true)
         val request = SmsRequestDto(phoneNumber = phone)
-        
         ApiClient.instance.requestSmsCode(request).enqueue(object : Callback<MessageResponse> {
             override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
                 setLoading(false)
@@ -192,11 +225,8 @@ class MainActivity : AppCompatActivity() {
                     showToast("Код надіслано!")
                     startResendTimer() 
                 } else {
-                    if (response.code() == 403) {
-                         showToast("Доступ заборонено (Блок/Бан)")
-                    } else {
-                         showToast("Помилка: ${response.message()}") 
-                    }
+                    if (response.code() == 403) showToast("Доступ заборонено (Блок/Бан)")
+                    else showToast("Помилка: ${response.message()}") 
                 }
             }
             override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
@@ -206,40 +236,17 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun verifySms(phone: String, code: String) {
-        setLoading(true)
-        val request = SmsVerifyDto(phoneNumber = phone, code = code)
-        
-        ApiClient.instance.verifySmsCode(request).enqueue(object : Callback<LoginResponseDto> {
-            override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
-                setLoading(false)
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    val token = body?.token
-                    if (token != null) {
-                        sessionManager.saveAuthToken(token)
-                        sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
-                        resendTimer?.cancel()
-                        
-                        if (body.isNewUser) {
-                            goToAgreementActivity()
-                        } else {
-                            goToHomeActivity()
-                        }
-                    } else {
-                        showToast("Помилка сервера")
-                    }
-                } else {
-                    showToast("Невірний код")
-                    otpEdits.forEach { it.text.clear() }
-                    otpEdits[0].requestFocus()
-                }
-            }
-            override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
-                setLoading(false)
-                showToast("Помилка мережі: ${t.message}")
-            }
-        })
+    private fun updateFcmTokenOnServer() {
+        val token = sessionManager.fetchAuthToken() ?: return 
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) return@addOnCompleteListener
+            val fcmToken = task.result
+            val body = mapOf("token" to fcmToken)
+            ApiClient.instance.updateFcmToken("Bearer $token", body).enqueue(object : Callback<Void> {
+                override fun onResponse(call: Call<Void>, response: Response<Void>) {}
+                override fun onFailure(call: Call<Void>, t: Throwable) {}
+            })
+        }
     }
 
     private fun showSmsScreen(phone: String) {
@@ -273,35 +280,21 @@ class MainActivity : AppCompatActivity() {
         finish() 
     }
 
-    // --- НОВА СТИЛЬНА ФУНКЦІЯ ПОВІДОМЛЕНЬ ---
     private fun showTopMessage(message: String, isError: Boolean = false) {
         toastHandler.removeCallbacks(hideToastRunnable)
         tvToastMessage.text = message
+        if (isError) ivToastIcon.setColorFilter(Color.parseColor("#FF5252"))
+        else ivToastIcon.setColorFilter(Color.parseColor("#FFD600"))
         
-        if (isError) {
-            ivToastIcon.setColorFilter(Color.parseColor("#FF5252"))
-        } else {
-            ivToastIcon.setColorFilter(Color.parseColor("#FFD600"))
-        }
-
         customToastContainer.visibility = View.VISIBLE
-        customToastContainer.animate()
-            .translationY(0f)
-            .alpha(1f)
-            .setDuration(400)
-            .setInterpolator(AccelerateDecelerateInterpolator())
-            .start()
-
+        customToastContainer.animate().translationY(0f).alpha(1f).setDuration(400)
+            .setInterpolator(AccelerateDecelerateInterpolator()).start()
         toastHandler.postDelayed(hideToastRunnable, 3500)
     }
 
     private fun hideTopMessage() {
-        customToastContainer.animate()
-            .translationY(-200f)
-            .alpha(0f)
-            .setDuration(300)
-            .withEndAction { customToastContainer.visibility = View.INVISIBLE }
-            .start()
+        customToastContainer.animate().translationY(-200f).alpha(0f).setDuration(300)
+            .withEndAction { customToastContainer.visibility = View.INVISIBLE }.start()
     }
 
     private fun showToast(msg: String) {

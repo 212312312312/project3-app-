@@ -12,13 +12,15 @@
     <color name="taxi_black_bg">#222426</color>
     <color name="taxi_white">#FFFFFF</color>
     <color name="taxi_red">#E53935</color>
-    <color name="taxi_gray_accent">#9CA3AF</color>
+    <color name="tariff_divider_color">#F3F4F6</color>
+    <color name="taxi_gray_accent">#E0E0E0</color>
+    <color name="background_primary">#F5F7FA</color>
     <color name="toast_background">#FFFFFF</color>      <color name="toast_text">#000000</color>            <color name="toast_shadow">#40000000</color>
     <color name="page_background">#F3F4F6</color>
-    <color name="card_background">#FFFFFF</color>
-    <color name="unified_block_bg">#FFFFFF</color>      <color name="unified_column_bg">#FFFFFF</color>     <color name="unified_input_press">#F5F5F5</color>            <color name="dotted_line_color">#BDBDBD</color>     <color name="text_primary">#000000</color>
-
-
+    <color name="card_background">#fff</color>
+    <color name="unified_block_bg">#FFFFFF</color>      <color name="unified_column_bg">#FFFFFF</color>     <color name="unified_input_press">#F5F5F5</color>            <color name="dotted_line_color">#BDBDBD</color>     <color name="text_primary">#454754</color>
+        <color name="switch_track_light">#F3F4F6</color> <color name="switch_thumb_light">#E2E8F0</color> <color name="switch_icon_active_light">#1A1A1A</color> <color name="switch_icon_inactive_light">#94A3B8</color> <color name="switch_track_dark">#2D2E30</color> <color name="switch_thumb_dark">#454754</color> <color name="switch_icon_active_dark">#FFFFFF</color> <color name="switch_icon_inactive_dark">#64748B</color>
+    <color name="menu_background_color">#F3F4F6</color> <color name="menu_neutral_color">#F3F4F6</color>
     <color name="text_secondary">#6B7280</color>
 
     <color name="info_window_divider">#E5E7EB</color>

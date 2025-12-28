@@ -39,6 +39,13 @@ class SessionManager(context: Context) {
         const val KEY_WORK_NAME = "work_name"
         const val KEY_WORK_LAT = "work_lat"
         const val KEY_WORK_LNG = "work_lng"
+
+        // Метод оплати
+        const val KEY_PAYMENT_METHOD = "payment_method"
+
+        // --- ПРОМОКОД (НОВІ КЛЮЧІ) ---
+        const val KEY_PROMO_DISCOUNT = "promo_discount_percent"
+        const val KEY_PROMO_LIMIT = "promo_discount_limit"
     }
 
     init {
@@ -157,8 +164,57 @@ class SessionManager(context: Context) {
             remove(ACTIVE_ORDER_ID)
             remove(USER_FULL_NAME)
             remove(USER_PHONE)
-            // Адреси Дім/Робота та Тему можна залишити, або видалити:
-            // remove(KEY_HOME_NAME)...
+            // Очищуємо також промокоди при виході
+            remove(KEY_PROMO_DISCOUNT)
+            remove(KEY_PROMO_LIMIT)
+            remove("promo_discount_percent") // <-- Додайте це
+            remove("promo_discount_limit")   // <-- Додайте це
+            apply()
+        }
+    }
+
+    // --- NOTIFICATIONS ---
+    fun setNotificationAsked(asked: Boolean) {
+        prefs.edit().putBoolean("notification_asked", asked).apply()
+    }
+
+    fun isNotificationAsked(): Boolean {
+        return prefs.getBoolean("notification_asked", false)
+    }
+
+    // --- PAYMENT METHOD ---
+    fun savePaymentMethod(method: String) {
+        prefs.edit().putString(KEY_PAYMENT_METHOD, method).apply()
+    }
+
+    fun fetchPaymentMethod(): String {
+        return prefs.getString(KEY_PAYMENT_METHOD, "CASH") ?: "CASH"
+    }
+
+    // --- PROMO / DISCOUNTS (НОВИЙ БЛОК) ---
+    // Зберігаємо відсоток і ліміт як String, щоб уникнути втрати точності і проблем з null
+    fun savePromoDiscount(percent: Double, limit: Double = 0.0) {
+        prefs.edit().apply {
+            putString(KEY_PROMO_DISCOUNT, percent.toString())
+            putString(KEY_PROMO_LIMIT, limit.toString())
+            apply()
+        }
+    }
+
+    fun fetchPromoDiscount(): Double {
+        val str = prefs.getString(KEY_PROMO_DISCOUNT, "0.0")
+        return str?.toDoubleOrNull() ?: 0.0
+    }
+
+    fun fetchPromoLimit(): Double {
+        val str = prefs.getString("promo_discount_limit", "0.0")
+        return str?.toDoubleOrNull() ?: 0.0
+    }
+
+    fun clearDiscounts() {
+        prefs.edit().apply {
+            remove(KEY_PROMO_DISCOUNT)
+            remove(KEY_PROMO_LIMIT)
             apply()
         }
     }

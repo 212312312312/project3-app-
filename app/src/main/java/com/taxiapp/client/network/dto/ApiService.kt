@@ -1,20 +1,9 @@
 package com.taxiapp.client.network
 
-import com.taxiapp.client.network.dto.CarTariffDto
-import com.taxiapp.client.network.dto.ActiveDiscountDto
-import com.taxiapp.client.network.dto.ClientPromoProgressDto // <-- ДОДАНО ЦЕЙ ІМПОРТ
-import com.taxiapp.client.network.dto.CreateOrderRequestDto
-import com.taxiapp.client.network.dto.LoginResponseDto
-import com.taxiapp.client.network.dto.SmsRequestDto
-import com.taxiapp.client.network.dto.SmsVerifyDto
-import com.taxiapp.client.network.dto.TaxiOrderDto
+import com.taxiapp.client.network.dto.*
+import com.taxiapp.client.data.model.TaxiService
 import retrofit2.Call
-import retrofit2.http.Body
-import retrofit2.http.DELETE
-import retrofit2.http.GET
-import retrofit2.http.Header
-import retrofit2.http.POST
-import retrofit2.http.Path
+import retrofit2.http.*
 
 // Прості класи відповідей
 data class ErrorResponse(val message: String)
@@ -29,47 +18,73 @@ interface ApiService {
     @POST("auth/client/sms/verify")
     fun verifySmsCode(@Body request: SmsVerifyDto): Call<LoginResponseDto>
 
+    @POST("auth/fcm-token")
+    fun updateFcmToken(
+        @Header("Authorization") token: String,
+        @Body body: Map<String, String>
+    ): Call<Void>
+
     // --- ТАРИФИ ---
     @GET("public/tariffs")
     fun getActiveTariffs(): Call<List<CarTariffDto>>
 
-    // --- АКЦІЇ (НОВИЙ МЕТОД) ---
+    @GET("/api/v1/public/tariffs")
+    fun getTariffs(@Header("Authorization") token: String): Call<List<CarTariffDto>>
+
+    // --- АКЦІЇ ТА ПРОМОКОДИ ---
     @GET("client/promos")
     fun getClientPromos(
         @Header("Authorization") token: String
-    ): Call<List<ClientPromoProgressDto>> // <-- Правильний синтаксис списку
+    ): Call<List<ClientPromoProgressDto>>
 
-    // --- КЛІЄНТ (ЗАМОВЛЕННЯ) ---
+    @GET("client/promos/discount")
+    fun getActiveDiscount(
+        @Header("Authorization") token: String
+    ): Call<ActiveDiscountDto>
 
-    // Створення
+    // Наш новый метод для активации
+    @POST("client/promos/apply")
+    fun applyPromo(
+        @Header("Authorization") token: String,
+        @Body request: ApplyPromoRequestDto
+    ): Call<MessageResponse>
+
+    // --- ЗАМОВЛЕННЯ ---
     @POST("client/orders")
     fun createOrder(
         @Header("Authorization") token: String,
         @Body request: CreateOrderRequestDto
     ): Call<TaxiOrderDto>
 
-    // Отримання статусу
     @GET("client/orders/{id}")
     fun getOrder(
         @Header("Authorization") token: String,
         @Path("id") id: Long
     ): Call<TaxiOrderDto>
 
-    // Скасування
     @POST("client/orders/{id}/cancel")
     fun cancelOrder(
         @Header("Authorization") token: String,
         @Path("id") orderId: Long
     ): Call<TaxiOrderDto>
 
-    // Видалення акаунту
     @DELETE("client/account")
-    fun deleteAccount(
-        @Header("Authorization") token: String
-    ): Call<MessageResponse>
+    fun deleteAccount(@Header("Authorization") token: String): Call<MessageResponse>
 
-    @GET("client/promos/discount")
-    fun getActiveDiscount(
-        @Header("Authorization") token: String
-    ): Call<ActiveDiscountDto>
+    // --- ІСТОРІЯ (Для HomeActivity та інших) ---
+    @GET("client/orders")
+    fun getHistory(@Header("Authorization") token: String): Call<List<TaxiOrderDto>>
+
+    // --- ІСТОРІЯ (Для StatsActivity) ---
+    // Я повернув цей метод, щоб StatsActivity не світився червоним.
+    // Він робить те саме, що і getHistory - отримує список замовлень клієнта.
+    @GET("client/orders")
+    fun getOrderHistory(@Header("Authorization") token: String): Call<List<TaxiOrderDto>>
+
+    // --- НОВИНИ ТА ІНШЕ ---
+    @GET("client/news")
+    fun getClientNews(@Header("Authorization") token: String): Call<List<NewsDto>>
+
+    @GET("client/services")
+    fun getServices(@Header("Authorization") token: String): Call<List<TaxiService>>
 }

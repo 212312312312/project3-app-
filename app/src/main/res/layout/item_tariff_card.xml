@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/item_root"
+    android:layout_width="100dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_marginEnd="12dp"
+    android:background="@android:color/transparent">
+
+    <ImageView
+        android:id="@+id/iv_tariff_icon"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:src="@drawable/ic_home_custom"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/tv_tariff_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Standard"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        
+        android:textColor="?attr/colorOnSurface" /> 
+        </LinearLayout>

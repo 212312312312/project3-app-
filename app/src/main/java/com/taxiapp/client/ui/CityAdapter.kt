@@ -9,13 +9,14 @@ import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.R
 
 class CityAdapter(
-    private val cities: List<String>,
-    private val onCityClick: (String) -> Unit
+    private var cities: List<String>,
+    private val selectedCity: String?, // <-- Принимаем текущий город
+    private val onCitySelected: (String) -> Unit
 ) : RecyclerView.Adapter<CityAdapter.CityViewHolder>() {
 
-    class CityViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val tvName: TextView = view.findViewById(R.id.tv_city_name)
-        // val icon: ImageView = view.findViewById(R.id.iv_city_icon) // Якщо є
+    fun updateList(newCities: List<String>) {
+        cities = newCities
+        notifyDataSetChanged()
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): CityViewHolder {
@@ -25,9 +26,26 @@ class CityAdapter(
 
     override fun onBindViewHolder(holder: CityViewHolder, position: Int) {
         val city = cities[position]
-        holder.tvName.text = city
-        holder.itemView.setOnClickListener { onCityClick(city) }
+        holder.bind(city)
     }
 
     override fun getItemCount(): Int = cities.size
+
+    inner class CityViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val tvCityName: TextView = itemView.findViewById(R.id.tv_city_name)
+        private val ivCheck: ImageView = itemView.findViewById(R.id.iv_check)
+
+        fun bind(city: String) {
+            tvCityName.text = city
+
+            // Логика галочки: если город совпадает с выбранным - показываем
+            if (city == selectedCity) {
+                ivCheck.visibility = View.VISIBLE
+            } else {
+                ivCheck.visibility = View.GONE
+            }
+
+            itemView.setOnClickListener { onCitySelected(city) }
+        }
+    }
 }

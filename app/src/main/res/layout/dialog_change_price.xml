@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog"
+    android:padding="24dp">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Вартість поїздки"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnBackground"
+            android:layout_centerVertical="true"/>
+
+        <ImageView
+            android:id="@+id/btn_close_dialog"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_close_small"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            app:tint="#9E9E9E"/>
+    </RelativeLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginBottom="32dp">
+
+        <FrameLayout
+            android:id="@+id/btn_price_minus"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_button_secondary">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_remove" 
+                android:layout_gravity="center"
+                app:tint="?attr/colorOnBackground"/>
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tv_dialog_price"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="110 ₴"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnBackground"
+            android:gravity="center"/>
+
+        <FrameLayout
+            android:id="@+id/btn_price_plus"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_button_secondary">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_add"
+                android:layout_gravity="center"
+                app:tint="?attr/colorOnBackground"/>
+        </FrameLayout>
+    </LinearLayout>
+
+    <SeekBar
+        android:id="@+id/seekbar_price"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="100"
+        android:progress="0"
+        android:progressTint="@color/taxi_yellow"
+        android:thumbTint="@color/taxi_yellow"
+        android:layout_marginBottom="8dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="32dp">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Звичайна"
+            android:textSize="12sp"
+            android:textColor="#9E9E9E"/>
+        <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="×3"
+            android:textSize="12sp"
+            android:textColor="#9E9E9E"/>
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_save_price"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Зберегти"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@color/black"
+        app:backgroundTint="@color/taxi_yellow"
+        app:cornerRadius="12dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"/>
+
+</LinearLayout>

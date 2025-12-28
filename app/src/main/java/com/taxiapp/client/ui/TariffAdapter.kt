@@ -1,7 +1,6 @@
 package com.taxiapp.client.ui
 
-import android.graphics.Paint // <-- Для закреслення
-import android.util.Log
+import android.graphics.Paint
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,11 +12,14 @@ import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
 import com.taxiapp.client.R
 import com.taxiapp.client.network.dto.CarTariffDto
+import kotlin.math.min
+import kotlin.math.roundToInt // <-- ВАЖНЫЙ ИМПОРТ
 
 data class TariffItem(
     val tariff: CarTariffDto,
     val price: String,
-    val priceValue: Double
+    val priceValue: Double,
+    val addedValue: Double = 0.0
 )
 
 class TariffAdapter(
@@ -26,118 +28,164 @@ class TariffAdapter(
 
     private var items: List<TariffItem> = emptyList()
     private var selectedPosition: Int = -1
+    private var rawTariffs: List<CarTariffDto> = emptyList()
+    private var currentDistanceMeters: Int = 0
+    private var currentExtraCost: Double = 0.0
+    private val customPrices = mutableMapOf<Long, Double>()
 
-    // --- ДОДАНО: Знижка ---
     private var currentDiscountPercent: Double = 0.0
+    private var maxDiscountAmount: Double = 0.0
 
-    // IP (Ваш код)
-    private val SERVER_IP = "192.168.0.104"
+    private val SERVER_IP = "192.168.0.104" // Проверь, чтобы IP был актуальным
 
-    class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+    inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val cardView: MaterialCardView = view.findViewById(R.id.tariff_card)
         val name: TextView = view.findViewById(R.id.tv_tariff_name)
         val price: TextView = view.findViewById(R.id.tv_tariff_price)
         val image: ImageView = view.findViewById(R.id.iv_tariff_icon)
         val desc: TextView = view.findViewById(R.id.tv_tariff_desc)
-        // --- ДОДАНО: Стара ціна ---
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
+
+        fun bind(item: TariffItem, isSelected: Boolean) {
+            val tariff = item.tariff
+            name.text = tariff.name
+
+            if (!tariff.description.isNullOrEmpty()) {
+                desc.visibility = View.VISIBLE
+                desc.text = tariff.description
+            } else {
+                desc.visibility = View.GONE
+            }
+
+            // --- КАРТИНКА ---
+            if (!tariff.iconUrl.isNullOrEmpty()) {
+                val fullUrl = if (tariff.iconUrl.startsWith("http")) {
+                    tariff.iconUrl
+                } else {
+                    val path = if (tariff.iconUrl.startsWith("/")) tariff.iconUrl else "/${tariff.iconUrl}"
+                    "http://$SERVER_IP:8080$path"
+                }
+
+                Glide.with(itemView.context)
+                    .load(fullUrl)
+                    .placeholder(R.drawable.ic_car_marker_info)
+                    .error(R.drawable.ic_car_marker_info)
+                    .into(image)
+            } else {
+                image.setImageResource(R.drawable.ic_car_marker_info)
+            }
+
+            // --- ЛОГИКА ЦЕНЫ (С ОКРУГЛЕНИЕМ) ---
+            if (currentDiscountPercent > 0.0) {
+                // Старая цена (округляем)
+                oldPrice.visibility = View.VISIBLE
+                // ИСПОЛЬЗУЕМ roundToInt() ВМЕСТО toInt()
+                oldPrice.text = "${item.priceValue.roundToInt()} ₴"
+                oldPrice.paintFlags = oldPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+
+                // Расчет скидки
+                val rawDiscount = item.priceValue * (currentDiscountPercent / 100.0)
+
+                val finalDiscount = if (maxDiscountAmount > 0.0) {
+                    min(rawDiscount, maxDiscountAmount)
+                } else {
+                    rawDiscount
+                }
+
+                val newPrice = item.priceValue - finalDiscount
+                val displayPrice = if (newPrice < 0) 0.0 else newPrice
+
+                // ИСПОЛЬЗУЕМ roundToInt() ВМЕСТО toInt()
+                price.text = "${displayPrice.roundToInt()} ₴"
+            } else {
+                oldPrice.visibility = View.GONE
+                // ИСПОЛЬЗУЕМ roundToInt() ВМЕСТО toInt()
+                price.text = "${item.priceValue.roundToInt()} ₴"
+            }
+
+            // --- ВЫДЕЛЕНИЕ ---
+            if (isSelected) {
+                cardView.cardElevation = 0f
+                cardView.strokeWidth = 6
+                cardView.strokeColor = ContextCompat.getColor(itemView.context, R.color.taxi_yellow)
+            } else {
+                cardView.strokeWidth = 0
+                cardView.cardElevation = 0f
+            }
+
+            itemView.setOnClickListener {
+                val prev = selectedPosition
+                selectedPosition = bindingAdapterPosition
+                notifyItemChanged(prev)
+                notifyItemChanged(selectedPosition)
+                onTariffSelected(item)
+            }
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TariffViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.tariff_item, parent, false)
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.tariff_item, parent, false)
         return TariffViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: TariffViewHolder, position: Int) {
-        val item = items[position]
-
-        holder.name.text = item.tariff.name
-        holder.desc.visibility = View.GONE
-
-        // --- ЛОГІКА ЦІНИ ЗІ ЗНИЖКОЮ ---
-        if (currentDiscountPercent > 0.0) {
-            // Є знижка -> показуємо стару і нову ціну
-            holder.oldPrice.visibility = View.VISIBLE
-            holder.oldPrice.text = "${item.price} грн"
-            holder.oldPrice.paintFlags = holder.oldPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-
-            // Рахуємо нову ціну
-            val discountAmount = item.priceValue * (currentDiscountPercent / 100.0)
-            val newPrice = item.priceValue - discountAmount
-            val formattedNewPrice = String.format("%.0f", newPrice)
-
-            holder.price.text = "$formattedNewPrice грн"
-            // Можна зробити зеленим, якщо хочете:
-            // holder.price.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.taxi_green))
-        } else {
-            // Немає знижки -> стандартний вигляд
-            holder.oldPrice.visibility = View.GONE
-            holder.price.text = "${item.price} грн"
-        }
-        // ------------------------------
-
-        // --- ВАШ КОД ЗАВАНТАЖЕННЯ КАРТИНКИ (БЕЗ ЗМІН) ---
-        var iconUrl = item.tariff.iconUrl
-
-        if (iconUrl != null) {
-            if (iconUrl.contains("localhost")) {
-                iconUrl = iconUrl.replace("localhost", SERVER_IP)
-            }
-            if (!iconUrl.startsWith("http")) {
-                iconUrl = "http://$SERVER_IP:8080$iconUrl"
-            }
-        }
-
-        Log.d("TariffAdapter", "Loading Icon: $iconUrl")
-
-        if (!iconUrl.isNullOrEmpty()) {
-            Glide.with(holder.itemView.context)
-                .load(iconUrl)
-                .placeholder(R.drawable.ic_car_marker_info)
-                .error(R.drawable.ic_car_marker_info)
-                .fitCenter()
-                .into(holder.image)
-        } else {
-            holder.image.setImageResource(R.drawable.ic_car_marker_info)
-        }
-        // ------------------------------------------------
-
-        // --- ВАШ КОД ВИДІЛЕННЯ (БЕЗ ЗМІН) ---
-        if (selectedPosition == position) {
-            holder.cardView.strokeWidth = 4
-            holder.cardView.strokeColor = ContextCompat.getColor(holder.itemView.context, R.color.taxi_yellow)
-            holder.cardView.cardElevation = 8f
-        } else {
-            holder.cardView.strokeWidth = 0
-            holder.cardView.cardElevation = 2f
-        }
-
-        holder.itemView.setOnClickListener {
-            val previousPos = selectedPosition
-            selectedPosition = holder.adapterPosition
-            notifyItemChanged(previousPos)
-            notifyItemChanged(selectedPosition)
-            onTariffSelected(item)
-        }
+        holder.bind(items[position], position == selectedPosition)
     }
 
     override fun getItemCount(): Int = items.size
 
     fun submitList(tariffs: List<CarTariffDto>, distanceMeters: Int) {
-        selectedPosition = -1
-        items = tariffs.map { tariff ->
-            val distKm = distanceMeters / 1000.0
-            val priceValue = tariff.basePrice + (distKm * tariff.pricePerKm)
-            val finalPrice = String.format("%.0f", priceValue)
-            TariffItem(tariff, finalPrice, priceValue)
-        }
+        this.rawTariffs = tariffs
+        this.currentDistanceMeters = distanceMeters
+        recalculateItems()
+    }
+
+    fun setDiscount(percent: Double, limit: Double) {
+        this.currentDiscountPercent = percent
+        this.maxDiscountAmount = limit
         notifyDataSetChanged()
     }
 
-    // --- ДОДАНО: Метод для встановлення знижки ---
-    fun setDiscount(percent: Double) {
-        this.currentDiscountPercent = percent
-        notifyDataSetChanged() // Оновлюємо весь список, щоб перерахувати ціни
+    fun updateExtraCost(cost: Double) {
+        this.currentExtraCost = cost
+        recalculateItems()
+    }
+
+    fun setCustomPrice(tariffId: Long, addedValue: Double) {
+        customPrices[tariffId] = addedValue
+        recalculateItems()
+    }
+
+    fun clearCustomPrices() {
+        customPrices.clear()
+        recalculateItems()
+    }
+
+    fun setSelectedTariffId(id: Long) {
+        val index = items.indexOfFirst { it.tariff.id == id }
+        if (index != -1) {
+            val prev = selectedPosition
+            selectedPosition = index
+            if (prev != -1 && prev < items.size) notifyItemChanged(prev)
+            notifyItemChanged(selectedPosition)
+            onTariffSelected(items[index])
+        }
+    }
+
+    private fun recalculateItems() {
+        items = rawTariffs.map { tariff ->
+            val distKm = currentDistanceMeters / 1000.0
+            val baseCalc = tariff.basePrice + (distKm * tariff.pricePerKm)
+            val withServices = baseCalc + currentExtraCost
+            val userAdded = customPrices[tariff.id] ?: 0.0
+
+            val finalPrice = withServices + userAdded
+
+            // Здесь тоже лучше использовать форматирование, которое округляет
+            val priceString = String.format("%.0f", finalPrice)
+
+            TariffItem(tariff, priceString, finalPrice, userAdded)
+        }
+        notifyDataSetChanged()
     }
 }

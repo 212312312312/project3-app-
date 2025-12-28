@@ -2,18 +2,17 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-kapt'
+    id 'com.google.gms.google-services' // <--- 1. ДОБАВЛЕН ПЛАГИН
 }
 
 android {
     namespace 'com.taxiapp.client'
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk 34 // Рекомендую использовать стабильную версию (33 или 34), 36 может быть нестабильной
 
     defaultConfig {
         applicationId "com.taxiapp.client"
         minSdk 24
-        targetSdk 36
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
@@ -36,14 +35,17 @@ android {
 }
 
 dependencies {
+    // ВАЖНО: Я удалил отсюда строку "classpath ...", она должна быть только в файле проекта!
+
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     implementation libs.androidx.core.ktx
     implementation libs.androidx.appcompat
-    implementation libs.material // Это уже было
+    implementation libs.material
     implementation libs.androidx.activity
     implementation libs.androidx.constraintlayout
     implementation libs.google.maps.services
-    // --- НАШИ НОВЫЕ СТРОКИ (используем псевдонимы из toml) ---
+
+    // --- ИСПОЛЬЗУЕМ ПСЕВДОНИМЫ ИЗ TOML ---
     implementation libs.google.material
     implementation libs.squareup.retrofit
     implementation libs.squareup.retrofit.converter.gson
@@ -54,6 +56,9 @@ dependencies {
     implementation libs.google.glide
     implementation 'com.google.android.gms:play-services-location:21.1.0'
     annotationProcessor libs.google.glide.compiler
+
+    // <--- 2. ДОБАВЛЕНА БИБЛИОТЕКА FIREBASE MESSAGING
+    implementation 'com.google.firebase:firebase-messaging:23.4.1'
 
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit

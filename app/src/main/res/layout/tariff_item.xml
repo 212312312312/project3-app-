@@ -6,13 +6,13 @@
     android:id="@+id/tariff_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
+    android:layout_marginBottom="0dp"
     android:layout_marginHorizontal="4dp"
     app:cardCornerRadius="12dp"
-    app:cardElevation="2dp"
+    app:cardElevation="0dp"
     app:strokeWidth="0dp"
     app:strokeColor="@color/taxi_yellow"
-    app:cardBackgroundColor="?attr/colorSurface"
+    app:cardBackgroundColor="@color/unified_block_bg"
     android:clickable="true"
     android:focusable="true">
 
@@ -60,9 +60,7 @@
             android:orientation="vertical"
             android:gravity="end"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent">
-
+            app:layout_constraintTop_toTopOf="parent">
             <TextView
                 android:id="@+id/tv_tariff_price"
                 android:layout_width="wrap_content"
@@ -80,6 +78,7 @@
                 android:textSize="12sp"
                 android:textColor="#757575"
                 android:visibility="gone"/>
+
         </LinearLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>

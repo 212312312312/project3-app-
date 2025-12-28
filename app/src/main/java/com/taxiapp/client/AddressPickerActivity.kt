@@ -39,6 +39,11 @@ import java.util.Locale
 class AddressPickerActivity : AppCompatActivity() {
 
     companion object {
+
+        const val MODE_STANDARD = 0
+        const val MODE_SAVE_HOME = 1
+        const val MODE_SAVE_WORK = 2
+        const val EXTRA_PICKER_MODE = "picker_mode"
         const val EXTRA_IS_ORIGIN = "is_origin"
         const val EXTRA_HIDE_MY_LOCATION = "hide_my_location"
         const val EXTRA_CURRENT_ADDRESS = "current_address"
@@ -55,6 +60,7 @@ class AddressPickerActivity : AppCompatActivity() {
         const val RESULT_ORIGIN_LNG = "updated_origin_lng"
 
         const val RESULT_WAYPOINTS_NAMES = "waypoints_names"
+
     }
 
     private var isOrigin: Boolean = false
@@ -146,7 +152,11 @@ class AddressPickerActivity : AppCompatActivity() {
         etDestination = findViewById(R.id.et_destination)
 
         containerWaypoints = findViewById(R.id.container_waypoints)
-        rowDestination = findViewById(R.id.row_destination)
+        rowDestination = findViewById(R.id.row_destination) // Это поле "Куда"
+
+        // Находим контейнеры полей для скрытия/показа
+        val containerOriginLayout = findViewById<LinearLayout>(R.id.container_origin_layout) // Нужно добавить ID в XML!
+        // Но пока используем родителя etOrigin, если он есть, или просто скроем ненужное
 
         btnAddWaypoint = findViewById(R.id.btn_add_waypoint)
         lineOriginDown = findViewById(R.id.line_origin_down)
@@ -157,13 +167,79 @@ class AddressPickerActivity : AppCompatActivity() {
         btnPickOnMap = findViewById(R.id.btn_pick_on_map)
 
         val title = findViewById<TextView>(R.id.picker_title)
-        title.text = if (isOriginMode) "Звідки їдемо?" else "Куди їдемо?"
-
-        findViewById<View>(R.id.btn_back).setOnClickListener { finish() }
+        val btnBack = findViewById<View>(R.id.btn_back)
+        btnBack.setOnClickListener { finish() }
 
         setupFocusListener(etOrigin)
         setupFocusListener(etDestination)
 
+        // --- ЛОГИКА РЕЖИМОВ ---
+        val mode = intent.getIntExtra(EXTRA_PICKER_MODE, MODE_STANDARD)
+
+        when (mode) {
+            MODE_SAVE_HOME -> {
+                title.text = "Додати дім"
+                configureSingleFieldMode(etDestination, R.drawable.ic_home_custom, "Введіть адресу дому")
+            }
+            MODE_SAVE_WORK -> {
+                title.text = "Додати роботу"
+                configureSingleFieldMode(etDestination, R.drawable.ic_work_custom, "Введіть адресу роботи")
+            }
+            else -> {
+                // Стандартный режим (Заказ такси)
+                title.text = if (isOriginMode) "Звідки їдемо?" else "Куди їдемо?"
+                configureStandardMode(isOriginMode, currentAddressA)
+            }
+        }
+
+        // Общая логика кнопок
+        btnMyLocation.setOnClickListener { detectMyLocation() }
+        btnPickOnMap.setOnClickListener {
+            val intent = Intent(this, MapPickerActivity::class.java)
+            intent.putExtra("start_lat", cityLat); intent.putExtra("start_lng", cityLng)
+            mapPickerLauncher.launch(intent)
+        }
+
+        btnAddWaypoint.setOnClickListener {
+            if (waypointViews.size < 3) addWaypointInput()
+            else Toast.makeText(this, "Максимум 3 зупинки", Toast.LENGTH_SHORT).show()
+        }
+
+        updateButtonsVisibility(hideMyLocation)
+    }
+
+    // --- НОВЫЙ ВСПОМОГАТЕЛЬНЫЙ МЕТОД ---
+    private fun configureSingleFieldMode(targetEt: EditText, iconRes: Int, hint: String) {
+        // 1. Скрываем верхний блок "Откуда"
+        // Ищем контейнер по ID, а если не нашли (старый XML) - скрываем родителя поля
+        val originContainer = findViewById<View>(R.id.container_origin_layout)
+            ?: etOrigin.parent as View
+
+        originContainer.visibility = View.GONE
+
+        // Скрываем линии и лишние элементы
+        lineOriginDown.visibility = View.GONE
+        lineDestUp.visibility = View.GONE
+        containerWaypoints.visibility = View.GONE
+
+        // 2. Настраиваем поле "Куда" (оно будет единственным)
+        rowDestination.visibility = View.VISIBLE
+        activeEditText = targetEt
+        targetEt.requestFocus()
+        targetEt.hint = hint
+
+        // 3. Меняем иконку (Лупу/Маркер -> Дом/Работа)
+        // Ищем по новому ID iv_dest_icon, который мы добавим в XML
+        val iconView = findViewById<ImageView>(R.id.iv_dest_icon)
+
+        if (iconView != null) {
+            iconView.setImageResource(iconRes)
+            // Красим иконку в основной цвет текста (черный/белый)
+            iconView.setColorFilter(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
+        }
+    }
+
+    private fun configureStandardMode(isOriginMode: Boolean, currentAddressA: String?) {
         if (isOriginMode) {
             activeEditText = etOrigin
             etOrigin.requestFocus()
@@ -187,23 +263,6 @@ class AddressPickerActivity : AppCompatActivity() {
             rowDestination.visibility = View.VISIBLE
             containerWaypoints.visibility = View.VISIBLE
         }
-
-        // Забираємо автозавантаження "популярних", як ви просили
-        // if (activeEditText?.text.isNullOrEmpty()) { loadNearbyPlaces() }
-
-        btnMyLocation.setOnClickListener { detectMyLocation() }
-        btnPickOnMap.setOnClickListener {
-            val intent = Intent(this, MapPickerActivity::class.java)
-            intent.putExtra("start_lat", cityLat); intent.putExtra("start_lng", cityLng)
-            mapPickerLauncher.launch(intent)
-        }
-
-        btnAddWaypoint.setOnClickListener {
-            if (waypointViews.size < 3) addWaypointInput()
-            else Toast.makeText(this, "Максимум 3 зупинки", Toast.LENGTH_SHORT).show()
-        }
-
-        updateButtonsVisibility(hideMyLocation)
     }
 
     // --- ПОШУК ---

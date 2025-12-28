@@ -11,5 +11,12 @@ data class CreateOrderRequestDto(
     val destLat: Double?,
     val destLng: Double?,
     val googleRoutePolyline: String?, // <-- ЭТО ПОЛЕ НУЖНО БЫЛО ДОБАВИТЬ
-    val waypoints: List<WaypointDto>? = null
+    val waypoints: List<WaypointDto>? = null,
+    val distanceMeters: Int,
+    val durationSeconds: Int,
+    val comment: String? = null,
+    val paymentMethod: String,
+    val serviceIds: List<Long> = emptyList(),
+    val addedValue: Double = 0.0
+
 )

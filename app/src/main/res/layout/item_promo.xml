@@ -49,23 +49,34 @@
                 android:gravity="center_vertical"
                 android:layout_marginTop="12dp">
                 
-                <ProgressBar
-                    android:id="@+id/pb_promo_progress"
-                    style="?android:attr/progressBarStyleHorizontal"
+                <androidx.cardview.widget.CardView
                     android:layout_width="0dp"
-                    android:layout_height="8dp"
+                    android:layout_height="12dp" 
                     android:layout_weight="1"
-                    android:max="100"
-                    android:progress="60"
-                    android:progressDrawable="@drawable/bg_progress_rounded" /> 
-                    <TextView
+                    app:cardCornerRadius="6dp" 
+                    app:cardBackgroundColor="#F0F0F0" 
+                    app:cardElevation="0dp">
+
+                    <ProgressBar
+                        android:id="@+id/pb_promo_progress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:max="100"
+                        android:progress="60"
+                        android:scaleY="4" 
+                        android:progressTint="@color/menu_background_color"
+                        android:background="@null"/>
+                </androidx.cardview.widget.CardView>
+                    
+                <TextView
                     android:id="@+id/tv_promo_progress_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="3/5"
                     android:textSize="14sp"
                     android:textStyle="bold"
-                    android:textColor="@color/taxi_yellow"
+                    android:textColor="@color/menu_background_color"
                     android:layout_marginStart="12dp"/>
             </LinearLayout>
         </LinearLayout>
@@ -74,7 +85,7 @@
             android:layout_width="64dp"
             android:layout_height="64dp"
             app:cardCornerRadius="32dp"
-            app:cardBackgroundColor="@color/taxi_yellow"
+            app:cardBackgroundColor="@color/menu_background_color"
             app:cardElevation="0dp">
             
             <TextView
@@ -84,7 +95,7 @@
                 android:text="15%"
                 android:textSize="20sp"
                 android:textStyle="bold"
-                android:textColor="@color/taxi_text_dark"
+                android:textColor="@color/text_primary"
                 android:gravity="center"/>
         </androidx.cardview.widget.CardView>
 

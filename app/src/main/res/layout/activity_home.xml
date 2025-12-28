@@ -18,6 +18,147 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+            <ImageView
+            android:id="@+id/map_loading_curtain"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/map_closer"
+            android:scaleType="centerCrop"
+            android:visibility="visible"/>
+
+        <FrameLayout
+        android:id="@+id/map_overlay_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:elevation="5dp"
+        android:visibility="visible">
+
+        <LinearLayout
+            android:id="@+id/overlay_origin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/unified_block_bg"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                android:layout_margin="2dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tv_overlay_origin"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxWidth="170dp" 
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="12dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="6dp"
+                        android:text="вул. Хрещатик, 1"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="sans-serif-medium"
+                        android:layout_gravity="start"/>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/taxi_gray_accent"
+                        android:layout_marginHorizontal="12dp"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxWidth="170dp"
+                        android:text="Точка відправлення"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary"
+                        android:paddingHorizontal="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="8dp"
+                        android:layout_gravity="start"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <View android:layout_width="1dp" android:layout_height="6dp"/>
+        </LinearLayout>
+
+
+        <LinearLayout
+            android:id="@+id/overlay_dest"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/unified_block_bg"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                android:layout_margin="2dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tv_overlay_dest"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxWidth="170dp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="12dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="6dp"
+                        android:text="ТРЦ Ocean Plaza"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary"
+                        android:fontFamily="sans-serif-medium"
+                        android:layout_gravity="start"/>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/taxi_gray_accent"
+                        android:layout_marginHorizontal="12dp"/>
+
+                    <TextView
+                        android:id="@+id/tv_overlay_dest_details"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxWidth="170dp"
+                        android:text="12.5 км"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary"
+                        android:paddingHorizontal="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="8dp"
+                        android:layout_gravity="start"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <View android:layout_width="1dp" android:layout_height="6dp"/>
+        </LinearLayout>
+    </FrameLayout>
+
         <ImageView
             android:id="@+id/pin_shadow"
             android:layout_width="32dp"
@@ -49,7 +190,6 @@
             android:clickable="true"
             android:focusable="true"
             android:foreground="?attr/selectableItemBackground">
-
             <ImageView
                 android:id="@+id/btn_menu_icon"
                 android:layout_width="match_parent"
@@ -66,131 +206,183 @@
             android:layout_alignParentEnd="true"
             android:layout_marginTop="50dp"
             android:layout_marginEnd="16dp"
-            app:cardCornerRadius="24dp"
+            app:cardCornerRadius="12dp" 
             app:cardElevation="6dp"
             app:cardBackgroundColor="@color/card_background"
             android:clickable="true"
             android:focusable="true"
             android:foreground="?attr/selectableItemBackground">
-
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:padding="12dp"
                 android:src="@drawable/ic_percent"
-                app:tint="@color/taxi_yellow"/> </androidx.cardview.widget.CardView>
-            
+                app:tint="@color/taxi_yellow"/> 
+        </androidx.cardview.widget.CardView>
+        
         <androidx.cardview.widget.CardView
-            android:id="@+id/btn_recenter_location"
+            android:id="@+id/btn_recenter_route"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_above="@id/bottom_sheet_card"
+            android:layout_above="@id/btn_recenter_location"
             android:layout_alignParentEnd="true"
             android:layout_marginEnd="16dp"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="12dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="6dp"
             app:cardBackgroundColor="@color/card_background"
             android:clickable="true"
             android:focusable="true"
+            android:visibility="gone"
             android:foreground="?attr/selectableItemBackground">
-
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:padding="12dp"
-                android:src="@android:drawable/ic_menu_mylocation"
+                android:padding="10dp"
+                android:src="@drawable/ic_route_center"
                 app:tint="@color/text_secondary"/>
         </androidx.cardview.widget.CardView>
+            
+        <androidx.cardview.widget.CardView
+        android:id="@+id/btn_recenter_location"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_above="@id/bottom_sheet_card"
+        android:layout_alignParentEnd="true"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="6dp"
+        app:cardBackgroundColor="@color/card_background"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground">
+        
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="12dp"
+            android:src="@android:drawable/ic_menu_mylocation"
+            app:tint="@color/text_secondary"/>
+    </androidx.cardview.widget.CardView>
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/bottom_sheet_card"
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/bottom_sheet_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="-10dp"
+        android:layout_marginHorizontal="0dp"
+        app:cardElevation="16dp"
+        app:cardCornerRadius="24dp"
+        app:cardBackgroundColor="@color/card_background">
+
+        <LinearLayout
+            android:id="@+id/content_bottom_sheet"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:layout_marginBottom="0dp"
-            android:layout_marginHorizontal="0dp"
-            app:cardElevation="16dp"
-            app:cardCornerRadius="24dp"
-            app:cardBackgroundColor="@color/card_background">
+            android:orientation="vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="24dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="24dp">
+                android:orientation="vertical">
 
-                <LinearLayout
+                <RelativeLayout
                     android:id="@+id/address_panel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:clipChildren="false">
 
                     <LinearLayout
                         android:id="@+id/container_origin"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="56dp"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:background="@drawable/bg_search_input"
-                        android:padding="14dp"
+                        android:backgroundTint="@color/input_background"
+                        android:paddingHorizontal="16dp"
                         android:clickable="true"
-                        android:focusable="true">
-
+                        android:focusable="true"
+                        android:clipChildren="false">
+                        
                         <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/my_icon_origin"
-                            app:tint="@color/taxi_yellow"
-                            android:layout_marginEnd="12dp"/>
-                            <TextView
+                            android:id="@+id/iv_marker_origin"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@drawable/ic_marker_from"
+                            android:layout_marginEnd="16dp"
+                            android:elevation="0dp"
+                            android:alpha="0"/> 
+
+                        <TextView
                             android:id="@+id/text_view_origin"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="Звідки? (Точка А)"
                             android:textSize="16sp"
+                            android:textStyle="bold"
                             android:textColor="@color/text_primary"
                             android:textColorHint="@color/text_secondary"
-                            android:background="@null"/>
+                            android:background="@null"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:alpha="0"/>
                     </LinearLayout>
 
                     <LinearLayout
+                        android:id="@+id/row_bottom"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
+                        android:layout_below="@id/container_origin"
                         android:layout_marginTop="12dp"
-                        android:gravity="center_vertical">
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:clipChildren="false">
 
                         <LinearLayout
                             android:id="@+id/container_destination"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="56dp"
                             android:layout_weight="1"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:background="@drawable/bg_search_input"
-                            android:padding="14dp"
-                            android:layout_marginEnd="8dp"
+                            android:backgroundTint="@color/input_background"
+                            android:paddingHorizontal="16dp"
+                            android:layout_marginEnd="12dp"
                             android:clickable="true"
-                            android:focusable="true">
-
+                            android:focusable="true"
+                            android:clipChildren="false">
+                            
                             <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:src="@drawable/my_icon_dest"
-                                app:tint="@color/taxi_yellow"
-                                android:layout_marginEnd="12dp"/>
-                                <TextView
+                                android:id="@+id/iv_marker_dest"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_marker_to"
+                                android:layout_marginEnd="16dp"
+                                android:elevation="0dp"
+                                android:alpha="0"/>
+                                
+                            <TextView
                                 android:id="@+id/text_view_destination"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="Куди? (Точка Б)"
+                                android:text="Куди їдемо?"
                                 android:textSize="16sp"
+                                android:textStyle="bold"
                                 android:textColor="@color/text_primary"
+                                android:hint="Куди?"
                                 android:textColorHint="@color/text_secondary"
                                 android:background="@null"
                                 android:singleLine="true"
-                                android:ellipsize="end"/>
+                                android:ellipsize="end"
+                                android:alpha="0"/>
                         </LinearLayout>
 
                         <FrameLayout
@@ -199,30 +391,35 @@
                             android:layout_marginEnd="8dp">
                             <androidx.cardview.widget.CardView
                                 android:id="@+id/btn_fav_home"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                app:cardCornerRadius="12dp"
+                                android:layout_width="56dp"
+                                android:layout_height="56dp"
+                                app:cardCornerRadius="16dp"
                                 app:cardElevation="0dp"
                                 app:cardBackgroundColor="@color/input_background"
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground">
+                                
                                 <ImageView
+                                    android:id="@+id/iv_icon_home"
                                     android:layout_width="match_parent"
                                     android:layout_height="match_parent"
-                                    android:padding="12dp"
-                                    android:src="@drawable/ic_home"
-                                    app:tint="@color/text_secondary"/>
+                                    android:padding="16dp"
+                                    android:src="@drawable/ic_home_custom"
+                                    app:tint="@color/text_secondary"
+                                    android:alpha="0"/>
                             </androidx.cardview.widget.CardView>
+                            
                             <ImageView
                                 android:id="@+id/indicator_add_home"
-                                android:layout_width="14dp"
-                                android:layout_height="14dp"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
                                 android:src="@drawable/ic_plus_small"
-                                app:tint="@color/taxi_yellow"
+                                app:tint="@color/text_primary"
                                 android:layout_gravity="top|end"
-                                android:layout_marginTop="4dp"
-                                android:layout_marginEnd="4dp"/>
+                                android:layout_marginTop="6dp"
+                                android:layout_marginEnd="6dp"
+                                android:alpha="0"/>
                         </FrameLayout>
 
                         <FrameLayout
@@ -230,135 +427,401 @@
                             android:layout_height="wrap_content">
                             <androidx.cardview.widget.CardView
                                 android:id="@+id/btn_fav_work"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                app:cardCornerRadius="12dp"
+                                android:layout_width="56dp"
+                                android:layout_height="56dp"
+                                app:cardCornerRadius="16dp"
                                 app:cardElevation="0dp"
                                 app:cardBackgroundColor="@color/input_background"
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground">
+                                
                                 <ImageView
+                                    android:id="@+id/iv_icon_work"
                                     android:layout_width="match_parent"
                                     android:layout_height="match_parent"
-                                    android:padding="12dp"
-                                    android:src="@drawable/ic_work"
-                                    app:tint="@color/text_secondary"/>
+                                    android:padding="16dp"
+                                    android:src="@drawable/ic_work_custom"
+                                    app:tint="@color/text_secondary"
+                                    android:alpha="0"/>
                             </androidx.cardview.widget.CardView>
+                            
                             <ImageView
                                 android:id="@+id/indicator_add_work"
-                                android:layout_width="14dp"
-                                android:layout_height="14dp"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
                                 android:src="@drawable/ic_plus_small"
-                                app:tint="@color/taxi_yellow"
+                                app:tint="@color/text_primary"
                                 android:layout_gravity="top|end"
-                                android:layout_marginTop="4dp"
-                                android:layout_marginEnd="4dp"/>
+                                android:layout_marginTop="6dp"
+                                android:layout_marginEnd="6dp"
+                                android:alpha="0"/>
                         </FrameLayout>
 
-                    </LinearLayout>
-                </LinearLayout>
+                    </LinearLayout> 
+                </RelativeLayout> 
+            </LinearLayout> 
+        </LinearLayout> 
+    </com.google.android.material.card.MaterialCardView>
+        <LinearLayout
+        android:id="@+id/cv_discount_banner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:background="@drawable/bg_promo_chip"
+        android:backgroundTint="@color/unified_block_bg"
+        
+        android:layout_above="@id/tariffs_panel" 
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="-8dp" 
+        
+        android:elevation="20dp"
+        android:outlineProvider="none"
+        android:visibility="gone">
 
-                <LinearLayout
-                    android:id="@+id/tariffs_panel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-                    <androidx.cardview.widget.CardView
-                        android:id="@+id/cv_discount_banner"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginHorizontal="16dp"
-                        android:layout_marginTop="8dp"
-                        android:layout_marginBottom="4dp"
-                        app:cardBackgroundColor="#F5F5F5" 
-                        app:cardCornerRadius="8dp"
-                        app:cardElevation="0dp"
-                        android:visibility="gone"> <TextView
-                            android:id="@+id/tv_discount_banner_text"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:padding="8dp"
-                            android:text="🎉 Діє 15% знижка на поїздку!"
-                            android:textColor="#616161"
-                            android:textStyle="bold"
-                            android:gravity="center"/>
-                    </androidx.cardview.widget.CardView>
-                    <ProgressBar
-                        android:id="@+id/tariffs_progress_bar"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_horizontal"
-                        android:layout_marginTop="16dp"/>
-                    
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/tariffs_recycler_view"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-                        tools:listitem="@layout/tariff_item" />
-                    
-                    <Button
-                        android:id="@+id/btn_order_taxi"
-                        android:layout_width="match_parent"
-                        android:layout_height="56dp"
-                        android:layout_marginTop="16dp"
-                        android:text="Замовити"
-                        android:textAllCaps="false"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/taxi_text_dark"
-                        android:backgroundTint="@color/taxi_yellow"
-                        
-                        app:cornerRadius="16dp"  
-                        
-                        android:enabled="false"/> </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        <TextView
+            android:id="@+id/tv_discount_banner_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Діє знижка 15%"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginStart="0dp"/>
+    </LinearLayout>
+       <androidx.cardview.widget.CardView
+        android:id="@+id/tariffs_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="0dp"
+        app:cardElevation="16dp"
+        app:cardBackgroundColor="@color/unified_block_bg"
+        app:cardCornerRadius="16dp"
+        android:visibility="gone">
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/active_order_card"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:layout_marginBottom="0dp"
-            android:layout_marginHorizontal="0dp"
-            app:cardElevation="16dp"
-            app:cardCornerRadius="24dp"
-            app:cardBackgroundColor="@color/card_background"
-            android:visibility="gone">
+            android:orientation="vertical"
+            android:paddingHorizontal="0dp" 
+            android:paddingTop="8dp"
+            android:paddingBottom="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="24dp">
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginBottom="8dp">
 
-                <LinearLayout
+                <FrameLayout
+                    android:id="@+id/btn_open_comment"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:id="@+id/iv_comment_icon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_comment"
+                        android:layout_gravity="center"
+                        app:tint="?attr/colorOnSurface"/>
+                </FrameLayout>
+
+                <View android:layout_width="1dp" android:layout_height="20dp"
+                      android:background="#1A000000" android:layout_gravity="center"/>
+
+                <FrameLayout
+                    android:id="@+id/btn_open_payment"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:id="@+id/iv_payment_icon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_cash"
+                        android:layout_gravity="center"
+                        app:tint="?attr/colorOnSurface"/>
+                </FrameLayout>
+
+                <View android:layout_width="1dp" android:layout_height="20dp"
+                      android:background="#1A000000" android:layout_gravity="center"/>
+
+                <FrameLayout
+                    android:id="@+id/btn_open_services"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:id="@+id/iv_services_icon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_services_new"
+                        android:layout_gravity="center"
+                        app:tint="?attr/colorOnSurface"/>
+                </FrameLayout>
+
+                <View android:layout_width="1dp" android:layout_height="20dp"
+                      android:background="#1A000000" android:layout_gravity="center"/>
+
+                <FrameLayout
+                    android:id="@+id/btn_change_price"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:id="@+id/iv_price_icon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_wallet"
+                        android:layout_gravity="center"
+                        app:tint="?attr/colorOnSurface"/>
+                </FrameLayout>
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/tariffs_progress_bar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/tariffs_recycler_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="8dp"
+                android:orientation="horizontal"
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:layout_marginBottom="0dp"/>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="4dp" 
+                android:background="@drawable/shadow_gradient_up"
+                android:layout_marginBottom="0dp"/>
+
+            <Button
+                android:id="@+id/btn_order_taxi"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:text="Замовити"
+                android:textAllCaps="false"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#232426"
+                android:backgroundTint="@color/taxi_yellow"
+                app:cornerRadius="12dp"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginBottom="16dp" 
+                android:enabled="false"/>
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+    <LinearLayout
+        android:id="@+id/cv_discount_banner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:background="@drawable/bg_promo_chip"
+        android:backgroundTint="@color/unified_block_bg"
+        
+        android:layout_above="@id/tariffs_panel"
+        android:layout_centerHorizontal="true"
+        
+        android:layout_marginBottom="-12dp"
+        
+        android:elevation="20dp" 
+        android:outlineProvider="none" 
+        
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_discount_banner_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Діє знижка 15%"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginStart="0dp"/>
+    </LinearLayout>
+
+        <com.google.android.material.card.MaterialCardView
+        android:id="@+id/active_order_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="-10dp"
+        android:layout_marginHorizontal="0dp"
+        app:cardElevation="16dp"
+        app:cardCornerRadius="24dp"
+        app:cardBackgroundColor="@color/card_background"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="40dp">
+
+            <TextView
+                android:id="@+id/order_status_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="Пошук водія..."
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:background="@drawable/bg_status_pill"
+                android:paddingHorizontal="24dp"
+                android:paddingVertical="8dp"
+                android:layout_marginBottom="16dp"/>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+                
+                <TextView
+                    android:id="@+id/tv_active_order_price"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center_horizontal"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-                    
-                    <ProgressBar
-                        android:id="@+id/status_progress_bar"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:indeterminateTint="@color/taxi_yellow"
-                        android:layout_marginEnd="10dp"/>
+                    android:text="245 ₴"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"/>
+                
+                <ImageView
+                    android:id="@+id/iv_active_order_payment"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="12dp"
+                    android:src="@drawable/ic_cash"
+                    app:tint="@color/text_secondary"/>
+            </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/layout_search_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="start">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+                    <ImageView
+                        android:id="@+id/iv_order_tariff_icon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_taxi_model_standard"
+                        android:layout_marginEnd="12dp"/>
                     <TextView
-                        android:id="@+id/order_status_text"
+                        android:id="@+id/tv_order_tariff_name"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Пошук водія..."
-                        android:textSize="20sp"
+                        android:text="Standard"
+                        android:textSize="16sp"
                         android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface"/> 
-                        </LinearLayout>
+                        android:textColor="@color/text_primary"/>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_order_services"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="+ Кондиціонер, Тварина"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="4dp"
+                    android:visibility="gone"/>
+
+                <TextView
+                    android:id="@+id/tv_order_comment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Коментар: біля арки"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:textStyle="italic"
+                    android:layout_marginBottom="4dp"
+                    android:visibility="gone"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layout_driver_assigned_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+                
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#EEEEEE"
+                    android:layout_marginBottom="16dp"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:id="@+id/tv_car_plate_large"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="AA 0000 AA"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:letterSpacing="0.05"
+                        android:background="@drawable/bg_search_input"
+                        android:backgroundTint="#F5F5F5"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="4dp"/>
+                    <TextView
+                        android:id="@+id/tv_car_details_subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Білий Skoda Octavia"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="8dp"/>
+                </LinearLayout>
 
                 <View
                     android:layout_width="match_parent"
@@ -367,120 +830,99 @@
                     android:layout_marginTop="16dp"
                     android:layout_marginBottom="16dp"/>
 
-                <LinearLayout
-                    android:id="@+id/layout_order_details"
+                <RelativeLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:id="@+id/iv_order_tariff_icon"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:src="@drawable/ic_car_marker_info"
-                        android:layout_marginEnd="12dp"/>
+                    android:layout_height="wrap_content">
+                    <androidx.cardview.widget.CardView
+                        android:id="@+id/cv_photo_container"
+                        android:layout_width="60dp"
+                        android:layout_height="60dp"
+                        app:cardCornerRadius="30dp"
+                        app:cardElevation="0dp"
+                        android:layout_centerVertical="true">
+                        <ImageView
+                            android:id="@+id/iv_driver_photo"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:src="@drawable/ic_avatar_placeholder"
+                            android:scaleType="centerCrop"/>
+                    </androidx.cardview.widget.CardView>
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:orientation="vertical"
+                        android:layout_toEndOf="@id/cv_photo_container"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="16dp">
                         <TextView
+                            android:id="@+id/tv_driver_first_name"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Тариф"
+                            android:text="Олександр"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"/>
+                        <TextView
+                            android:id="@+id/tv_driver_experience"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="В службі..."
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary"
+                            android:layout_marginTop="2dp"/>
+                        <TextView
+                            android:id="@+id/tv_driver_rides_count"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Поїздок: ..."
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary"/>
-                        <TextView
-                            android:id="@+id/tv_order_tariff_name"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Business"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:textColor="?attr/colorOnSurface"/>
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/tv_order_price"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="125 ₴"
-                        android:textSize="20sp"
-                        android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface"/>
-                </LinearLayout>
-                
-                <LinearLayout
-                    android:id="@+id/driver_info_layout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone"
-                    android:layout_marginTop="16dp">
-                    
-                    <TextView
-                        android:id="@+id/tv_driver_name"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Водій знайдений!"
-                        android:textSize="14sp"
-                        android:textColor="@color/taxi_yellow"/>
-                        
-                      <LinearLayout
-                         android:layout_width="match_parent"
-                         android:layout_height="wrap_content"
-                         android:orientation="horizontal"
-                         android:gravity="center_vertical"
-                         android:layout_marginTop="8dp">
-                         
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-                            <TextView android:id="@+id/tv_car_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Car" android:textStyle="bold" android:textSize="16sp" android:textColor="?attr/colorOnSurface"/>
-                            <TextView android:id="@+id/tv_car_plate" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AA0000AA" android:textSize="14sp" android:textColor="@color/text_secondary"/>
-                        </LinearLayout>
-                        
-                        <ImageButton android:id="@+id/btn_call_driver" android:layout_width="48dp" android:layout_height="48dp" android:src="@android:drawable/ic_menu_call" android:background="@drawable/bg_button_primary" android:padding="10dp" app:tint="@color/white"/>
-                    </LinearLayout>
-                </LinearLayout>
-
-                <Button
-                    android:id="@+id/btn_cancel_order"
-                    android:layout_width="match_parent"
-                    android:layout_height="50dp"
-                    android:layout_marginTop="24dp"
-                    android:text="Скасувати"
-                    android:textColor="@color/white"
-                    android:backgroundTint="@color/taxi_red"
-                    android:textStyle="bold"
-                    app:cornerRadius="12dp"/>
-                    
+                    <ImageButton
+                        android:id="@+id/btn_call_driver"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@android:drawable/ic_menu_call"
+                        android:background="@drawable/bg_button_primary"
+                        android:padding="12dp"
+                        app:tint="@color/white"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"/>
+                </RelativeLayout>
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-<androidx.cardview.widget.CardView
+
+            <Button
+                android:id="@+id/btn_cancel_order"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="24dp"
+                android:text="Скасувати"
+                android:textColor="@color/white"
+                android:backgroundTint="@color/taxi_red"
+                android:textStyle="bold"
+                app:cornerRadius="12dp"/>
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+        <androidx.cardview.widget.CardView
             android:id="@+id/custom_toast_container"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerHorizontal="true"
+            android:layout_margin="60dp"
             android:layout_marginTop="60dp"
             android:layout_alignParentTop="true"
-            
             app:cardCornerRadius="30dp"
             app:cardElevation="20dp"
-            
             app:cardBackgroundColor="@color/toast_background"
-            
             android:outlineSpotShadowColor="@color/toast_shadow"
             android:outlineAmbientShadowColor="@color/toast_shadow"
             tools:targetApi="p"
-            
             android:visibility="invisible"
             android:translationY="-200dp">
-
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -489,261 +931,382 @@
                 android:paddingVertical="16dp"
                 android:paddingHorizontal="28dp"
                 android:minWidth="200dp">
-
                 <ImageView
                     android:id="@+id/iv_toast_icon"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:src="@drawable/ic_alert_circle"
                     app:tint="@color/taxi_yellow"/>
-
                 <TextView
                     android:id="@+id/tv_toast_message"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
                     android:text="Повідомлення"
-                    
                     android:textColor="@color/toast_text"
-                    
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:maxWidth="300dp"
                     android:lineSpacingExtra="2dp"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
+
     </RelativeLayout>
 
-
     <LinearLayout
-        android:id="@+id/nav_view_content"
-        android:layout_width="340dp"
+        android:id="@+id/navigation_view"
+        android:layout_width="350dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="?android:attr/colorBackground"
         android:orientation="vertical"
-        android:padding="24dp"
+        android:background="@color/menu_background_color"
         android:clickable="true"
         android:focusable="true">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Налаштування"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="?attr/colorOnBackground"
-            android:layout_marginBottom="24dp"/>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/btn_open_profile_details"
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#E5E7EB"
-            android:layout_marginBottom="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="@color/card_background">
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:scrollbars="none"
+            android:fillViewport="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:padding="16dp">
+                android:orientation="vertical">
 
-                <androidx.cardview.widget.CardView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    app:cardCornerRadius="24dp"
-                    app:cardBackgroundColor="#E5E7EB"
-                    app:cardElevation="0dp">
-                    <ImageView
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="0dp"
+                    android:layout_marginBottom="12dp"
+                    android:layout_marginHorizontal="0dp"
+                    app:shapeAppearanceOverlay="@style/Shape.Card.Top"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/card_background"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:padding="10dp"
-                        android:src="@drawable/ic_avatar_placeholder"
-                        app:tint="#9CA3AF"/>
-                </androidx.cardview.widget.CardView>
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
 
-                <LinearLayout
-                    android:layout_width="0dp"
+                        <LinearLayout
+                            android:id="@+id/btn_open_profile_details"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingTop="20dp"
+                            android:paddingBottom="12dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true">
+
+                            <androidx.cardview.widget.CardView
+                                android:layout_width="72dp"
+                                android:layout_height="72dp"
+                                app:cardCornerRadius="36dp"
+                                app:cardBackgroundColor="@color/menu_neutral_color"
+                                app:cardElevation="0dp">
+                                <TextView
+                                    android:id="@+id/tv_avatar_letter"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:text="U"
+                                    android:textSize="28sp"
+                                    android:textStyle="bold"
+                                    android:gravity="center"
+                                    android:textColor="@color/taxi_text_dark"/>
+                            </androidx.cardview.widget.CardView>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:layout_marginStart="20dp">
+                                <TextView
+                                    android:id="@+id/profile_user_name"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Райдер"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold"
+                                    android:textColor="@color/text_primary"/>
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Налаштування"
+                                    android:textSize="15sp"
+                                    android:textColor="@color/text_secondary"
+                                    android:layout_marginTop="4dp"/>
+                            </LinearLayout>
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_chevron_right"
+                                app:tint="@color/text_secondary"/>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btn_menu_stats"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingStart="20dp"
+                            android:paddingEnd="16dp"
+                            android:paddingTop="16dp"
+                            android:paddingBottom="16dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true">
+                            <ImageView
+                                android:src="@drawable/ic_menu_stats"
+                                android:layout_width="30dp"
+                                android:layout_height="30dp"
+                                android:layout_marginEnd="20dp"
+                                app:tint="@color/text_primary"/>
+                            <TextView
+                                android:text="Статистика"
+                                android:textSize="19sp"
+                                android:textColor="@color/text_primary"
+                                android:fontFamily="sans-serif-medium"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"/>
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_chevron_right"
+                                app:tint="@color/text_secondary"/>
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="16dp">
-
-                    <TextView
-                        android:id="@+id/profile_user_name"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Райдер"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Мій профіль"
-                        android:textSize="14sp"
-                        android:textColor="@color/taxi_gray_accent"/>
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/taxi_gray_accent"/>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/btn_open_favorites"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#E5E7EB"
-            android:layout_marginBottom="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="@color/card_background">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:padding="16dp">
-
-                <androidx.cardview.widget.CardView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    app:cardCornerRadius="24dp"
-                    app:cardBackgroundColor="#E5E7EB"
-                    app:cardElevation="0dp">
-                    <ImageView
+                    android:layout_marginBottom="12dp"
+                    android:layout_marginHorizontal="0dp"
+                    app:shapeAppearanceOverlay="@style/Shape.Card.Middle"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/card_background"
+                    app:strokeWidth="0dp">
+                    <LinearLayout
+                        android:id="@+id/profile_btn_change_city"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:padding="12dp"
-                        android:src="@android:drawable/btn_star_big_on"
-                        app:tint="#9CA3AF"/>
-                </androidx.cardview.widget.CardView>
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Обрані адреси"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="?attr/colorOnSurface"
-                    android:layout_marginStart="16dp"/>
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/taxi_gray_accent"/>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/profile_btn_change_city"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#E5E7EB"
-            android:layout_marginBottom="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="@color/card_background">
-            
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="РЕГІОН"
-                    android:textSize="12sp"
-                    android:letterSpacing="0.1"
-                    android:textStyle="bold"
-                    android:textColor="@color/taxi_gray_accent"/>
-
-                <TextView
-                    android:id="@+id/profile_current_city"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Київ"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/taxi_yellow" 
-                    android:layout_marginTop="4dp"/>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp"
-            app:strokeColor="#E5E7EB"
-            android:layout_marginBottom="12dp"
-            app:cardBackgroundColor="@color/card_background">
-            
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:padding="20dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="ТЕМА"
-                        android:textSize="12sp"
-                        android:letterSpacing="0.1"
-                        android:textStyle="bold"
-                        android:textColor="@color/taxi_gray_accent"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Темний режим"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface"
-                        android:layout_marginTop="4dp"/>
-                </LinearLayout>
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/profile_switch_theme"
-                    android:layout_width="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingStart="20dp"
+                        android:paddingEnd="16dp"
+                        android:paddingTop="13dp"
+                        android:paddingBottom="13dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true">
+                        <ImageView
+                            android:layout_width="30dp"
+                            android:layout_height="30dp"
+                            android:src="@drawable/ic_place_small"
+                            app:tint="@color/text_primary"
+                            android:layout_marginEnd="20dp"/>
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center_vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Місце"
+                                android:textSize="12sp"
+                                android:textColor="@color/text_secondary"
+                                android:includeFontPadding="false"/>
+                            <TextView
+                                android:id="@+id/profile_current_city"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Київ"
+                                android:textSize="19sp"
+                                android:textColor="@color/text_primary"
+                                android:fontFamily="sans-serif-medium"
+                                android:includeFontPadding="false"/>
+                        </LinearLayout>
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_chevron_right"
+                            android:layout_marginEnd="3dp"
+                            app:tint="@color/text_secondary"/>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:thumbTint="@color/taxi_yellow" 
-                    app:trackTint="#DDDDDD" />
-                    
+                    android:layout_marginBottom="12dp"
+                    android:layout_marginHorizontal="0dp"
+                    app:shapeAppearanceOverlay="@style/Shape.Card.Middle"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/card_background"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingVertical="8dp">
+
+                        <LinearLayout
+                            android:id="@+id/btn_menu_history"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            style="@style/MenuStyle">
+                            <ImageView android:src="@drawable/ic_menu_history" style="@style/MenuIconStyle"/>
+                            <TextView android:text="Мої поїздки" style="@style/MenuTextStyle"/>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btn_menu_payment"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            style="@style/MenuStyle">
+                            <ImageView android:src="@drawable/ic_menu_payment" style="@style/MenuIconStyle"/>
+                            <TextView android:text="Оплата" style="@style/MenuTextStyle"/>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btn_open_favorites"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            style="@style/MenuStyle">
+                            <ImageView android:src="@drawable/ic_place_small" style="@style/MenuIconStyle"/>
+                            <TextView android:text="Обрані адреси" style="@style/MenuTextStyle"/>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btn_menu_discounts"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            style="@style/MenuStyle">
+                            <ImageView android:src="@drawable/ic_menu_discount" style="@style/MenuIconStyle"/>
+                            <TextView android:text="Знижки" style="@style/MenuTextStyle"/>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btn_menu_news"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            style="@style/MenuStyle">
+                            <ImageView android:src="@drawable/ic_menu_news" style="@style/MenuIconStyle"/>
+                            <TextView android:text="Новини" style="@style/MenuTextStyle"/>
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:layout_marginHorizontal="0dp"
+                    app:shapeAppearanceOverlay="@style/Shape.Card.Middle"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/card_background"
+                    app:strokeWidth="0dp">
+                    <LinearLayout
+                        android:id="@+id/btn_menu_help"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        style="@style/MenuStyle">
+                        <ImageView android:src="@drawable/ic_menu_help" style="@style/MenuIconStyle"/>
+                        <TextView android:text="Допомога" style="@style/MenuTextStyle"/>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginBottom="0dp"
+                    android:layout_marginHorizontal="0dp"
+                    app:shapeAppearanceOverlay="@style/Shape.Card.Bottom"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/card_background"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="24dp"
+                        android:paddingBottom="40dp"
+                        android:paddingStart="20dp"
+                        android:paddingEnd="20dp">
+
+                        <TextView
+                            android:id="@+id/tv_theme_label"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Світла тема"
+                            android:textSize="18sp"
+                            android:textColor="@color/text_primary"
+                            android:fontFamily="sans-serif-medium"/>
+
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:id="@+id/theme_switch_container"
+                            android:layout_width="100dp"
+                            android:layout_height="50dp"
+                            android:background="@drawable/bg_theme_switch_track"
+                            android:padding="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <View
+                                android:id="@+id/theme_switch_thumb"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:background="@drawable/bg_theme_switch_thumb"
+                                app:layout_constraintWidth_percent="0.5"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintBottom_toBottomOf="parent"/>
+
+                            <ImageView
+                                android:id="@+id/iv_theme_sun"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_sun"
+                                app:tint="@color/switch_icon_active_light"
+                                android:elevation="2dp"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintHorizontal_bias="0.17"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintBottom_toBottomOf="parent"/>
+
+                            <ImageView
+                                android:id="@+id/iv_theme_moon"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_moon"
+                                app:tint="@color/switch_icon_inactive_light"
+                                android:elevation="2dp"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintHorizontal_bias="0.83"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintBottom_toBottomOf="parent"/>
+                        </androidx.constraintlayout.widget.ConstraintLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-    
+        </ScrollView>
     </LinearLayout>
+
 </androidx.drawerlayout.widget.DrawerLayout>

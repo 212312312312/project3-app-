@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/unified_block_bg"
+    android:paddingTop="48dp"
+    android:paddingBottom="24dp">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:layout_marginHorizontal="24dp">
+
+        <ImageView
+            android:id="@+id/btn_back"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@drawable/ic_arrow_back_black"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            app:tint="@color/text_primary"
+            android:layout_centerVertical="true"
+            android:layout_alignParentStart="true"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Коментар"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnBackground"
+            android:layout_centerVertical="true"
+            android:layout_toEndOf="@id/btn_back"
+            android:layout_marginStart="16dp"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_done"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Готово"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            
+            android:enabled="false"
+            android:textColor="#9E9E9E"
+            app:strokeColor="#9E9E9E"
+            app:strokeWidth="1dp"
+            app:cornerRadius="8dp"
+            
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"/>
+    </RelativeLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingEnd="24dp">
+
+        <FrameLayout
+            android:layout_width="60dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top">
+            
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_comment"
+                android:layout_marginTop="16dp" 
+                android:layout_gravity="center_horizontal"
+                app:tint="?attr/colorOnBackground"/>
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/menu_background_color"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:cardPreventCornerOverlap="false">
+
+                <EditText
+                    android:id="@+id/et_comment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="100dp"
+                    android:background="@null" 
+                    android:hint="Напишіть коментар..."
+                    android:textSize="16sp"
+                    android:textColor="?attr/colorOnBackground"
+                    android:textColorHint="@color/text_secondary"
+                    android:gravity="top|start"
+                    android:padding="16dp"
+                    android:maxLength="400"
+                    android:inputType="textCapSentences|textMultiLine|textNoSuggestions"/>
+            </androidx.cardview.widget.CardView>
+
+            <TextView
+                android:id="@+id/tv_counter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0/400"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:layout_gravity="end"
+                android:layout_marginTop="4dp"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="24dp"/>
+
+    <LinearLayout
+        android:id="@+id/suggestions_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/suggestion_wait"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Чекайте біля..."
+            android:paddingVertical="16dp"
+            android:paddingStart="60dp" 
+            android:paddingEnd="24dp"
+            android:textSize="16sp"
+            android:textColor="?attr/colorOnBackground"
+            android:background="?attr/selectableItemBackground"/>
+        
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?android:attr/listDivider" android:layout_marginStart="60dp" android:layout_marginEnd="24dp"/>
+
+        <TextView
+            android:id="@+id/suggestion_entry"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Заїзд зі сторони..."
+            android:paddingVertical="16dp"
+            android:paddingStart="60dp"
+            android:paddingEnd="24dp"
+            android:textSize="16sp"
+            android:textColor="?attr/colorOnBackground"
+            android:background="?attr/selectableItemBackground"/>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?android:attr/listDivider" android:layout_marginStart="60dp" android:layout_marginEnd="24dp"/>
+
+        <TextView
+            android:id="@+id/suggestion_change"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Потрібна решта з..."
+            android:paddingVertical="16dp"
+            android:paddingStart="60dp"
+            android:paddingEnd="24dp"
+            android:textSize="16sp"
+            android:textColor="?attr/colorOnBackground"
+            android:background="?attr/selectableItemBackground"/>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?android:attr/listDivider" android:layout_marginStart="60dp" android:layout_marginEnd="24dp"/>
+
+        <TextView
+            android:id="@+id/suggestion_nocall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Не телефонуйте мені"
+            android:paddingVertical="16dp"
+            android:paddingStart="60dp"
+            android:paddingEnd="24dp"
+            android:textSize="16sp"
+            android:textColor="?attr/colorOnBackground"
+            android:background="?attr/selectableItemBackground"/>
+            
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?android:attr/listDivider" android:layout_marginStart="60dp" android:layout_marginEnd="24dp"/>
+
+    </LinearLayout>
+</LinearLayout>

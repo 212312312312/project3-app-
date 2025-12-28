@@ -2,28 +2,33 @@ package com.taxiapp.client.network.dto
 
 import com.google.gson.annotations.SerializedName
 
-// DTO для ответа Google Directions
 data class DirectionsResponse(
     val routes: List<Route>
 )
 
 data class Route(
     @SerializedName("overview_polyline")
-    val overviewPolyline: Polyline,
-    // НОВЫЙ БЛОК: Получаем дистанцию
+    val overviewPolyline: OverviewPolyline,
     val legs: List<Leg>
 )
 
+data class OverviewPolyline(
+    val points: String
+)
+
 data class Leg(
-    val distance: Distance
+    val distance: Distance,
+    val duration: Duration // <-- ДОБАВЛЕНО ЭТО ПОЛЕ
 )
 
 data class Distance(
-    val text: String, // "22.5 km"
+    val text: String,
     @SerializedName("value")
-    val meters: Int // 22500 (в метрах)
+    val meters: Int // Google отдает "value", мы называем "meters"
 )
 
-data class Polyline(
-    val points: String
+data class Duration(
+    val text: String,
+    @SerializedName("value")
+    val seconds: Int // <-- ВАЖНО: Google отдает "value", мы называем "seconds"
 )
