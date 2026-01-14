@@ -1,8 +1,18 @@
 package com.taxiapp.client.network.dto
 
+import com.google.gson.annotations.SerializedName
+
+// 1. Додаємо цей маленький клас, щоб Android знав, як виглядає послуга
+data class OrderServiceDto(
+    val id: Long,
+    val name: String,
+    val price: Double
+)
+
+// 2. Оновлюємо основний клас, зберігаючи твою структуру
 data class TaxiOrderDto(
     val id: Long,
-    val client: Any?,
+    val client: Any?, // Залишаємо Any?, як у тебе було
     val driver: OrderDriverDto?,
     val status: String,
     val fromAddress: String,
@@ -20,7 +30,12 @@ data class TaxiOrderDto(
     val formattedWaypoints: String?,
     val paymentMethod: String? = "CASH",
 
-    // --- ОБОВ'ЯЗКОВО ДОДАЙ ЦЕ ---
-    val serviceIds: List<Long>? = null, // Список послуг, які повернув сервер
-    val comment: String? = null         // Коментар, який зберіг сервер
+    // Старі поля (залишаємо)
+    val serviceIds: List<Long>? = null,
+    val comment: String? = null,
+
+    // !!! НОВЕ ПОЛЕ, ЯКЕ ВИКЛИКАЛО ПОМИЛКУ !!!
+    // Тепер HomeActivity побачить цей список
+    @SerializedName("services")
+    val services: List<OrderServiceDto> = emptyList()
 )

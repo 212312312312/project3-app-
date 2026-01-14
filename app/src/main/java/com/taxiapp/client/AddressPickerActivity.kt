@@ -117,7 +117,7 @@ class AddressPickerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_address_picker)
 
         // --- ВСТАВТЕ ВАШ КЛЮЧ ---
-        val myApiKey = "AIzaSyD.........................."
+        val myApiKey = "AIzaSyDp1blRHORukZ08uYYpvh52fN0mGe7Rnu4"
         // -----------------------
 
         if (!Places.isInitialized()) {

@@ -9,22 +9,27 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:padding="24dp">
+        android:orientation="vertical">
 
-        <RelativeLayout
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="40dp">
-            
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="16dp"
+            android:paddingTop="50dp">
+
             <ImageView
                 android:id="@+id/btn_back"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:src="@drawable/ic_menu_revert"
-                app:tint="@color/text_primary"
-                android:layout_alignParentStart="true"
-                android:layout_centerVertical="true"/>
+                android:src="@drawable/ic_arrow_back_black"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                app:tint="@color/text_primary"/>
 
             <TextView
                 android:layout_width="wrap_content"
@@ -33,96 +38,110 @@
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
-                android:layout_centerInParent="true"/>
-        </RelativeLayout>
+                android:layout_marginStart="16dp"/>
+        </LinearLayout>
 
-        <androidx.cardview.widget.CardView
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:layout_gravity="center_horizontal"
-            app:cardCornerRadius="50dp"
-            app:cardElevation="0dp"
-            app:cardBackgroundColor="#E0E0E0"
-            android:layout_marginBottom="24dp">
-            
-            <ImageView
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingBottom="24dp">
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="100dp"
+                android:layout_height="100dp"
+                android:layout_gravity="center_horizontal"
+                app:cardCornerRadius="50dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/menu_background_color"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:id="@+id/tv_avatar_letter_large"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:text="A"
+                    android:textSize="48sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:gravity="center"
+                    android:includeFontPadding="false"/>
+                    
+            </androidx.cardview.widget.CardView>
+
+            <EditText
+                android:id="@+id/et_user_name"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:src="@drawable/ic_avatar_placeholder"
-                android:padding="20dp"
-                app:tint="#9E9E9E"/>
-        </androidx.cardview.widget.CardView>
+                android:layout_height="wrap_content"
+                android:background="@null"
+                android:hint="Ваше ім'я"
+                android:text="Райдер"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_hint"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:layout_marginBottom="8dp"
+                android:inputType="textPersonName|textCapWords"/>
 
-        <EditText
-            android:id="@+id/et_user_name"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@null"
-            android:hint="Ваше ім'я"
-            android:text="Райдер"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_hint"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:layout_marginBottom="8dp"
-            android:inputType="textPersonName|textCapWords"/>
+            <TextView
+                android:id="@+id/tv_user_phone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="+380 XX XXX XX XX"
+                android:textColor="@color/text_secondary"
+                android:textSize="16sp"
+                android:gravity="center"/>
 
-        <TextView
-            android:id="@+id/tv_user_phone"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="+380 XX XXX XX XX"
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp"
-            android:gravity="center"/>
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"/>
 
-        <Space 
-            android:layout_width="match_parent" 
-            android:layout_height="0dp" 
-            android:layout_weight="1"/>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_logout"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:text="Вийти з акаунту"
+                android:backgroundTint="@android:color/transparent"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                app:cornerRadius="16dp"
+                app:strokeWidth="0dp"
+                android:stateListAnimator="@null"/>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_logout"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="Вийти з акаунту"
-            android:backgroundTint="@android:color/transparent"
-            android:textColor="@color/text_primary"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            app:cornerRadius="16dp"
-            app:strokeWidth="0dp"
-            android:stateListAnimator="@null"/>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#E0E0E0"
+                android:layout_marginHorizontal="24dp"
+                android:layout_marginVertical="4dp"/>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#E0E0E0"
-            android:layout_marginHorizontal="24dp"
-            android:layout_marginVertical="4dp"/>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_delete_account"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:text="Видалити акаунт"
+                android:backgroundTint="@android:color/transparent"
+                android:textColor="#FF5252"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                app:cornerRadius="16dp"
+                app:strokeWidth="0dp"
+                android:stateListAnimator="@null"
+                android:layout_marginBottom="16dp"/>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_delete_account"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="Видалити акаунт"
-            android:backgroundTint="@android:color/transparent"
-            android:textColor="#FF5252"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            app:cornerRadius="16dp"
-            app:strokeWidth="0dp"
-            android:stateListAnimator="@null"
-            android:layout_marginBottom="16dp"/>
-
+        </LinearLayout>
     </LinearLayout>
 
     <androidx.cardview.widget.CardView
         android:id="@+id/custom_toast_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal|top" 
+        android:layout_gravity="center_horizontal|top"
         android:layout_marginTop="60dp"
         
         app:cardBackgroundColor="@color/toast_background"

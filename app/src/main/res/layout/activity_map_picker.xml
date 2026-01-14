@@ -15,8 +15,11 @@
         android:id="@+id/btn_back_card"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_margin="16dp"
-        app:cardCornerRadius="24dp"
+        
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="50dp"
+        
+        app:cardCornerRadius="12dp"
         app:cardElevation="6dp"
         app:cardBackgroundColor="@color/card_background"
         android:clickable="true"
@@ -28,7 +31,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:padding="12dp"
-            android:src="@android:drawable/ic_menu_revert"
+            android:src="@drawable/ic_arrow_back_black"
             app:tint="@color/text_primary"/>
     </androidx.cardview.widget.CardView>
 
@@ -93,7 +96,9 @@
                 android:layout_height="56dp"
                 android:text="Підтвердити адресу"
                 android:layout_marginTop="16dp"
-                android:textColor="@color/taxi_text_dark"
+                
+                android:textColor="@android:color/black" 
+                
                 android:textStyle="bold"
                 android:backgroundTint="@color/taxi_yellow"/>
 

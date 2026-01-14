@@ -12,7 +12,7 @@ import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.ClientPromoProgressDto
 import com.taxiapp.client.ui.PromoAdapter
 import com.taxiapp.client.ui.PromoDetailsBottomSheet
-import com.taxiapp.client.ui.EnterPromoDialog // <-- Використовуємо наш клас
+import com.taxiapp.client.ui.EnterPromoDialog
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 import retrofit2.Call
@@ -40,12 +40,7 @@ class PromoActivity : AppCompatActivity() {
 
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
 
-        // Кнопка на порожньому екрані відкриває НАШ діалог
         emptyState.setOnClickListener { showPromoCodeDialog() }
-
-        // Якщо в activity_promo.xml є кнопка для відкриття діалогу (наприклад, плюсик),
-        // знайди її і теж додай слухач:
-        // findViewById<View>(R.id.btn_add_promo)?.setOnClickListener { showPromoCodeDialog() }
 
         adapter = PromoAdapter { promoItem ->
             val bottomSheet = PromoDetailsBottomSheet(promoItem)
@@ -66,19 +61,24 @@ class PromoActivity : AppCompatActivity() {
         }
 
         progressBar.visibility = View.VISIBLE
-        // Не ховаємо список одразу, щоб не блимало, якщо дані завантажаться швидко
 
         ApiClient.instance.getClientPromos("Bearer $token").enqueue(object : Callback<List<ClientPromoProgressDto>> {
             override fun onResponse(call: Call<List<ClientPromoProgressDto>>, response: Response<List<ClientPromoProgressDto>>) {
                 progressBar.visibility = View.GONE
 
                 if (response.isSuccessful) {
-                    val list = response.body() ?: emptyList()
+                    val fullList = response.body() ?: emptyList()
 
-                    if (list.isEmpty()) {
+                    // --- ИСПРАВЛЕНИЕ ЛОГИКИ ---
+                    // Мы показываем только те задания, где награда ЕЩЕ НЕ ДОСТУПНА.
+                    // Если isRewardAvailable == true, значит задание выполнено и оно ушло в "Мои скидки".
+                    val activeTasks = fullList.filter { !it.isRewardAvailable }
+                    // ---------------------------
+
+                    if (activeTasks.isEmpty()) {
                         showEmptyState()
                     } else {
-                        showList(list)
+                        showList(activeTasks)
                     }
                 } else {
                     showEmptyState()
@@ -87,7 +87,7 @@ class PromoActivity : AppCompatActivity() {
 
             override fun onFailure(call: Call<List<ClientPromoProgressDto>>, t: Throwable) {
                 progressBar.visibility = View.GONE
-                showEmptyState() // Або Toast про помилку
+                showEmptyState()
             }
         })
     }
@@ -101,15 +101,12 @@ class PromoActivity : AppCompatActivity() {
     private fun showEmptyState() {
         recyclerView.visibility = View.GONE
         emptyState.visibility = View.VISIBLE
-        // Очищаємо список адаптера
         adapter.submitList(emptyList())
     }
 
-    // --- ВІДКРИТТЯ ДІАЛОГУ ---
     private fun showPromoCodeDialog() {
         val dialog = EnterPromoDialog(
             onSuccess = {
-                // Коли код успішно активовано, перезавантажуємо список
                 loadPromos()
             }
         )

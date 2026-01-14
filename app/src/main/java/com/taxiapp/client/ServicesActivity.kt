@@ -6,10 +6,8 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -28,7 +26,7 @@ class ServicesActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ServicesAdapter
     private lateinit var btnApply: MaterialButton
-    private lateinit var sessionManager: SessionManager // Добавили переменную класса
+    private lateinit var sessionManager: SessionManager
 
     private var servicesList = mutableListOf<TaxiService>()
     private var preSelectedIds = ArrayList<Long>()
@@ -38,7 +36,6 @@ class ServicesActivity : AppCompatActivity() {
         setContentView(R.layout.activity_services)
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) {}
 
-        // Инициализируем SessionManager сразу
         sessionManager = SessionManager(this)
 
         val list = intent.getSerializableExtra("SELECTED_IDS") as? ArrayList<Long>
@@ -57,58 +54,38 @@ class ServicesActivity : AppCompatActivity() {
             returnResult()
         }
 
-        // Изначально обновляем состояние
+        // Кнопка теперь всегда активна при старте
         updateButtonState()
 
         loadServices()
     }
 
-    // Метод проверки состояния кнопки и стилизации
+    // !!! ИСПРАВЛЕНИЕ ЗДЕСЬ !!!
+    // Кнопка теперь ВСЕГДА активна, чтобы можно было снять все галочки и нажать "Готово"
     private fun updateButtonState() {
-        val hasSelection = servicesList.any { it.isSelected }
+        btnApply.isEnabled = true // Разрешаем клик всегда
 
-        btnApply.isEnabled = hasSelection
+        val isDark = sessionManager.isDarkMode()
 
-        if (hasSelection) {
-            // Кнопка АКТИВНА
-            val isDark = sessionManager.isDarkMode()
+        // Убираем обводку, делаем кнопку сплошной и красивой всегда
+        btnApply.strokeWidth = 0
 
-            // Убираем обводку (чтобы была сплошная заливка)
-            btnApply.strokeWidth = 0
-
-            if (isDark) {
-                // Темная тема: Фон Белый, Текст Черный
-                btnApply.backgroundTintList = ColorStateList.valueOf(Color.WHITE)
-                btnApply.setTextColor(Color.BLACK)
-            } else {
-                // Светлая тема: Фон Черный, Текст Белый
-                btnApply.backgroundTintList = ColorStateList.valueOf(Color.BLACK)
-                btnApply.setTextColor(Color.WHITE)
-            }
+        if (isDark) {
+            btnApply.backgroundTintList = ColorStateList.valueOf(Color.WHITE)
+            btnApply.setTextColor(Color.BLACK)
         } else {
-            // Кнопка НЕ АКТИВНА (Серый Outlined стиль)
-            btnApply.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-            btnApply.setTextColor(Color.parseColor("#9E9E9E")) // Серый текст
-
-            // Возвращаем обводку
-            btnApply.strokeColor = ColorStateList.valueOf(Color.parseColor("#9E9E9E"))
-            btnApply.strokeWidth = dpToPx(1)
+            btnApply.backgroundTintList = ColorStateList.valueOf(Color.BLACK)
+            btnApply.setTextColor(Color.WHITE)
         }
-    }
-
-    // Вспомогательный метод для конвертации dp в px (для strokeWidth)
-    private fun dpToPx(dp: Int): Int {
-        return (dp * resources.displayMetrics.density).toInt()
     }
 
     private fun loadServices() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val token = sessionManager.fetchAuthToken()
-
                 if (token.isNullOrEmpty()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ServicesActivity, "Ошибка авторизации", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@ServicesActivity, "Помилка авторизації", Toast.LENGTH_SHORT).show()
                     }
                     return@launch
                 }
@@ -118,7 +95,7 @@ class ServicesActivity : AppCompatActivity() {
                 if (response.isSuccessful && response.body() != null) {
                     val services = response.body()!!
 
-                    // Восстанавливаем выбор
+                    // Восстанавливаем галочки
                     services.forEach { service ->
                         if (preSelectedIds.contains(service.id)) {
                             service.isSelected = true
@@ -130,30 +107,21 @@ class ServicesActivity : AppCompatActivity() {
                         servicesList.addAll(services)
 
                         adapter = ServicesAdapter(servicesList) { clickedService ->
-                            // При клике переключаем галочку
+                            // Переключаем выбор
                             clickedService.isSelected = !clickedService.isSelected
-
-                            // Обновляем конкретный элемент (чтобы галочка перерисовалась)
                             adapter.notifyItemChanged(servicesList.indexOf(clickedService))
-
-                            // Проверяем кнопку "Готово"
-                            updateButtonState()
+                            // Кнопку обновлять не обязательно (она всегда активна), но если захочешь менять текст - можно
                         }
                         recyclerView.adapter = adapter
-
-                        // Проверяем кнопку после загрузки
-                        updateButtonState()
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ServicesActivity, "Ошибка сервера: ${response.code()}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@ServicesActivity, "Помилка сервера", Toast.LENGTH_SHORT).show()
                     }
                 }
-
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ServicesActivity, "Помилка завантаження: ${e.message}", Toast.LENGTH_SHORT).show()
-                    e.printStackTrace()
+                    Toast.makeText(this@ServicesActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
                 }
             }
         }

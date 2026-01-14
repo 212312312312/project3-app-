@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Button
@@ -13,7 +15,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AlertDialog // Важливо!
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import com.taxiapp.client.network.ApiClient
@@ -30,7 +32,10 @@ class UserDetailsActivity : AppCompatActivity() {
     private lateinit var etName: EditText
     private lateinit var tvPhone: TextView
 
-    // Змінні для повідомлення
+    // Нова змінна для великої літери аватара
+    private lateinit var tvAvatarLetter: TextView
+
+    // Змінні для повідомлення (Toast)
     private lateinit var customToastContainer: CardView
     private lateinit var tvToastMessage: TextView
     private lateinit var ivToastIcon: ImageView
@@ -44,9 +49,10 @@ class UserDetailsActivity : AppCompatActivity() {
 
         sessionManager = SessionManager(applicationContext)
 
-        // Ініціалізація UI
+        // --- ІНІЦІАЛІЗАЦІЯ UI ---
         etName = findViewById(R.id.et_user_name)
         tvPhone = findViewById(R.id.tv_user_phone)
+        tvAvatarLetter = findViewById(R.id.tv_avatar_letter_large) // Знаходимо TextView літери
 
         // Ініціалізація тоста
         try {
@@ -55,10 +61,27 @@ class UserDetailsActivity : AppCompatActivity() {
             ivToastIcon = findViewById(R.id.iv_toast_icon)
         } catch (e: Exception) {}
 
-        // Дані
-        etName.setText(sessionManager.getUserName())
+        // --- ЗАПОВНЕННЯ ДАНИМИ ---
+        val savedName = sessionManager.getUserName()
+        etName.setText(savedName)
+
+        // Встановлюємо першу літеру при запуску
+        updateAvatarLetter(savedName)
+
         val phone = sessionManager.getUserPhone()
         tvPhone.text = if (phone.isNotEmpty()) "+38$phone" else "+380 XX XXX XX XX"
+
+        // --- ЛОГІКА ДИНАМІЧНОЇ ЗМІНИ ЛІТЕРИ ---
+        etName.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                // Оновлюємо літеру, коли користувач вводить текст
+                updateAvatarLetter(s.toString())
+            }
+
+            override fun afterTextChanged(s: Editable?) {}
+        })
 
         // --- КНОПКИ ---
 
@@ -72,36 +95,43 @@ class UserDetailsActivity : AppCompatActivity() {
         // 2. Вихід
         findViewById<View>(R.id.btn_logout).setOnClickListener { logoutAndExit() }
 
-        // 3. Видалення (Кнопка, на яку ви натискаєте)
+        // 3. Видалення
         val btnDelete = findViewById<View>(R.id.btn_delete_account)
         btnDelete.setOnClickListener {
             showCustomDeleteDialog()
         }
     }
 
+    // --- ОНОВЛЕННЯ ЛІТЕРИ ---
+    private fun updateAvatarLetter(name: String) {
+        val letter = if (name.isNotBlank()) {
+            // Беремо першу літеру, переводимо у верхній регістр
+            name.trim().first().toString().uppercase()
+        } else {
+            "U" // За замовчуванням (User), якщо поле пусте
+        }
+        tvAvatarLetter.text = letter
+    }
+
     // --- ФУНКЦІЯ ВІДОБРАЖЕННЯ ДІАЛОГУ ---
     private fun showCustomDeleteDialog() {
-        // 1. Загружаем наш XML с кнопками
         val dialogView = layoutInflater.inflate(R.layout.dialog_delete_account, null)
 
-        // 2. Создаем диалог
         val dialog = AlertDialog.Builder(this, R.style.DeleteAccountDialog)
             .setView(dialogView)
-            .setCancelable(true) // Можно закрыть, нажав мимо
+            .setCancelable(true)
             .create()
 
-        // 3. Находим кнопки ВНУТРИ нашего макета
         val btnCancel = dialogView.findViewById<Button>(R.id.btn_dialog_cancel)
         val btnDelete = dialogView.findViewById<Button>(R.id.btn_dialog_delete)
 
-        // 4. Настраиваем клики
         btnCancel.setOnClickListener {
-            dialog.dismiss() // Просто закрыть
+            dialog.dismiss()
         }
 
         btnDelete.setOnClickListener {
-            dialog.dismiss() // Закрыть окно
-            deleteAccountOnServer() // Выполнить удаление
+            dialog.dismiss()
+            deleteAccountOnServer()
         }
 
         dialog.show()

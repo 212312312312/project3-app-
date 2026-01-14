@@ -1,5 +1,6 @@
 package com.taxiapp.client.ui
 
+import android.graphics.Color
 import android.graphics.Paint
 import android.view.LayoutInflater
 import android.view.View
@@ -13,11 +14,11 @@ import com.google.android.material.card.MaterialCardView
 import com.taxiapp.client.R
 import com.taxiapp.client.network.dto.CarTariffDto
 import kotlin.math.min
-import kotlin.math.roundToInt // <-- ВАЖНЫЙ ИМПОРТ
+import kotlin.math.roundToInt
 
 data class TariffItem(
     val tariff: CarTariffDto,
-    val price: String,
+    val priceString: String,
     val priceValue: Double,
     val addedValue: Double = 0.0
 )
@@ -36,7 +37,7 @@ class TariffAdapter(
     private var currentDiscountPercent: Double = 0.0
     private var maxDiscountAmount: Double = 0.0
 
-    private val SERVER_IP = "192.168.0.104" // Проверь, чтобы IP был актуальным
+    private val SERVER_IP = "192.168.0.104" // Переконайтеся, що IP актуальний
 
     inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val cardView: MaterialCardView = view.findViewById(R.id.tariff_card)
@@ -45,6 +46,7 @@ class TariffAdapter(
         val image: ImageView = view.findViewById(R.id.iv_tariff_icon)
         val desc: TextView = view.findViewById(R.id.tv_tariff_desc)
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
+        val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge) // <-- Новий елемент
 
         fun bind(item: TariffItem, isSelected: Boolean) {
             val tariff = item.tariff
@@ -77,15 +79,28 @@ class TariffAdapter(
 
             // --- ЛОГИКА ЦЕНЫ (С ОКРУГЛЕНИЕМ) ---
             if (currentDiscountPercent > 0.0) {
-                // Старая цена (округляем)
+                // Показуємо стару ціну
                 oldPrice.visibility = View.VISIBLE
-                // ИСПОЛЬЗУЕМ roundToInt() ВМЕСТО toInt()
                 oldPrice.text = "${item.priceValue.roundToInt()} ₴"
                 oldPrice.paintFlags = oldPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
 
-                // Расчет скидки
-                val rawDiscount = item.priceValue * (currentDiscountPercent / 100.0)
+                // Показуємо бейдж знижки
+                discountBadge.visibility = View.VISIBLE
+                discountBadge.text = "-${currentDiscountPercent.toInt()}%"
 
+                // --- ЛОГИКА ФОНУ БЕЙДЖА ---
+                if (isSelected) {
+                    // Вибраний: Залитий фон (градієнт), білий текст
+                    discountBadge.setBackgroundResource(R.drawable.bg_discount_filled)
+                    discountBadge.setTextColor(Color.WHITE)
+                } else {
+                    // Не вибраний: Рамка, бірюзовий текст
+                    discountBadge.setBackgroundResource(R.drawable.bg_discount_outline)
+                    discountBadge.setTextColor(Color.parseColor("#00E5FF"))
+                }
+
+                // Розрахунок знижки
+                val rawDiscount = item.priceValue * (currentDiscountPercent / 100.0)
                 val finalDiscount = if (maxDiscountAmount > 0.0) {
                     min(rawDiscount, maxDiscountAmount)
                 } else {
@@ -95,15 +110,14 @@ class TariffAdapter(
                 val newPrice = item.priceValue - finalDiscount
                 val displayPrice = if (newPrice < 0) 0.0 else newPrice
 
-                // ИСПОЛЬЗУЕМ roundToInt() ВМЕСТО toInt()
                 price.text = "${displayPrice.roundToInt()} ₴"
             } else {
                 oldPrice.visibility = View.GONE
-                // ИСПОЛЬЗУЕМ roundToInt() ВМЕСТО toInt()
+                discountBadge.visibility = View.GONE
                 price.text = "${item.priceValue.roundToInt()} ₴"
             }
 
-            // --- ВЫДЕЛЕНИЕ ---
+            // --- ВЫДЕЛЕНИЕ КАРТКИ ---
             if (isSelected) {
                 cardView.cardElevation = 0f
                 cardView.strokeWidth = 6
@@ -180,8 +194,6 @@ class TariffAdapter(
             val userAdded = customPrices[tariff.id] ?: 0.0
 
             val finalPrice = withServices + userAdded
-
-            // Здесь тоже лучше использовать форматирование, которое округляет
             val priceString = String.format("%.0f", finalPrice)
 
             TariffItem(tariff, priceString, finalPrice, userAdded)

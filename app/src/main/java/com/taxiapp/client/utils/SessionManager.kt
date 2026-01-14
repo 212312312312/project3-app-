@@ -5,45 +5,34 @@ import android.content.SharedPreferences
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.libraries.places.api.model.Place
 
+// Допоміжний клас для передачі даних про знижку
+data class SessionPromoData(
+    val discountPercent: Int,
+    val maxDiscountAmount: Double
+)
+
 class SessionManager(context: Context) {
 
     private var prefs: SharedPreferences
 
     companion object {
         const val PREFS_NAME = "TaxiAppPrefs"
-
-        // Токен
         const val USER_TOKEN = "user_token"
-
-        // Інфо користувача
         const val USER_FULL_NAME = "user_full_name"
         const val USER_PHONE = "user_phone"
-
-        // Місто
         const val USER_CITY_NAME = "user_city_name"
         const val USER_CITY_LAT = "user_city_lat"
         const val USER_CITY_LNG = "user_city_lng"
         const val USER_CITY_ZOOM = "user_city_zoom"
-
-        // Активне замовлення
         const val ACTIVE_ORDER_ID = "active_order_id"
-
-        // Тема
         const val KEY_IS_DARK_MODE = "is_dark_mode"
-
-        // --- АДРЕСИ (Дім / Робота) ---
         const val KEY_HOME_NAME = "home_name"
         const val KEY_HOME_LAT = "home_lat"
         const val KEY_HOME_LNG = "home_lng"
-
         const val KEY_WORK_NAME = "work_name"
         const val KEY_WORK_LAT = "work_lat"
         const val KEY_WORK_LNG = "work_lng"
-
-        // Метод оплати
         const val KEY_PAYMENT_METHOD = "payment_method"
-
-        // --- ПРОМОКОД (НОВІ КЛЮЧІ) ---
         const val KEY_PROMO_DISCOUNT = "promo_discount_percent"
         const val KEY_PROMO_LIMIT = "promo_discount_limit"
     }
@@ -164,11 +153,8 @@ class SessionManager(context: Context) {
             remove(ACTIVE_ORDER_ID)
             remove(USER_FULL_NAME)
             remove(USER_PHONE)
-            // Очищуємо також промокоди при виході
             remove(KEY_PROMO_DISCOUNT)
             remove(KEY_PROMO_LIMIT)
-            remove("promo_discount_percent") // <-- Додайте це
-            remove("promo_discount_limit")   // <-- Додайте це
             apply()
         }
     }
@@ -191,8 +177,7 @@ class SessionManager(context: Context) {
         return prefs.getString(KEY_PAYMENT_METHOD, "CASH") ?: "CASH"
     }
 
-    // --- PROMO / DISCOUNTS (НОВИЙ БЛОК) ---
-    // Зберігаємо відсоток і ліміт як String, щоб уникнути втрати точності і проблем з null
+    // --- PROMO / DISCOUNTS ---
     fun savePromoDiscount(percent: Double, limit: Double = 0.0) {
         prefs.edit().apply {
             putString(KEY_PROMO_DISCOUNT, percent.toString())
@@ -207,8 +192,15 @@ class SessionManager(context: Context) {
     }
 
     fun fetchPromoLimit(): Double {
-        val str = prefs.getString("promo_discount_limit", "0.0")
+        val str = prefs.getString(KEY_PROMO_LIMIT, "0.0")
         return str?.toDoubleOrNull() ?: 0.0
+    }
+
+    // !!! НОВИЙ МЕТОД ДЛЯ ВИПРАВЛЕННЯ ПОМИЛКИ !!!
+    fun fetchActivePromo(): SessionPromoData? {
+        val percent = fetchPromoDiscount()
+        if (percent <= 0.0) return null
+        return SessionPromoData(percent.toInt(), fetchPromoLimit())
     }
 
     fun clearDiscounts() {

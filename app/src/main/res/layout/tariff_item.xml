@@ -44,6 +44,22 @@
             app:layout_constraintTop_toTopOf="parent"/>
 
         <TextView
+            android:id="@+id/tv_discount_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="-20%"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:layout_marginStart="8dp"
+            android:visibility="gone"
+            app:layout_constraintStart_toEndOf="@id/tv_tariff_name"
+            app:layout_constraintTop_toTopOf="@id/tv_tariff_name"
+            app:layout_constraintBottom_toBottomOf="@id/tv_tariff_name"/>
+        <TextView
             android:id="@+id/tv_tariff_desc"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -61,6 +77,7 @@
             android:gravity="end"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent">
+            
             <TextView
                 android:id="@+id/tv_tariff_price"
                 android:layout_width="wrap_content"

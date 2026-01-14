@@ -17,9 +17,9 @@ class ServicesAdapter(
     class ServiceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val name: TextView = view.findViewById(R.id.tv_service_name)
         val price: TextView = view.findViewById(R.id.tv_service_price)
-        // Теперь это ImageView, а не CheckBox
         val checkIcon: ImageView = view.findViewById(R.id.iv_selected_check)
-        val container: View = view.findViewById(R.id.item_container)
+        // container используем, если он есть, иначе itemView
+        val container: View? = view.findViewById(R.id.item_container)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ServiceViewHolder {
@@ -34,20 +34,14 @@ class ServicesAdapter(
         holder.name.text = service.name
         holder.price.text = "${service.price.toInt()} ₴"
 
-        // Логика видимости иконки
-        if (service.isSelected) {
-            holder.checkIcon.visibility = View.VISIBLE
-        } else {
-            holder.checkIcon.visibility = View.GONE
-        }
+        // Видимость галочки
+        holder.checkIcon.visibility = if (service.isSelected) View.VISIBLE else View.GONE
 
-        // Клик по всему элементу
-        holder.container.setOnClickListener {
-            onItemClick(service)
-        }
+        // !!! ИСПРАВЛЕНИЕ: Один надежный клик !!!
+        // Если есть специальный контейнер - вешаем на него, иначе на весь элемент
+        val clickTarget = holder.container ?: holder.itemView
 
-        // Клик можно вешать и на itemView, но container надежнее внутри нашего layout
-        holder.itemView.setOnClickListener {
+        clickTarget.setOnClickListener {
             onItemClick(service)
         }
     }
