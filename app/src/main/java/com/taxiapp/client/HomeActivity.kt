@@ -2364,7 +2364,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         layoutActiveOrderPrice.visibility = View.VISIBLE 
 
         when(order.status) {
-            "REQUESTED" -> {
+            // !!! ЗМІНА ТУТ !!! 
+            // Додаємо "OFFERING" у той самий блок, що й "REQUESTED"
+            "REQUESTED", "OFFERING" -> {
                 orderStatusText.text = "Пошук водія..."
                 startStatusBlinking()
 
@@ -2382,7 +2384,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 updateDriverInfo(order)
             }
 
-            // --- ЗМІНИ ТУТ ---
             "DRIVER_ARRIVED" -> {
                 stopStatusBlinking()
                 orderStatusText.text = "Водій на місці" 
