@@ -68,6 +68,9 @@ interface ApiService {
         @Path("id") orderId: Long
     ): Call<TaxiOrderDto>
 
+    @POST("/public/calculate-price")
+    fun calculatePrice(@Body request: CalculatePriceRequestDto): Call<List<CarTariffDto>>
+
     @DELETE("client/account")
     fun deleteAccount(@Header("Authorization") token: String): Call<MessageResponse>
 
@@ -87,4 +90,7 @@ interface ApiService {
 
     @GET("client/services")
     fun getServices(@Header("Authorization") token: String): Call<List<TaxiService>>
+
+    @GET("public/sectors")
+    fun getSectors(): Call<List<SectorDto>>
 }

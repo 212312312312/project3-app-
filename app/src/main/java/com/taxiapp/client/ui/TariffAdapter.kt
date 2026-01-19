@@ -13,6 +13,8 @@ import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
 import com.taxiapp.client.R
 import com.taxiapp.client.network.dto.CarTariffDto
+import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -32,12 +34,15 @@ class TariffAdapter(
     private var rawTariffs: List<CarTariffDto> = emptyList()
     private var currentDistanceMeters: Int = 0
     private var currentExtraCost: Double = 0.0
+
+    // Ручна зміна ціни юзером (Чайові)
     private val customPrices = mutableMapOf<Long, Double>()
 
     private var currentDiscountPercent: Double = 0.0
     private var maxDiscountAmount: Double = 0.0
 
-    private val SERVER_IP = "192.168.0.104" // Переконайтеся, що IP актуальний
+    // ВАЖЛИВО: Замініть на реальний IP вашого сервера, якщо тестуєте на реальному пристрої
+    private val SERVER_IP = "192.168.0.104"
 
     inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val cardView: MaterialCardView = view.findViewById(R.id.tariff_card)
@@ -46,12 +51,13 @@ class TariffAdapter(
         val image: ImageView = view.findViewById(R.id.iv_tariff_icon)
         val desc: TextView = view.findViewById(R.id.tv_tariff_desc)
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
-        val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge) // <-- Новий елемент
+        val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge)
 
         fun bind(item: TariffItem, isSelected: Boolean) {
             val tariff = item.tariff
             name.text = tariff.name
 
+            // Опис
             if (!tariff.description.isNullOrEmpty()) {
                 desc.visibility = View.VISIBLE
                 desc.text = tariff.description
@@ -59,7 +65,7 @@ class TariffAdapter(
                 desc.visibility = View.GONE
             }
 
-            // --- КАРТИНКА ---
+            // Іконка
             if (!tariff.iconUrl.isNullOrEmpty()) {
                 val fullUrl = if (tariff.iconUrl.startsWith("http")) {
                     tariff.iconUrl
@@ -77,29 +83,23 @@ class TariffAdapter(
                 image.setImageResource(R.drawable.ic_car_marker_info)
             }
 
-            // --- ЛОГИКА ЦЕНЫ (С ОКРУГЛЕНИЕМ) ---
+            // Логіка відображення ціни зі знижкою
             if (currentDiscountPercent > 0.0) {
-                // Показуємо стару ціну
                 oldPrice.visibility = View.VISIBLE
                 oldPrice.text = "${item.priceValue.roundToInt()} ₴"
                 oldPrice.paintFlags = oldPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
 
-                // Показуємо бейдж знижки
                 discountBadge.visibility = View.VISIBLE
                 discountBadge.text = "-${currentDiscountPercent.toInt()}%"
 
-                // --- ЛОГИКА ФОНУ БЕЙДЖА ---
                 if (isSelected) {
-                    // Вибраний: Залитий фон (градієнт), білий текст
                     discountBadge.setBackgroundResource(R.drawable.bg_discount_filled)
                     discountBadge.setTextColor(Color.WHITE)
                 } else {
-                    // Не вибраний: Рамка, бірюзовий текст
                     discountBadge.setBackgroundResource(R.drawable.bg_discount_outline)
                     discountBadge.setTextColor(Color.parseColor("#00E5FF"))
                 }
 
-                // Розрахунок знижки
                 val rawDiscount = item.priceValue * (currentDiscountPercent / 100.0)
                 val finalDiscount = if (maxDiscountAmount > 0.0) {
                     min(rawDiscount, maxDiscountAmount)
@@ -117,7 +117,7 @@ class TariffAdapter(
                 price.text = "${item.priceValue.roundToInt()} ₴"
             }
 
-            // --- ВЫДЕЛЕНИЕ КАРТКИ ---
+            // Стиль обраної картки
             if (isSelected) {
                 cardView.cardElevation = 0f
                 cardView.strokeWidth = 6
@@ -154,6 +154,14 @@ class TariffAdapter(
         recalculateItems()
     }
 
+    // Цей метод можна видалити або залишити пустим, якщо він викликається з HomeActivity,
+    // але ми тепер покладаємось на submitList з calculatedPrice
+    fun updatePrices(newPrices: Map<Long, Double>) {
+        // Ми ігноруємо старий спосіб передачі цін мапою,
+        // тому що тепер ціна приходить всередині об'єкта CarTariffDto (calculatedPrice)
+        // recalculateItems() // Не потрібно викликати
+    }
+
     fun setDiscount(percent: Double, limit: Double) {
         this.currentDiscountPercent = percent
         this.maxDiscountAmount = limit
@@ -188,9 +196,31 @@ class TariffAdapter(
 
     private fun recalculateItems() {
         items = rawTariffs.map { tariff ->
-            val distKm = currentDistanceMeters / 1000.0
-            val baseCalc = tariff.basePrice + (distKm * tariff.pricePerKm)
-            val withServices = baseCalc + currentExtraCost
+
+            // 1. ВИЗНАЧАЄМО БАЗОВУ ЦІНУ ПОЇЗДКИ
+            val basePriceForCalc = if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
+                // ВАРІАНТ А: Сервер надіслав точну ціну (Smart Pricing)
+                tariff.calculatedPrice!!
+            } else {
+                // ВАРІАНТ Б: Фолбек (рахуємо на телефоні, якщо немає інтернету)
+                // ТУТ БУЛА ПОМИЛКА: ми виправляємо формулу, щоб враховувати 3 км!
+
+                val totalKm = currentDistanceMeters / 1000.0
+                val INCLUDED_KM = 3.0
+
+                // Рахуємо тільки ті км, які перевищують 3 км
+                val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
+
+                val manualCalc = tariff.basePrice + (billableKm * tariff.pricePerKm)
+
+                // Округляємо і гарантуємо, що не менше бази
+                max(ceil(manualCalc), tariff.basePrice)
+            }
+
+            // 2. Додаємо вартість послуг (якщо обрані в ServicesActivity)
+            val withServices = basePriceForCalc + currentExtraCost
+
+            // 3. Додаємо "чайові" (якщо юзер накрутив)
             val userAdded = customPrices[tariff.id] ?: 0.0
 
             val finalPrice = withServices + userAdded

@@ -1,26 +1,21 @@
 package com.taxiapp.client
 
-import com.google.maps.android.SphericalUtil
-import android.widget.RelativeLayout
-import android.app.Activity
-import android.Manifest // <--- ВАЖЛИВИЙ ІМПОРТ
+import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
-import android.app.Dialog // <--- ВАЖЛИВИЙ ІМПОРТ
+import android.app.Activity
+import android.app.Dialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable // <--- ВАЖЛИВИЙ ІМПОРТ
+import android.graphics.drawable.ColorDrawable
 import android.location.Geocoder
 import android.location.Location
 import android.net.Uri
 import android.os.Build
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import com.google.android.gms.maps.model.BitmapDescriptor
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.Marker
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -38,6 +33,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,9 +57,12 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
@@ -73,26 +72,32 @@ import com.google.android.gms.maps.model.StyleSpan
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.Place
 import com.google.maps.android.PolyUtil
+import com.google.maps.android.SphericalUtil
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.DirectionsApiClient
 import com.taxiapp.client.network.dto.ActiveDiscountDto
+import com.taxiapp.client.network.ApiService
 import com.taxiapp.client.network.dto.CarTariffDto
 import com.taxiapp.client.network.dto.CreateOrderRequestDto
 import com.taxiapp.client.network.dto.DirectionsResponse
+import com.taxiapp.client.network.dto.SectorDto // Додано
 import com.taxiapp.client.network.dto.TaxiOrderDto
 import com.taxiapp.client.network.dto.WaypointDto
+import com.taxiapp.client.network.dto.CalculatePriceRequestDto
+import com.taxiapp.client.NetworkUtils
 import com.taxiapp.client.ui.TariffAdapter
 import com.taxiapp.client.ui.TariffItem
 import com.taxiapp.client.utils.AddressUtils
 import com.taxiapp.client.utils.BitmapHelper
 import com.taxiapp.client.utils.CityData
 import com.taxiapp.client.utils.CityDatabase
+import com.taxiapp.client.utils.GeometryUtils // Додано
 import com.taxiapp.client.utils.SessionManager
-import com.taxiapp.client.utils.ViewUtils // <--- Не забудь імпорт ViewUtils
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.Locale
+import kotlin.math.ceil // Додано
 
 class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
@@ -222,6 +227,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mapLoadingCurtain: ImageView
     private lateinit var contentBottomSheet: View
     
+    // --- НОВА ЗМІННА: СПИСОК СЕКТОРІВ ---
+    private var loadedSectors: List<SectorDto> = emptyList()
+    
     private var originPlace: Place? = null
     private var destinationPlace: Place? = null
     private var routeDistanceMeters: Int = 0
@@ -274,7 +282,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             val data = result.data!!
             val action = data.getStringExtra(AddressPickerActivity.RESULT_ACTION)
 
-            // 1. ВАРІАНТ: Юзер обрав адресу зі списку (текстовий пошук)
             if (action == "place") {
                 val name = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
                 val lat = data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0)
@@ -304,14 +311,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
                 handleAddressSelection(place, name)
             }
-
-            // 2. ВАРІАНТ: Юзер натиснув кнопку "Вказати на карті"
             else if (action == "map_click") {
                 val intent = Intent(this, MapPickerActivity::class.java)
-
-                // Визначаємо, де відкрити карту:
-                // Якщо обираємо Точку А (Start) -> центруємо на Origin або на поточному центрі
-                // Якщо обираємо Точку Б (Dest) -> центруємо на Destination або на поточному центрі
                 val startLatLng = if (pickerMode == MODE_ORIGIN) {
                     originPlace?.latLng ?: mMap?.cameraPosition?.target
                 } else {
@@ -322,8 +323,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                     intent.putExtra("start_lat", startLatLng.latitude)
                     intent.putExtra("start_lng", startLatLng.longitude)
                 }
-
-                // Запускаємо окремий екран вибору на карті
                 mapPickerLauncher.launch(intent)
             }
         }
@@ -359,20 +358,15 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private val mapPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             val data = result.data!!
-            
-            // Получаем координаты, которые выбрал юзер в MapPickerActivity
             val lat = data.getDoubleExtra("picked_lat", 0.0)
             val lng = data.getDoubleExtra("picked_lng", 0.0)
             val addressName = data.getStringExtra("picked_name") ?: "Точка на карті"
 
-            // Создаем объект Place
             val place = Place.builder()
                 .setName(addressName)
                 .setLatLng(LatLng(lat, lng))
                 .build()
 
-            // Отправляем в твою готовую функцию обработки
-            // Она сама поймет (по pickerMode), куда подставить этот адрес (в А или в Б)
             handleAddressSelection(place, addressName)
         }
     }
@@ -380,62 +374,39 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private val servicesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK && result.data != null) {
             val data = result.data!!
-            
-            // 1. Отримуємо вартість послуг
             servicesExtraCost = data.getDoubleExtra("EXTRA_COST", 0.0)
             selectedServiceIds = data.getSerializableExtra("SELECTED_IDS") as? ArrayList<Long> ?: ArrayList()
 
-            // 2. !!! ОНОВЛЮЄМО АДАПТЕР !!!
-            // Це перерахує ціни у всіх картках (Тариф + Послуги)
             tariffAdapter.updateExtraCost(servicesExtraCost)
 
-            // 3. Оновлюємо кнопку, якщо тариф вже був обраний (опціонально, бо адаптер скине виділення)
-            // Якщо хочеш, щоб виділення злітало (щоб юзер клікнув на тариф заново і побачив нову ціну):
             btnOrderTaxi.isEnabled = false
             btnOrderTaxi.text = "Оберіть тариф"
             selectedTariffItem = null
-            
-            // АБО (якщо хочеш зберегти вибір):
-            /*
-            selectedTariffItem?.let { item ->
-               // Треба вручну оновити item.priceValue, бо старий об'єкт item має стару ціну
-               val newPrice = item.priceValue + servicesExtraCost // Це грубо, краще нехай юзер переобере
-               btnOrderTaxi.text = "Замовити ${newPrice.toInt()} ₴"
-            }
-            */
             
             showToast("Послуги додано: +${servicesExtraCost.toInt()} грн")
         }
     }
 
-    // --- 1. ЛАУНЧЕР ДЛЯ ПОВІДОМЛЕНЬ (Перейменований, щоб не було конфлікту) ---
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         // Тут нічого не робимо, бо ми вже на карті
     }
 
-    // --- 2. ЛАУНЧЕР ДЛЯ ГЕОЛОКАЦІЇ (Залишається старий) ---
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            
-            // 1. Логіка Геолокації
             if (isGranted) {
-                // ДОЗВОЛЕНО
                 try {
                     mMap?.isMyLocationEnabled = true
                     detectCityAndMove()
                 } catch (e: SecurityException) {}
             } else {
-                // ВІДМОВЛЕНО
                 if (currentCity == null) {
                     showCitySelectorDialog()
                 } else {
                     showToast("Увімкніть геолокацію в налаштуваннях")
                 }
             }
-
-            // 2. ВАЖЛИВО: Тільки тепер, коли ми розібралися з локацією, запускаємо таймер для Сповіщень
             checkAndShowNotificationDialogWithDelay() 
         }
 
@@ -445,13 +416,12 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         if (!NetworkUtils.isInternetAvailable(this)) {
             val intent = Intent(this, NoInternetActivity::class.java)
             startActivity(intent)
-            finish() // Закрываем HomeActivity, чтобы она не пыталась грузить карту
-            return // Останавливаем выполнение кода
+            finish() 
+            return 
         }
 
         sessionManager = SessionManager(applicationContext)
 
-        // Настройка темы
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val isDark = sessionManager.isDarkMode()
         val mode = if (isDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
@@ -461,13 +431,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         setContentView(R.layout.activity_home)
 
-        // !!! ВАЖНО: Инициализируем новые переменные интерфейса здесь (или в initUI) !!!
-        // Это исправит ошибки "Unresolved reference"
-
-
         setupSystemBars(isDark)
 
-        // API KEY
         val myApiKey = "AIzaSyDp1blRHORukZ08uYYpvh52fN0mGe7Rnu4" 
         if (!Places.isInitialized()) {
             Places.initialize(applicationContext, myApiKey, Locale("uk", "UA"))
@@ -480,27 +445,25 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         setupTariffAdapter()
         updateFavoriteButtonsUI()
 
+        // --- НОВЕ: ЗАВАНТАЖЕННЯ СЕКТОРІВ ТА ТАРИФІВ ---
+        loadSectors()
+        loadTariffs()
+        // ----------------------------------------------
+
         val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
 
-        // Логика восстановления заказа
         val savedOrderId = sessionManager.fetchActiveOrderId()
         if (savedOrderId != -1L) {
             activeOrderId = savedOrderId    
             
-            // showActiveOrderPanel() // <--- УДАЛЯЕМ ЭТУ СТРОКУ
-            // Мы не можем вызвать её здесь, так как у нас еще нет объекта order, только ID.
-            // startStatusPolling() сделает запрос на сервер, получит order и сам вызовет showActiveOrderPanel(order).
-            
             startStatusPolling() 
             
-            // Чтобы панель тарифов не перекрывала карту пока грузится заказ, можно временно скрыть её:
              findViewById<View>(R.id.tariffs_panel).visibility = View.GONE
         } else if (currentCity == null) {
             checkPermissionsAndAutoDetectCity()
         }
 
-        // Анимация перехода (скриншот)
         if (lastScreenshot != null) {
             val coverImage = ImageView(this)
             coverImage.setImageBitmap(lastScreenshot)
@@ -522,11 +485,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 .start()
         }
     }
-
-    // ... (ТУТ МАЮТЬ БУТИ ВАШІ МЕТОДИ: initUI, setupSystemBars, і т.д.) ...
-    // ... Якщо ви їх не видаляли, вони тут ...
-
-    // --- НОВІ МЕТОДИ ДЛЯ ДІАЛОГУ ---
 
     private fun checkAndShowNotificationDialogWithDelay() {
         if (shouldShowNotificationDialog()) {
@@ -556,11 +514,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         val dialog = Dialog(this)
         dialog.setContentView(R.layout.dialog_notification_permission)
 
-        // 1. Убираем стандартный белый фон окна (чтобы скругления CardView работали и не было белых углов)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
-        // 2. ВАЖНО: Растягиваем само окно диалога на всю ширину (MATCH_PARENT).
-        // Теперь ширина ограничивается ТОЛЬКО твоими отступами в XML (24dp).
         dialog.window?.setLayout(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -576,7 +531,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             sessionManager.setNotificationAsked(true)
 
             if (Build.VERSION.SDK_INT >= 33) {
-                // Используем наш НОВЫЙ лаунчер
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
@@ -644,8 +598,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         super.onResume()
         updateFavoriteButtonsUI()
         
-        // Якщо панель тарифів відкрита, перезавантажуємо ціни, 
-        // щоб відобразити нову знижку з промокоду, якщо вона з'явилася
         if (tariffsPanel.visibility == View.VISIBLE) {
             fetchTariffsAndShowPanel()
         }
@@ -671,14 +623,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         ivMenuIcon = findViewById(R.id.btn_menu_icon)
 
         overlayOrigin = findViewById(R.id.overlay_origin)
-
-        // Было: R.id.tv_overlay_origin_text -> Стало: R.id.tv_overlay_origin
         tvOverlayOrigin = findViewById(R.id.tv_overlay_origin)
-
-        // Было: R.id.overlay_marker_dest -> Стало: R.id.overlay_dest
         overlayDest = findViewById(R.id.overlay_dest)
-
-        // Было: R.id.tv_overlay_dest_text -> Стало: R.id.tv_overlay_dest
         tvOverlayDest = findViewById(R.id.tv_overlay_dest)
 
         centerPin = findViewById(R.id.center_pin)
@@ -725,23 +671,19 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         btnOrderTaxi = findViewById(R.id.btn_order_taxi)
 
         try {
-            tvPrice = findViewById(R.id.tv_active_order_price) // <-- ЗАМЕНИ R.id.tv_estimated_price НА ТВОЙ ID ИЗ XML
+            tvPrice = findViewById(R.id.tv_active_order_price) 
         } catch (e: Exception) {
-            // Если ID не найден, чтобы не падало
             e.printStackTrace()
         }
 
-        // --- 1. ЗНАХОДИМО НОВІ КНОПКИ ДЛЯ КОМЕНТАРЯ ---
         btnOpenComment = findViewById(R.id.btn_open_comment)
         ivCommentIcon = findViewById(R.id.iv_comment_icon)
         
-        // --- 2. ДОДАЄМО ОБРОБНИК КЛІКУ ---
         btnOpenComment.setOnClickListener {
             val intent = Intent(this, CommentActivity::class.java)
-            intent.putExtra("EXTRA_COMMENT", orderComment) // Передаємо поточний текст, щоб редагувати
+            intent.putExtra("EXTRA_COMMENT", orderComment) 
             commentLauncher.launch(intent)
         }
-        // ----------------------------------------------
 
         containerOrigin = findViewById(R.id.container_origin)
         tvOrigin = findViewById(R.id.text_view_origin)
@@ -808,7 +750,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         btnRecenterRoute.setOnClickListener {
-            // Перевіряємо, яка панель зараз активна (Тарифи або Активне замовлення)
             val visiblePanel = if (activeOrderCard.visibility == View.VISIBLE) {
                 activeOrderCard
             } else if (tariffsPanel.visibility == View.VISIBLE) {
@@ -817,16 +758,12 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 null
             }
 
-            // Якщо панель знайдена - використовуємо нашу нову логіку
             if (visiblePanel != null) {
-                // 0f знизу (бо ми це враховуємо в функції), 10f зверху
                 updateMapPadding(visiblePanel, 0f, 10f)
             } else {
-                // Якщо панелей немає (рідкісний кейс), просто центруємо маршрут стандартно
                 if (currentRoutePolyline != null) {
-                     val boundsBuilder = LatLngBounds.Builder()
-                     // ... (тут можна залишити спрощену логіку або просто нічого не робити)
                      try {
+                         val boundsBuilder = LatLngBounds.Builder()
                          boundsBuilder.include(originPlace!!.latLng!!)
                          boundsBuilder.include(destinationPlace!!.latLng!!)
                          decodedRoutePoints?.forEach { boundsBuilder.include(it) }
@@ -864,16 +801,12 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         btnOrderTaxi.setOnClickListener {
-    if (selectedTariffItem != null) {
-        // ✅ ПРАВИЛЬНО:
-        createOrder(selectedTariffItem!!.tariff, selectedTariffItem!!.priceValue)
-
-        // ❌ ОШИБКА (если было так):
-        // createOrder(selectedTariffItem!!.tariff, selectedTariffItem!!.priceValue + servicesExtraCost)
-    } else {
-        showToast("Оберіть тариф")
-    }
-}
+            if (selectedTariffItem != null) {
+                createOrder(selectedTariffItem!!.tariff, selectedTariffItem!!.priceValue)
+            } else {
+                showToast("Оберіть тариф")
+            }
+        }
 
         btnCancelOrder.setOnClickListener { cancelCurrentOrder() }
         
@@ -902,16 +835,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
              drawerLayout.closeDrawer(GravityCompat.START)
         }
         findViewById<View>(R.id.btn_menu_payment).setOnClickListener {
-            // Закриваємо меню
             drawerLayout.closeDrawer(GravityCompat.START)
-            
-            // Створюємо інтент для переходу
             val intent = Intent(this, PaymentActivity::class.java)
-            
-            // Передаємо поточний метод, щоб там стояла правильна галочка
             intent.putExtra("EXTRA_PAYMENT_METHOD", currentPaymentMethod)
-            
-            // Запускаємо через лаунчер, щоб отримати результат назад
             paymentLauncher.launch(intent)
         }
         findViewById<View>(R.id.btn_menu_discounts).setOnClickListener {
@@ -930,14 +856,12 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         findViewById<View>(R.id.btn_open_payment).setOnClickListener {
             val intent = Intent(this, PaymentActivity::class.java)
-            // Передаем текущий метод, чтобы там поставить галочку
             intent.putExtra("EXTRA_PAYMENT_METHOD", currentPaymentMethod)
             paymentLauncher.launch(intent)
         }
 
         findViewById<View>(R.id.btn_open_services).setOnClickListener {
             val intent = Intent(this, ServicesActivity::class.java)
-            // Передаємо вже обрані послуги, щоб там стояли галочки
             intent.putExtra("SELECTED_IDS", selectedServiceIds)
             servicesLauncher.launch(intent)
         }
@@ -1040,29 +964,24 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun showToast(msg: String) {
-        // Додаємо "геолокацію" до списку слів, які викликають червоний стиль
         val isError = msg.contains("Помилка", true) || 
                       msg.contains("Error", true) || 
                       msg.contains("недоступний") || 
-                      msg.contains("геолокацію") // <-- Додай це
+                      msg.contains("геолокацію")
                       
         showTopMessage(msg, isError)
     }
 
     private fun updateCommentIconState() {
         if (orderComment.isNotEmpty()) {
-            // Якщо є коментар — фарбуємо в акцентний колір (жовтий)
             ivCommentIcon.setColorFilter(ContextCompat.getColor(this, R.color.taxi_yellow))
         } else {
-            // Якщо коментаря немає — перевіряємо, яка зараз тема системи
             val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
             val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
 
             if (isDarkMode) {
-                // У темній темі іконка має бути БІЛОЮ
                 ivCommentIcon.setColorFilter(android.graphics.Color.WHITE)
             } else {
-                // У світлій темі іконка має бути ЧОРНОЮ
                 ivCommentIcon.setColorFilter(android.graphics.Color.BLACK)
             }
         }
@@ -1151,14 +1070,11 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 Manifest.permission.ACCESS_COARSE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            // Права НЕМАЄ -> Запитуємо (Лаунчер спрацює пізніше і викличе сповіщення)
             requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         } else {
-            // Права ВЖЕ Є -> Робимо справи з локацією І запускаємо сповіщення
             mMap?.isMyLocationEnabled = true
             detectCityAndMove()
             
-            // <-- ДОДАЄМО ЦЕЙ РЯДОК
             checkAndShowNotificationDialogWithDelay() 
         }
     }
@@ -1227,7 +1143,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun recenterMapOnUser() {
         if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            // Це запустить requestPermissionLauncher. Якщо місто є -> покаже тост.
             requestPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
             return
         }
@@ -1239,12 +1154,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun recalculateTotalPrice() {
-        // currentTariffPrice - це ціна, яку вирахував Google Maps або сервер за маршрут
-        // servicesExtraCost - це ціна обраних послуг
-        
         val finalPrice = currentTariffPrice + servicesExtraCost
-        
-        // Оновлюємо TextView з ціною
         tvPrice.text = "${finalPrice.toInt()} ₴" 
     }
 
@@ -1276,19 +1186,15 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         tariffsRecyclerView.adapter = tariffAdapter
         tariffsRecyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.VERTICAL, false)
 
-        // 1. Очищаем старые декораторы (чтобы линии не дублировались)
         while (tariffsRecyclerView.itemDecorationCount > 0) {
             tariffsRecyclerView.removeItemDecorationAt(0)
         }
 
-        // 2. Добавляем "Умный" декоратор, который пропускает последний элемент
         tariffsRecyclerView.addItemDecoration(object : androidx.recyclerview.widget.RecyclerView.ItemDecoration() {
             val divider = androidx.core.content.ContextCompat.getDrawable(this@HomeActivity, R.drawable.divider_horizontal)
 
-            // Этот метод создает место (отступ) для линии
             override fun getItemOffsets(outRect: android.graphics.Rect, view: android.view.View, parent: androidx.recyclerview.widget.RecyclerView, state: androidx.recyclerview.widget.RecyclerView.State) {
                 val position = parent.getChildAdapterPosition(view)
-                // Если это НЕ последний элемент -> добавляем отступ снизу
                 if (position != androidx.recyclerview.widget.RecyclerView.NO_POSITION && position < state.itemCount - 1) {
                     outRect.bottom = divider?.intrinsicHeight ?: 0
                 } else {
@@ -1296,7 +1202,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
             }
 
-            // Этот метод рисует саму линию
             override fun onDraw(c: android.graphics.Canvas, parent: androidx.recyclerview.widget.RecyclerView, state: androidx.recyclerview.widget.RecyclerView.State) {
                 divider?.let {
                     val left = parent.paddingLeft
@@ -1307,7 +1212,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                         val child = parent.getChildAt(i)
                         val position = parent.getChildAdapterPosition(child)
                         
-                        // Рисуем линию только если это НЕ последний элемент
                         if (position != androidx.recyclerview.widget.RecyclerView.NO_POSITION && position < state.itemCount - 1) {
                             val params = child.layoutParams as androidx.recyclerview.widget.RecyclerView.LayoutParams
                             val top = child.bottom + params.bottomMargin
@@ -1325,7 +1229,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
         mMap?.uiSettings?.isCompassEnabled = false
-        // --- 1. Налаштування стилю (Темна/Світла тема) ---
         if (sessionManager.isDarkMode()) {
             try {
                 mMap?.setMapStyle(MapStyleOptions.loadRawResourceStyle(this, R.raw.map_style_dark))
@@ -1338,31 +1241,25 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
 
-        // --- 2. Початкове позиціонування камери ---
         val cityToLoad = currentCity ?: sessionManager.fetchUserCity()
         val cityCenter = cityToLoad?.let { LatLng(it.lat, it.lng) } ?: LatLng(50.4501, 30.5234)
         val cityZoom = cityToLoad?.zoom ?: 11f
         mMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(cityCenter, cityZoom))
 
-        // --- 3. Налаштування UI карти ---
         mMap?.uiSettings?.isZoomControlsEnabled = false
 
-        // Перевірка дозволів на геолокацію
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             mMap?.isMyLocationEnabled = true
-            mMap?.uiSettings?.isMyLocationButtonEnabled = false // Ми використовуємо свою кнопку
+            mMap?.uiSettings?.isMyLocationButtonEnabled = false 
             if (currentCity != null) recenterMapOnUser()
         }
 
-        // --- 4. ВАЖЛИВО: Слухач руху камери ---
         mMap?.setOnCameraMoveListener {
             updateSmartLabels()
         }
 
-        // --- 5. Початок руху камери (Анімація піна) ---
         mMap?.setOnCameraMoveStartedListener { reason ->
             if (currentRoutePolyline == null) {
-                // Режим вибору адреси: Піднімаємо пін
                 tvOrigin.text = "Визначення..."
                 centerPin.animate()
                     .translationY(convertDpToPixel(-48f))
@@ -1373,25 +1270,20 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                     pinShadow.animate().scaleX(0.6f).scaleY(0.6f).alpha(0.3f).setDuration(250).start()
                 } catch (e: Exception) {}
             } else {
-                // Режим маршруту: Показуємо кнопку повернення
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     btnRecenterRoute.visibility = View.VISIBLE
                 }
             }
         }
 
-        // --- 6. Кінець руху камери (Фіксація) ---
         mMap?.setOnCameraIdleListener {
             updateSmartLabels()
 
-            // Если маршрут уже есть - ничего не меняем
             if (currentRoutePolyline != null) return@setOnCameraIdleListener
 
-            // Если маршрута нет - мы считаем, что юзер двигает карту, чтобы уточнить Точку А
             val center = mMap!!.cameraPosition.target
             getAddressForOrigin(center)
 
-            // Анимация пина
             centerPin.animate()
                 .translationY(convertDpToPixel(-32f))
                 .setInterpolator(BounceInterpolator())
@@ -1402,35 +1294,25 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
              } catch (e: Exception) {}
         }
 
-        // ================================================================
-        // --- 7. НОВЕ: ПЛАВНЕ ЗАВАНТАЖЕННЯ (Seamless Transition) ---
-        // ================================================================
-
-        // Встановлюємо слухач завантаження тайлів
         mMap?.setOnMapLoadedCallback {
             revealInterface()
         }
 
-        // ЗАХИСТ: Якщо інтернет повільний і тайли не завантажились за 2.5 сек,
-        // все одно показуємо інтерфейс, щоб юзер не чекав вічно.
         Handler(Looper.getMainLooper()).postDelayed({
             revealInterface()
         }, 2500)
     }
 
-    // Допоміжна змінна, щоб анімація не спрацювала двічі
     private var isInterfaceRevealed = false
 
-    // Функція анімації відкриття
     private fun revealInterface() {
         if (isInterfaceRevealed) return
         isInterfaceRevealed = true
 
-        // 1. Плавно убираем шторку-картинку
         if (::mapLoadingCurtain.isInitialized) {
             mapLoadingCurtain.animate()
                 .alpha(0f)
-                .setDuration(800) // Чуть дольше, чтобы было эпичнее
+                .setDuration(800) 
                 .setInterpolator(AccelerateDecelerateInterpolator())
                 .withEndAction {
                     mapLoadingCurtain.visibility = View.GONE
@@ -1438,22 +1320,19 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 .start()
         }
 
-        // 2. Список элементов, которые нужно "проявить" (текст и иконки)
         val skeletonViews = listOf(
-            tvOrigin, tvDestination,           // Тексты
-            ivMarkerOrigin, ivMarkerDest,      // Маркеры в полях
-            ivIconHome, ivIconWork,            // Иконки Дом/Работа
-            indicatorAddHome, indicatorAddWork // Плюсики
+            tvOrigin, tvDestination,            
+            ivMarkerOrigin, ivMarkerDest,       
+            ivIconHome, ivIconWork,             
+            indicatorAddHome, indicatorAddWork 
         )
 
-        // 3. Анимируем их появление
         skeletonViews.forEach { view ->
-            // Проверка на всякий случай, если view не инициализирована
             try {
                 view.animate()
                     .alpha(1f)
                     .setDuration(500)
-                    .setStartDelay(200) // Небольшая задержка после начала ухода шторки
+                    .setStartDelay(200) 
                     .setInterpolator(DecelerateInterpolator())
                     .start()
             } catch (e: Exception) {}
@@ -1499,107 +1378,99 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun tryDrawRoute() {
         if (originPlace == null || destinationPlace == null) return
-        clearMapForRoute() // Очищаємо старе
-        
+        clearMapForRoute() // Очищаем старое
+
         val originLatLng = originPlace!!.latLng!!
         val destinationLatLng = destinationPlace!!.latLng!!
-        
-        // --- 1. ЗАПОВНЮЄМО І ПОКАЗУЄМО РОЗУМНІ МІТКИ (ТЕКСТ) ---
-        // Ці мітки "літають" поверх карти і не обрізаються
+
+        // --- 1. Метки ---
         tvOverlayOrigin.text = cleanAddress(originPlace!!.name ?: "А")
         tvOverlayDest.text = cleanAddress(destinationPlace!!.name ?: "Б")
-        
+
         overlayOrigin.visibility = View.VISIBLE
         overlayDest.visibility = View.VISIBLE
-        
-        // Даємо час на отрисовку, щоб коректно розрахувати позицію
+
         overlayOrigin.post { updateSmartLabels() }
 
-        // --- 2. МАЛЮЄМО НА КАРТІ ТІЛЬКИ ТОЧКИ (БЕЗ ТЕКСТУ) ---
-        
-        // !!! ДОДАНО: Малюємо Точку А (щоб вона не зникала) !!!
-        val iconA = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot) 
-        mMap?.addMarker(MarkerOptions()
-            .position(originLatLng)
-            .icon(iconA)
-            .anchor(0.5f, 0.5f)
-            .zIndex(100f)) 
+        // --- 2. Маркеры ---
+        val iconA = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
+        mMap?.addMarker(MarkerOptions().position(originLatLng).icon(iconA).anchor(0.5f, 0.5f).zIndex(100f))
 
-        // Для Точки Б
-        val iconB = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot) 
-        mMap?.addMarker(MarkerOptions()
-            .position(destinationLatLng)
-            .icon(iconB)
-            .anchor(0.5f, 0.5f)
-            .zIndex(100f))
-        
-        // Проміжні точки
+        val iconB = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
+        mMap?.addMarker(MarkerOptions().position(destinationLatLng).icon(iconB).anchor(0.5f, 0.5f).zIndex(100f))
+
         val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
         for (wpPair in currentWaypoints) {
-            mMap?.addMarker(MarkerOptions()
-                .position(wpPair.first)
-                .icon(waypointIcon)
-                .anchor(0.5f, 0.5f)
-                .title(wpPair.second))
+            mMap?.addMarker(MarkerOptions().position(wpPair.first).icon(waypointIcon).anchor(0.5f, 0.5f).title(wpPair.second))
         }
-        
-        // --- 3. ЗАПИТ МАРШРУТУ ---
+
+        // --- 3. Запрос маршрута ---
         val originApiString = "${originLatLng.latitude},${originLatLng.longitude}"
         val destApiString = "${destinationLatLng.latitude},${destinationLatLng.longitude}"
+        
         val waypointsString = if (currentWaypoints.isNotEmpty()) {
-            "optimize:false|" + currentWaypoints.joinToString("%7C") { "${it.first.latitude},${it.first.longitude}" }
+            "optimize:false|" + currentWaypoints.joinToString("|") { "${it.first.latitude},${it.first.longitude}" }
         } else {
             null
         }
-        
+
         val myApiKey = "AIzaSyDp1blRHORukZ08uYYpvh52fN0mGe7Rnu4"
 
-        DirectionsApiClient.instance.getDirections(originApiString, destApiString, waypointsString, myApiKey).enqueue(object : Callback<DirectionsResponse> {
-            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                if (response.isSuccessful && response.body()?.routes?.isNotEmpty() == true) {
-                    val route = response.body()!!.routes[0]
-                    currentRoutePolyline = route.overviewPolyline.points
+        DirectionsApiClient.instance.getDirections(originApiString, destApiString, waypointsString, myApiKey)
+            .enqueue(object : Callback<DirectionsResponse> {
+                override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
+                    if (response.isSuccessful && response.body()?.routes?.isNotEmpty() == true) {
+                        val route = response.body()!!.routes[0]
+                        currentRoutePolyline = route.overviewPolyline.points
 
-                    // 1. Присвоюємо значення ГЛОБАЛЬНІЙ змінній
-                    decodedRoutePoints = PolyUtil.decode(currentRoutePolyline)
+                        // Малюємо маршрут
+                        decodedRoutePoints = PolyUtil.decode(currentRoutePolyline)
+                        drawStylishRoute(decodedRoutePoints!!)
 
-                    // 2. Викликаємо drawStylishRoute з глобальною змінною
-                    drawStylishRoute(decodedRoutePoints!!)
+                        // Центруємо камеру
+                        val boundsBuilder = LatLngBounds.Builder()
+                        boundsBuilder.include(originLatLng)
+                        boundsBuilder.include(destinationLatLng)
+                        currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                        decodedRoutePoints!!.forEach { point -> boundsBuilder.include(point) }
 
-                    // 3. НАЛАШТУВАННЯ КАМЕРИ
-                    val boundsBuilder = LatLngBounds.Builder()
-                    boundsBuilder.include(originLatLng)
-                    boundsBuilder.include(destinationLatLng)
-                    currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                        val extraRoutePadding = convertDpToPixel(80f).toInt()
+                        try {
+                            mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), extraRoutePadding), 600, null)
+                        } catch (e: Exception) {}
 
-                    // Використовуємо decodedRoutePoints для меж
-                    decodedRoutePoints!!.forEach { point -> boundsBuilder.include(point) }
+                        btnRecenterRoute.visibility = View.GONE
 
-                    val extraRoutePadding = convertDpToPixel(80f).toInt() // Використовуємо наш новий padding
+                        // Рахуємо дистанцію
+                        var totalDistance = 0L
+                        var totalSeconds = 0L
+                        for (leg in route.legs) {
+                            totalDistance += leg.distance.meters
+                            totalSeconds += leg.duration.seconds
+                        }
+                        routeDistanceMeters = totalDistance.toInt()
+                        routeDurationSeconds = totalSeconds.toInt()
 
-                    // Анімуємо камеру
-                    mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), extraRoutePadding), 600, null)
+                        // !!! ВИДАЛЯЄМО ВЕСЬ СТАРИЙ БЛОК "НОВА ЛОГІКА РОЗРАХУНКУ ЦІНИ" ЗВІДСИ !!!
+                        // Замість нього просто викликаємо метод, який запитає ціну у сервера:
 
-                    btnRecenterRoute.visibility = View.GONE
+                        fetchTariffsAndShowPanel()
 
-                    var totalDistance = 0L
-                    var totalSeconds = 0L
-
-                    for (leg in route.legs) {
-                        totalDistance += leg.distance.meters
-                        totalSeconds += leg.duration.seconds
+                    } else {
+                        showToast("Маршрут не знайдено")
                     }
+                }
 
-                    routeDistanceMeters = totalDistance.toInt()
-                    routeDurationSeconds = totalSeconds.toInt()
-
-                    fetchTariffsAndShowPanel()
-                } else showToast("Маршрут не знайдено")
-            }
-            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) { showToast("Помилка мережі") }
-        })
+                override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
+                    showToast("Помилка мережі: ${t.message}")
+                }
+            })
     }
-
+    
+    private fun showTariffsPanel() {
+       fetchTariffsAndShowPanel()
+    }
+    
     private fun drawStylishRoute(path: List<LatLng>) {
         if (mMap == null) return
 
@@ -1607,28 +1478,23 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             mMap?.isMyLocationEnabled = false
         } catch (e: SecurityException) { }
 
-        // 1. Очистка старых маркеров (тех, что мы нарисовали в tryDrawRoute)
         originMarker?.remove()
         destinationMarker?.remove()
-        mMap?.clear() // Для надійності очищаємо все і малюємо заново
+        mMap?.clear() 
 
-        // 2. Малюємо лінії
         val borderOpts = PolylineOptions().addAll(path).width(20f).color(ContextCompat.getColor(this, R.color.route_border)).startCap(RoundCap()).endCap(RoundCap()).zIndex(1f)
         polylineBorder = mMap?.addPolyline(borderOpts)
 
         val mainOpts = PolylineOptions().addAll(path).width(14f).color(ContextCompat.getColor(this, R.color.route_main)).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
         polylineMain = mMap?.addPolyline(mainOpts)
 
-        // --- 3. ТОЧКА А ---
         if (originPlace != null) {
-            // Малюємо основний маркер
             originMarker = mMap?.addMarker(MarkerOptions()
                 .position(originPlace!!.latLng!!)
                 .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
                 .anchor(0.5f, 0.5f)
                 .zIndex(1000f)) 
 
-            // Оновлюємо текст оверлею
             val uiText = tvOrigin.text.toString()
             val isBadText = uiText.contains("Визначення", true) || uiText.contains("Звідки", true) || uiText.contains("...", true) || uiText.isBlank()
             val finalOriginText = if (!isBadText) uiText else (originPlace?.address ?: originPlace?.name ?: "Точка А")
@@ -1636,7 +1502,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             overlayOrigin.visibility = View.VISIBLE
         }
 
-        // --- 4. ТОЧКА Б ---
         if (destinationPlace != null) {
             destinationMarker = mMap?.addMarker(MarkerOptions()
                 .position(destinationPlace!!.latLng!!)
@@ -1664,7 +1529,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             overlayDest.visibility = View.VISIBLE
         }
         
-        // Проміжні точки (якщо є)
         val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
         for (wpPair in currentWaypoints) {
             mMap?.addMarker(MarkerOptions()
@@ -1675,11 +1539,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 .title(wpPair.second))
         }
 
-        // 5. Анимация
         animateRoute(path)
         
-        // !!! ВАЖЛИВО: Примусово оновлюємо положення міток після малювання !!!
-        // Це виправляє баг, коли мітки не з'являються, якщо карта не рухається
         contentBottomSheet.post { updateSmartLabels() }
     }
 
@@ -1735,7 +1596,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
              } catch (e: Exception) {}
         }
 
-        originMarker = null // Ссылка сбрасывается
+        originMarker = null 
         destinationMarker = null
         mMap?.setPadding(0, 0, 0, 0)
         routeAnimator?.removeAllListeners()
@@ -1762,55 +1623,106 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun fetchTariffsAndShowPanel() {
-        addressPanel.visibility = View.GONE
-        tariffsPanel.visibility = View.VISIBLE
-        tariffsProgressBar.visibility = View.VISIBLE
-        btnRecenter.visibility = View.GONE
-        setLocationButtonAnchor(R.id.tariffs_panel)
+    // 1. Налаштування UI (Видимість панелей)
+    addressPanel.visibility = View.GONE
+    tariffsPanel.visibility = View.VISIBLE
+    tariffsProgressBar.visibility = View.VISIBLE
+    btnRecenter.visibility = View.GONE
+    setLocationButtonAnchor(R.id.tariffs_panel)
 
-        try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
+    try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
-        tariffAdapter.submitList(emptyList(), 0)
-        ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
-        val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
-        ivMenuIcon.setColorFilter(adaptiveColor)
+    // Скидання списку перед завантаженням
+    tariffAdapter.submitList(emptyList(), 0)
+    
+    // Зміна іконки меню на "Назад"
+    ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
+    val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
+    ivMenuIcon.setColorFilter(adaptiveColor)
 
-        val promoPercent = sessionManager.fetchPromoDiscount()
-        val promoLimit = sessionManager.fetchPromoLimit()
+    // 2. Логіка отримання знижок (Промокоди)
+    val promoPercent = sessionManager.fetchPromoDiscount()
+    val promoLimit = sessionManager.fetchPromoLimit()
+    val token = sessionManager.fetchAuthToken()
 
-        val token = sessionManager.fetchAuthToken()
-        if (token != null) {
-            ApiClient.instance.getActiveDiscount("Bearer $token").enqueue(object : Callback<ActiveDiscountDto> {
-                override fun onResponse(call: Call<ActiveDiscountDto>, response: Response<ActiveDiscountDto>) {
-                    var finalPercent = promoPercent
-                    var finalLimit = promoLimit
-                    
-                    if (response.isSuccessful && response.body() != null) {
-                        val taskDiscount = response.body()!!
-                        if (taskDiscount.percent > finalPercent) {
-                            finalPercent = taskDiscount.percent
-                            finalLimit = taskDiscount.maxAmount ?: 0.0
-                        }
+    // Внутрішня функція: що робити, коли зі знижками розібралися
+    fun proceedToLoadTariffs(finalPercent: Double, finalLimit: Double) {
+        tariffAdapter.setDiscount(finalPercent, finalLimit)
+
+        val currentRoute = currentRoutePolyline
+        val currentDist = routeDistanceMeters
+
+        // === SMART PRICING LOGIC ===
+        if (currentRoute != null && currentDist > 0) {
+            // ВАРІАНТ А: Є маршрут -> Просимо сервер порахувати точну ціну (Місто/Загород)
+            val request = CalculatePriceRequestDto(currentRoute, currentDist)
+            
+            ApiClient.instance.calculatePrice(request).enqueue(object : Callback<List<CarTariffDto>> {
+                override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
+                    tariffsProgressBar.visibility = View.GONE
+                    if (response.isSuccessful) {
+                        availableTariffs = response.body() ?: emptyList()
+                        // Сервер повернув тарифи вже з полем calculatedPrice -> показуємо їх
+                        displayTariffs() 
+                    } else {
+                        // Якщо сервер не зміг порахувати -> вантажимо звичайні тарифи
+                        loadTariffs() 
                     }
-
-                    // --- ТЕПЕРЬ ПРОСТО ПЕРЕДАЕМ В АДАПТЕР (Без управления баннером) ---
-                    tariffAdapter.setDiscount(finalPercent, finalLimit)
-                    loadTariffs()
                 }
-
-                override fun onFailure(call: Call<ActiveDiscountDto>, t: Throwable) {
-                    handleLocalPromoFallback(promoPercent, promoLimit)
+                override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
+                    // Помилка мережі -> вантажимо звичайні тарифи
+                    loadTariffs() 
                 }
             })
         } else {
-            handleLocalPromoFallback(promoPercent, promoLimit)
+            // ВАРІАНТ Б: Маршруту немає -> Просто вантажимо список тарифів
+            loadTariffs()
         }
     }
 
-    // Этот метод тоже обновляем, чтобы стиль был единым
+    // 3. Запит на сервер за актуальною знижкою
+    if (token != null) {
+        ApiClient.instance.getActiveDiscount("Bearer $token").enqueue(object : Callback<ActiveDiscountDto> {
+            override fun onResponse(call: Call<ActiveDiscountDto>, response: Response<ActiveDiscountDto>) {
+                var finalPercent = promoPercent
+                var finalLimit = promoLimit
+                
+                if (response.isSuccessful && response.body() != null) {
+                    val taskDiscount = response.body()!!
+                    if (taskDiscount.percent > finalPercent) {
+                        finalPercent = taskDiscount.percent
+                        finalLimit = taskDiscount.maxAmount ?: 0.0
+                    }
+                }
+                proceedToLoadTariffs(finalPercent, finalLimit)
+            }
+
+            override fun onFailure(call: Call<ActiveDiscountDto>, t: Throwable) {
+                proceedToLoadTariffs(promoPercent, promoLimit)
+            }
+        })
+    } else {
+        proceedToLoadTariffs(promoPercent, promoLimit)
+    }
+}
+
+
+    private fun loadSectors() {
+        // !!! ВИПРАВЛЕННЯ: Правильний виклик ApiClient !!!
+        // Використовуємо ApiClient.instance, бо там вже налаштовано Retrofit і Gson
+        ApiClient.instance.getSectors().enqueue(object : retrofit2.Callback<List<SectorDto>> {
+            override fun onResponse(call: Call<List<SectorDto>>, response: Response<List<SectorDto>>) {
+                if (response.isSuccessful && response.body() != null) {
+                    loadedSectors = response.body()!!
+                }
+            }
+            override fun onFailure(call: Call<List<SectorDto>>, t: Throwable) {
+                // Не критично
+            }
+        })
+    }
+
     private fun handleLocalPromoFallback(percent: Double, limit: Double) {
-        // Просто передаем данные в адаптер.
-        // Если percent > 0, адаптер сам нарисует значки на тарифах.
         tariffAdapter.setDiscount(percent, limit)
         loadTariffs()
     }
@@ -1834,11 +1746,10 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun startStatusBlinking() {
-        // Если анимация уже есть и работает - не трогаем
         if (::statusBlinkAnimator.isInitialized && statusBlinkAnimator.isRunning) return
 
         statusBlinkAnimator = android.animation.ObjectAnimator.ofFloat(orderStatusText, "alpha", 1f, 0.4f, 1f)
-        statusBlinkAnimator.duration = 1500 // 1.5 секунды на цикл
+        statusBlinkAnimator.duration = 1500 
         statusBlinkAnimator.repeatCount = android.animation.ValueAnimator.INFINITE
         statusBlinkAnimator.repeatMode = android.animation.ValueAnimator.REVERSE
         statusBlinkAnimator.start()
@@ -1847,7 +1758,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun stopStatusBlinking() {
         if (::statusBlinkAnimator.isInitialized) {
             statusBlinkAnimator.cancel()
-            orderStatusText.alpha = 1f // Возвращаем полную видимость
+            orderStatusText.alpha = 1f 
         }
     }
 
@@ -1858,17 +1769,13 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         val destLoc = destinationPlace?.latLng
         val projection = mMap!!.projection
 
-        // Логика для Точки А (isStart = true)
         if (originLoc != null && overlayOrigin.visibility == View.VISIBLE) {
             val screenPt = projection.toScreenLocation(originLoc)
-            // Передаем true (это старт)
             moveViewIdeally(overlayOrigin, screenPt.x.toFloat(), screenPt.y.toFloat(), isStartPoint = true)
         }
 
-        // Логика для Точки Б (isStart = false)
         if (destLoc != null && overlayDest.visibility == View.VISIBLE) {
             val screenPt = projection.toScreenLocation(destLoc)
-            // Передаем false (это финиш)
             moveViewIdeally(overlayDest, screenPt.x.toFloat(), screenPt.y.toFloat(), isStartPoint = false)
         }
     }
@@ -1878,76 +1785,55 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         val viewHeight = view.height
         val screenWidth = resources.displayMetrics.widthPixels
         
-        // 1. Определяем "Соседнюю точку" маршрута, чтобы понять направление линии
-        var isRouteGoingUp = false // По умолчанию считаем, что маршрут не мешает сверху
+        var isRouteGoingUp = false 
 
         if (decodedRoutePoints != null && decodedRoutePoints!!.isNotEmpty()) {
             val projection = mMap!!.projection
             val routePoints = decodedRoutePoints!!
             
-            // Точка, с которой сравниваем
             val compareLatLng = if (isStartPoint) {
-                // Для старта: берем вторую точку маршрута (если есть)
                 if (routePoints.size > 1) routePoints[1] else routePoints[0]
             } else {
-                // Для финиша: берем предпоследнюю точку
                 if (routePoints.size > 1) routePoints[routePoints.size - 2] else routePoints[0]
             }
 
-            // Переводим её в пиксели экрана
             val compareScreenPt = projection.toScreenLocation(compareLatLng)
 
-            // ПРОВЕРКА: Если Y соседней точки МЕНЬШЕ Y нашей точки, значит линия идет ВВЕРХ
-            // (в Android координаты Y растут вниз: 0 - это верх экрана)
             if (compareScreenPt.y < targetY) {
                 isRouteGoingUp = true
             }
         }
 
-        // 2. Выбираем базовую позицию Y
-        // Если маршрут уходит ВВЕРХ -> Ставим метку ПОД точкой
-        // Иначе -> Ставим метку НАД точкой (стандарт)
-        
         var finalY: Float
         val verticalPadding = convertDpToPixel(8f)
 
         if (isRouteGoingUp) {
-            // Маршрут занимает верх, ставим метку СНИЗУ
             finalY = targetY + verticalPadding
         } else {
-            // Маршрут внизу или его нет, ставим метку СВЕРХУ
             finalY = targetY - viewHeight - verticalPadding
         }
 
-        // 3. Вычисляем X (Центрируем)
         var finalX = targetX - (viewWidth / 2)
 
-        // 4. ANTI-CLIP (Защита от краев экрана)
         val margin = convertDpToPixel(16f)
 
-        // Левый край
         if (finalX < margin) {
             finalX = margin
         }
-        // Правый край
         if (finalX + viewWidth > screenWidth - margin) {
             finalX = screenWidth - margin - viewWidth
         }
 
-        // 5. Защита ВЕРХА и НИЗА экрана (если мы вытеснили метку за экран)
-        val topSafeArea = convertDpToPixel(50f) // Статусбар
-        val bottomSafeArea = resources.displayMetrics.heightPixels - convertDpToPixel(150f) // Примерная высота нижней панели
+        val topSafeArea = convertDpToPixel(50f) 
+        val bottomSafeArea = resources.displayMetrics.heightPixels - convertDpToPixel(150f) 
 
-        // Если мы поставили метку сверху, а она вылезла за верх экрана -> ПРИНУДИТЕЛЬНО ВНИЗ
         if (finalY < topSafeArea) {
             finalY = targetY + verticalPadding
         }
-        // Если мы поставили метку снизу, а она вылезла под панель -> ПРИНУДИТЕЛЬНО ВВЕРХ
         else if (finalY + viewHeight > bottomSafeArea) {
              finalY = targetY - viewHeight - verticalPadding
         }
 
-        // 6. Применяем
         view.x = finalX
         view.y = finalY
     }
@@ -1967,40 +1853,58 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             return
         }
 
-        // --- ВИПРАВЛЕННЯ: НЕ ОЧИЩАЄМО ЦІНИ ТУТ ---
-        // Ми видалили рядки tariffCustomPrices.clear() та tariffAdapter.clearCustomPrices()
-        // Тому що цей метод викликається в onResume, і він збивав ваші налаштування.
-
-        // Оновлюємо список тарифів
+        // 1. Оновлюємо список в адаптері (передаємо тарифи та дистанцію)
         tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
 
-        // --- ДОДАНО: ВІДНОВЛЮЄМО ЗБЕРЕЖЕНІ НАДБАВКИ ---
-        // Якщо у нас вже є збережені зміни цін, ми застосовуємо їх назад до адаптера
-        tariffCustomPrices.forEach { (tariffId, addedValue) ->
-            tariffAdapter.setCustomPrice(tariffId, addedValue)
+        // 2. ВІДНОВЛЮЄМО ЦІНИ З УРАХУВАННЯМ МІНІМАЛКИ (3 КМ)
+        // Якщо tariffCustomPrices порожній (наприклад, перший запуск), треба його порахувати ПРАВИЛЬНО
+        if (tariffCustomPrices.isEmpty() && routeDistanceMeters > 0) {
+             // Спроба розрахунку "на льоту", якщо маршрут вже є
+             val INCLUDED_KM = 3.0
+             val totalKm = routeDistanceMeters / 1000.0
+             // Якщо ми ще не знаємо секторів (loadedSectors порожній), 
+             // припускаємо, що все це "місто", але віднімаємо 3 км
+             val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
+             
+             availableTariffs.forEach { tariff ->
+                 val price = tariff.basePrice + (billableKm * tariff.pricePerKm)
+                 tariffCustomPrices[tariff.id] = ceil(price)
+             }
         }
 
-    
-        // Оновлюємо відступи карти
+        // Застосовуємо розраховані (або збережені) ціни
+        tariffAdapter.updatePrices(tariffCustomPrices) 
+        
+        // Відновлюємо "чайові"
+        tariffCustomPrices.forEach { (tariffId, _) ->
+             // У нас в map лежить ПОВНА ціна. А setCustomPrice очікує ДОДАТКОВУ.
+             // Тут була логічна помилка. tariffCustomPrices зберігає ПОВНУ ціну маршруту.
+             // А "чайові" (addedValue) ми повинні зберігати окремо або витягувати з selectedTariffItem.
+             
+             // Виправлення: ми просто оновлюємо базові ціни через updatePrices вище.
+             // А "чайові" (addedValue) адаптер зберігає у себе всередині (customPrices).
+             // Тому тут нічого робити не треба, якщо ми не хочемо відновити стан після повороту екрану.
+        }
+
         tariffsPanel.post {
             updateMapPadding(tariffsPanel, 0f, 10f)
         }
 
-        // Логіка вибору тарифу за замовчуванням (якщо ще не обрано)
+        // Логіка вибору тарифу за замовчуванням
         if (selectedTariffItem == null) {
             val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) } 
                 ?: availableTariffs.firstOrNull()
 
             if (defaultTariff != null) {
-                val distKm = routeDistanceMeters / 1000.0
-                val priceValue = defaultTariff.basePrice + (distKm * defaultTariff.pricePerKm)
+                // Беремо ПРАВИЛЬНУ ціну з нашої мапи
+                val finalPrice = tariffCustomPrices[defaultTariff.id] ?: defaultTariff.basePrice
                 
-                // Перевіряємо, чи є надбавка для дефолтного тарифу
-                val added = tariffCustomPrices[defaultTariff.id] ?: 0.0
-                val finalPrice = priceValue + added
-                val finalPriceString = String.format("%.0f", finalPrice)
-                
-                val item = TariffItem(defaultTariff, finalPriceString, finalPrice, added) 
+                val item = TariffItem(
+                    tariff = defaultTariff, 
+                    priceString = String.format("%.0f", finalPrice), 
+                    priceValue = finalPrice, 
+                    addedValue = 0.0
+                ) 
                 
                 selectedTariffItem = item
                 tariffAdapter.setSelectedTariffId(defaultTariff.id)
@@ -2009,22 +1913,27 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 btnOrderTaxi.text = "Замовити"
             }
         } else {
-            // Якщо тариф вже був обраний (ми повернулися з іншого екрану), оновлюємо кнопку
+            // Якщо тариф вже був обраний, оновлюємо кнопку з його ціною
             val item = selectedTariffItem!!
+            // Актуалізуємо ціну, якщо вона змінилась через перерахунок маршруту
+            val updatedPrice = tariffCustomPrices[item.tariff.id] ?: item.priceValue
+            
+            // Зберігаємо стару надбавку
+            val added = item.addedValue
+            val finalWithTips = updatedPrice + added
+            
             btnOrderTaxi.isEnabled = true
-            btnOrderTaxi.text = "Замовити ${item.priceValue.toInt()} ₴"
+            btnOrderTaxi.text = "Замовити ${finalWithTips.toInt()} ₴"
         }
     }
 
     private fun setLocationButtonAnchor(anchorId: Int) {
         val btnLocation = findViewById<View>(R.id.btn_recenter_location)
-        val params = btnLocation.layoutParams as RelativeLayout.LayoutParams
+        val params = btnLocation.layoutParams as android.widget.RelativeLayout.LayoutParams
         
-        // Удаляем старые правила (на всякий случай)
-        params.removeRule(RelativeLayout.ABOVE)
+        params.removeRule(android.widget.RelativeLayout.ABOVE)
         
-        // Добавляем новое правило
-        params.addRule(RelativeLayout.ABOVE, anchorId)
+        params.addRule(android.widget.RelativeLayout.ABOVE, anchorId)
         
         btnLocation.layoutParams = params
     }
@@ -2042,14 +1951,13 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             )
         }
         
-        // 1. !!! ДОДАНО: Дістаємо збережену надбавку для цього тарифу !!!
         val myAddedValue = tariffCustomPrices[tariff.id] ?: 0.0
         
         val request = CreateOrderRequestDto(
             fromAddress = originPlace!!.name ?: "А",
             toAddress = destinationPlace!!.name ?: "Б",
             tariffId = tariff.id,
-            price = price, // Це вже фінальна сума (Тариф + Послуги + Надбавка)
+            price = price, 
             originLat = originPlace!!.latLng?.latitude,
             originLng = originPlace!!.latLng?.longitude,
             destLat = destinationPlace!!.latLng?.latitude,
@@ -2059,14 +1967,11 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             distanceMeters = routeDistanceMeters,
             durationSeconds = routeDurationSeconds,
             
-            // Передаємо коментар
             comment = if (orderComment.isBlank()) null else orderComment,
 
-            // Передаємо метод оплати
             paymentMethod = currentPaymentMethod,
             serviceIds = selectedServiceIds,
             
-            // 2. !!! ДОДАНО: Передаємо надбавку на сервер !!!
             addedValue = myAddedValue
         )
         
@@ -2103,7 +2008,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
         dialog.setContentView(view)
 
-        // Элементы UI
         val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
         val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
         val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
@@ -2111,72 +2015,52 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         val btnSave = view.findViewById<Button>(R.id.btn_save_price)
         val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
 
-        // --- ГЛАВНАЯ МАТЕМАТИКА ---
         
         val currentTariffId = selectedTariffItem!!.tariff.id
         
-        // 1. Получаем полную цену из выбранного тарифа (Тариф + Услуги + УЖЕ СУЩЕСТВУЮЩАЯ НАДБАВКА)
         val currentTotalPrice = selectedTariffItem!!.priceValue
         
-        // 2. Получаем старую надбавку, которую мы сохраняли ранее (или 0.0)
         val savedAddedValue = tariffCustomPrices[currentTariffId] ?: 0.0
         
-        // 3. Вычисляем ИСТИННУЮ БАЗУ (Чистая цена тарифа с услугами, без торга)
-        // Формула: ТекущаяЦена - СтараяНадбавка
         val trueBasePrice = currentTotalPrice - savedAddedValue
         
-        // 4. Считаем лимит надбавки (чтобы цена была максимум x3 от базы)
-        // Если база 100, макс цена 300. Значит макс надбавка = 200 (это 2 * база)
         val maxAddition = trueBasePrice * 2.0 
 
-        // Функция обновления UI внутри диалога
         fun updateDialogUI(currentAddition: Double) {
             val finalPrice = trueBasePrice + currentAddition
             tvPrice.text = "${finalPrice.toInt()} ₴"
             
-            // Расчет позиции ползунка
-            // Если currentAddition = 200, а maxAddition = 200 -> progress = 100%
             val progress = if (maxAddition > 0) {
                 ((currentAddition / maxAddition) * 100).toInt()
             } else 0
             
             seekBar.progress = progress
             
-            // Кнопка минус активна, только если есть надбавка
             btnMinus.isEnabled = currentAddition > 0
             btnMinus.alpha = if (currentAddition > 0) 1.0f else 0.5f
             
-            // Кнопка плюс активна, если не достигли максимума
             btnPlus.isEnabled = currentAddition < maxAddition
             btnPlus.alpha = if (currentAddition < maxAddition) 1.0f else 0.5f
         }
 
-        // Инициализация при открытии (показываем текущее состояние)
         updateDialogUI(savedAddedValue)
-
-        // --- СЛУШАТЕЛИ ---
 
         seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(p0: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    // Обратная математика: из процентов в деньги
                     val newAddition = (progress / 100.0) * maxAddition
                     
-                    // Округляем до 10 грн для красоты
                     val roundedAddition = (Math.round(newAddition / 10.0) * 10).toDouble()
                     
-                    // Обновляем только текст, не двигая слайдер (чтобы не дёргался)
                     val finalPrice = trueBasePrice + roundedAddition
                     tvPrice.text = "${finalPrice.toInt()} ₴"
                     
-                    // Кнопки обновляем вручную
                     btnMinus.isEnabled = roundedAddition > 0
                     btnMinus.alpha = if (roundedAddition > 0) 1.0f else 0.5f
                 }
             }
             override fun onStartTrackingTouch(p0: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(p0: android.widget.SeekBar?) {
-                // Когда отпустили палец - жестко синхронизируем UI с округленным значением
                 val currentPrice = tvPrice.text.toString().replace(" ₴", "").toDouble()
                 val addition = currentPrice - trueBasePrice
                 updateDialogUI(addition)
@@ -2204,27 +2088,20 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         btnSave.setOnClickListener {
-            // 1. Берем итоговую цену из текста
             val finalPrice = tvPrice.text.toString().replace(" ₴", "").toDouble()
             
-            // 2. Считаем, сколько пользователь надбавил
             val addedValue = finalPrice - trueBasePrice
             
-            // 3. Сохраняем в Map
             tariffCustomPrices[currentTariffId] = addedValue
             
-            // 4. Обновляем Адаптер
             tariffAdapter.setCustomPrice(currentTariffId, addedValue)
             
-            // 5. Обновляем текущий selectedTariffItem в Activity
-            // !!! ВИПРАВЛЕННЯ ТУТ: priceString замість price !!!
             selectedTariffItem = selectedTariffItem?.copy(
-                priceString = finalPrice.toInt().toString(), // <-- ТУТ БУЛА ПОМИЛКА
+                priceString = finalPrice.toInt().toString(), 
                 priceValue = finalPrice,
                 addedValue = addedValue
             )
             
-            // 6. Обновляем кнопку заказа
             btnOrderTaxi.text = "Замовити"
             
             dialog.dismiss()
@@ -2265,7 +2142,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun showActiveOrderPanel(order: TaxiOrderDto) {
-        // 1. Видимость
         findViewById<View>(R.id.active_order_card).visibility = View.VISIBLE
         findViewById<View>(R.id.tariffs_panel).visibility = View.GONE
         findViewById<View>(R.id.btn_menu).visibility = View.GONE
@@ -2275,28 +2151,24 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
-        // 2. Цена
         tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
 
-        // 3. Оплата
         if (order.paymentMethod == "CARD") {
             ivActiveOrderPayment.setImageResource(R.drawable.ic_card)
         } else {
             ivActiveOrderPayment.setImageResource(R.drawable.ic_cash)
         }
 
-        // 4. Тариф (Название + Иконка)
         tvOrderTariffName.text = order.tariffName
 
         val ivOrderTariffIcon = findViewById<ImageView>(R.id.iv_order_tariff_icon)
 
-        // Ищем тариф в списке availableTariffs по названию, чтобы взять URL картинки
         val matchingTariff = availableTariffs.find { it.name == order.tariffName }
         
         val iconUrl = matchingTariff?.iconUrl 
 
         if (iconUrl != null && iconUrl.isNotEmpty()) {
-            ivOrderTariffIcon.imageTintList = null // Убираем серый цвет, чтобы иконка была цветной
+            ivOrderTariffIcon.imageTintList = null 
             
             var finalUrl = iconUrl
             if (finalUrl.contains("localhost")) finalUrl = finalUrl.replace("localhost", "10.0.2.2")
@@ -2307,26 +2179,21 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 .error(R.drawable.ic_taxi_model_standard)
                 .into(ivOrderTariffIcon)
         } else {
-            // Если иконки нет - ставим заглушку и красим в серый
             ivOrderTariffIcon.setImageResource(R.drawable.ic_taxi_model_standard)
             ivOrderTariffIcon.setColorFilter(ContextCompat.getColor(this, R.color.text_secondary))
         }
 
-        // 5. Послуги (ОНОВЛЕНО: Відображаємо назви)
         if (order.services.isNotEmpty()) {
             tvOrderServices.visibility = View.VISIBLE
-            // Беремо назви з об'єктів і склеюємо через кому
             val servicesText = order.services.joinToString(separator = ", ") { it.name }
             tvOrderServices.text = "+ $servicesText"
         } else if (!order.serviceIds.isNullOrEmpty()) {
-            // Фолбек для старої версії (якщо прийшли тільки ID)
             tvOrderServices.visibility = View.VISIBLE
             tvOrderServices.text = "+ Додаткові послуги"
         } else {
             tvOrderServices.visibility = View.GONE
         }
 
-        // 6. Коментар
         if (order.comment != null && order.comment.isNotEmpty()) {
             tvOrderComment.visibility = View.VISIBLE
             tvOrderComment.text = "Коментар: ${order.comment}"
@@ -2353,10 +2220,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
     
     private fun updateStatusUI(order: TaxiOrderDto) {
-        // Скидаємо колір тексту на стандартний
         orderStatusText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         
-        // Скидаємо видимість кнопки (за замовчуванням показуємо для REQUESTED/ACCEPTED)
         btnCancelOrder.visibility = View.VISIBLE
         btnCancelOrder.isEnabled = true
         btnCancelOrder.text = "Скасувати"
@@ -2364,8 +2229,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         layoutActiveOrderPrice.visibility = View.VISIBLE 
 
         when(order.status) {
-            // !!! ЗМІНА ТУТ !!! 
-            // Додаємо "OFFERING" у той самий блок, що й "REQUESTED"
             "REQUESTED", "OFFERING" -> {
                 orderStatusText.text = "Пошук водія..."
                 startStatusBlinking()
@@ -2391,7 +2254,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.VISIBLE
                 
-                // Ховаємо кнопку (клієнт вже не може просто так скасувати)
                 btnCancelOrder.visibility = View.GONE 
 
                 updateDriverInfo(order)
@@ -2406,7 +2268,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.VISIBLE
                 
-                // Ховаємо кнопку
                 btnCancelOrder.visibility = View.GONE 
 
                 updateDriverInfo(order)
@@ -2420,7 +2281,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.GONE
                 
-                // Ховаємо кнопку (поїздка вже завершена)
                 btnCancelOrder.visibility = View.GONE
                 
                 sessionManager.clearActiveOrderId()
@@ -2437,8 +2297,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.GONE
                 
-                // Тут кнопку теж можна сховати або залишити (щоб візуально було видно кінець)
-                // Залишимо, бо після скасування ми перекидаємо на головну через таймер
                 btnCancelOrder.visibility = View.GONE
                 
                 sessionManager.clearActiveOrderId()
@@ -2494,20 +2352,15 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f) {
         bottomPanel.post {
             if (mMap != null) {
-                // 1. Вимірюємо реальну висоту панелі
                 val panelHeight = bottomPanel.height
                 if (panelHeight == 0) return@post
 
-                // 2. Рахуємо фізичний відступ (щоб підняти логотип Google)
                 val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
                 val totalBottomPadding = panelHeight + extraBuffer
                 val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
-                // 3. Встановлюємо Padding карті
-                // Логотип Google буде закріплений НАД панеллю (як ви і хотіли)
                 mMap?.setPadding(0, topPadding, 0, totalBottomPadding)
 
-                // 4. Логіка відображення маршруту
                 if (currentRoutePolyline != null) {
                     try {
                         val boundsBuilder = LatLngBounds.Builder()
@@ -2515,18 +2368,11 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                             boundsBuilder.include(originPlace!!.latLng!!)
                             boundsBuilder.include(destinationPlace!!.latLng!!)
                             
-                            // Додаємо всі точки
                             currentWaypoints.forEach { boundsBuilder.include(it.first) }
                             decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                            // !!! ГОЛОВНА ЗМІНА ТУТ !!!
-                            // Було 30f -> Ставимо 80f (або 90f).
-                            // Це "безпечний відступ" всередині видимої зони.
-                            // Тепер точки не будуть прилипати до панелі тарифів, 
-                            // і місця вистачить для відображення Smart Labels.
                             val labelSafePadding = convertDpToPixel(80f).toInt()
 
-                            // Анімуємо камеру (без всяких scrollBy/zoomBy, просто коректні межі)
                             mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
                             
                             btnRecenterRoute.visibility = View.GONE
@@ -2558,20 +2404,15 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         sessionManager.clearActiveOrderId()
         tariffAdapter.submitList(emptyList(), 0)
 
-        // --- ДОДАНО: СКИДАННЯ ВСІХ ДАНИХ ЗАМОВЛЕННЯ ---
-        // 1. Очищаємо надбавки
         tariffCustomPrices.clear()
         tariffAdapter.clearCustomPrices()
         
-        // 2. Очищаємо послуги
         selectedServiceIds.clear()
         servicesExtraCost = 0.0
         tariffAdapter.updateExtraCost(0.0)
 
-        // 3. Очищаємо коментар
         orderComment = ""
         updateCommentIconState()
-        // ----------------------------------------------
 
         tvOrigin.text = "Звідки?"
         tvDestination.text = "Куди?"
@@ -2606,9 +2447,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
     
     private fun resetUI() {
-        // ... твой код сброса карты ...
-    
-        // Сброс цен
         tariffCustomPrices.clear()
         tariffAdapter.clearCustomPrices()
     }
