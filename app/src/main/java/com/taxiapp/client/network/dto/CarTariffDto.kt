@@ -1,15 +1,19 @@
 package com.taxiapp.client.network.dto
+
 import com.google.gson.annotations.SerializedName
+import java.io.Serializable
 
 data class CarTariffDto(
-    val id: Long,
-    val name: String,
-    val basePrice: Double,
-    val pricePerKm: Double,
-    val pricePerWaitingMinute: Double = 0.0,
-    val description: String? = null,
-    @SerializedName("imageUrl") val iconUrl: String? = null,
+    @SerializedName("id") val id: Long,
+    @SerializedName("name") val name: String,
+    @SerializedName("basePrice") val basePrice: Double,
+    @SerializedName("pricePerKm") val pricePerKm: Double,
 
-    // Новое поле для готовой цены от сервера
-    var calculatedPrice: Double? = null
-)
+    // --- ВАЖНЫЕ ДОБАВЛЕНИЯ ---
+    @SerializedName("pricePerWaitingMinute") val pricePerWaitingMinute: Double = 0.0,
+    @SerializedName("imageUrl") val imageUrl: String?,
+    // -------------------------
+
+    @SerializedName("calculatedPrice") val calculatedPrice: Double? = null,
+    @SerializedName("description") val description: String? = null
+) : Serializable

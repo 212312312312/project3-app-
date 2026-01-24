@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -25,28 +24,28 @@ class HelpTariffsActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var sessionManager: SessionManager
 
-    // Текстовые поля для деталей (снизу экрана)
+    // Текстові поля для деталей (знизу екрану)
     private lateinit var tvPriceBase: TextView
     private lateinit var tvPriceKm: TextView
     private lateinit var tvPriceMin: TextView
+
+    // Налаштування сервера
+    private val SERVER_IP = "192.168.0.104" // Твій актуальний IP
+    private val SERVER_PORT = "8080"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_help_tariffs)
 
-        // 1. ИСПРАВЛЕНИЕ: Заменили 'e' на '_', чтобы убрать предупреждение
         try { ViewUtils.makeImmersive(this) } catch (_: Exception) {}
 
         sessionManager = SessionManager(this)
 
-        // Инициализация View
         findViewById<View>(R.id.btn_back).setOnClickListener { finish() }
 
         recyclerView = findViewById(R.id.rv_tariffs)
-        // Важно: горизонтальная прокрутка для карточек
         recyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
-        // Находим поля, куда будем писать цены
         tvPriceBase = findViewById(R.id.tv_price_base)
         tvPriceKm = findViewById(R.id.tv_price_km)
         tvPriceMin = findViewById(R.id.tv_price_min)
@@ -57,7 +56,6 @@ class HelpTariffsActivity : AppCompatActivity() {
     private fun loadTariffs() {
         val token = sessionManager.fetchAuthToken() ?: return
 
-        // Вызываем метод API (путь: /api/v1/public/tariffs)
         ApiClient.instance.getTariffs("Bearer $token").enqueue(object : Callback<List<CarTariffDto>> {
             override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
                 if (response.isSuccessful && response.body() != null) {
@@ -77,63 +75,54 @@ class HelpTariffsActivity : AppCompatActivity() {
     private fun setupAdapter(tariffs: List<CarTariffDto>) {
         if (tariffs.isEmpty()) return
 
-        // Создаем наш внутренний адаптер
         val adapter = HelpAdapter(tariffs) { selectedTariff ->
-            // При клике обновляем тексты внизу
             updateDetails(selectedTariff)
         }
 
         recyclerView.adapter = adapter
-
-        // Сразу показываем детали первого тарифа (чтобы не было пусто)
+        // Відразу показуємо деталі першого тарифу
         updateDetails(tariffs[0])
     }
 
     private fun updateDetails(tariff: CarTariffDto) {
         tvPriceBase.text = "${tariff.basePrice.toInt()} ₴"
         tvPriceKm.text = "${tariff.pricePerKm.toInt()} ₴"
+        // Використовуємо правильне поле для хвилин очікування
         tvPriceMin.text = "${tariff.pricePerWaitingMinute.toInt()} ₴"
     }
 
-    // --- ВНУТРЕННИЙ АДАПТЕР ---
+    // --- ВНУТРІШНІЙ АДАПТЕР ---
     private inner class HelpAdapter(
         private val list: List<CarTariffDto>,
         private val onSelected: (CarTariffDto) -> Unit
     ) : RecyclerView.Adapter<HelpAdapter.HelpViewHolder>() {
 
         private var selectedPosition = 0
-        // URL твоего сервера для картинок
-        private val IMAGES_BASE_URL = "http://192.168.0.104:8080/images/"
 
         inner class HelpViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            val rootLayout: LinearLayout = itemView.findViewById(R.id.item_root)
             val icon: ImageView = itemView.findViewById(R.id.iv_tariff_icon)
             val name: TextView = itemView.findViewById(R.id.tv_tariff_name)
+
+            // Використовуємо itemView як кореневий елемент для зміни прозорості
+            val rootLayout: View = itemView
 
             fun bind(tariff: CarTariffDto, isSelected: Boolean) {
                 name.text = tariff.name
 
-                // 2. ИСПРАВЛЕНИЕ: Используем 'iconUrl' вместо 'imageUrl'
-                // В вашем DTO на клиенте это поле называется iconUrl
-                val currentIconUrl = tariff.iconUrl
-
-                if (!currentIconUrl.isNullOrEmpty()) {
-                    val fullUrl = if (currentIconUrl.startsWith("http")) {
-                        currentIconUrl
-                    } else {
-                        IMAGES_BASE_URL + currentIconUrl
-                    }
+                // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
+                if (!tariff.imageUrl.isNullOrEmpty()) {
+                    val fullUrl = "http://$SERVER_IP:$SERVER_PORT/uploads/${tariff.imageUrl}"
 
                     Glide.with(itemView.context)
                         .load(fullUrl)
-                        .placeholder(R.drawable.ic_home_custom)
-                        .error(R.drawable.ic_home_custom)
+                        .placeholder(R.drawable.ic_taxi_model_standard)
+                        .error(R.drawable.ic_taxi_model_standard)
                         .into(icon)
                 } else {
-                    icon.setImageResource(R.drawable.ic_home_custom)
+                    icon.setImageResource(R.drawable.ic_taxi_model_standard)
                 }
 
-                // Выделение (яркий если выбран, прозрачный если нет)
+                // --- ЛОГІКА ВИДІЛЕННЯ (ALPHA) ---
                 if (isSelected) {
                     rootLayout.alpha = 1.0f
                 } else {
@@ -151,7 +140,6 @@ class HelpTariffsActivity : AppCompatActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): HelpViewHolder {
-            // Используем ТВОЙ item_tariff_card.xml
             val view = LayoutInflater.from(parent.context).inflate(R.layout.item_tariff_card, parent, false)
             return HelpViewHolder(view)
         }

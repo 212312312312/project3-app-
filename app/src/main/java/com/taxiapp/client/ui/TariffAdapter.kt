@@ -2,6 +2,7 @@ package com.taxiapp.client.ui
 
 import android.graphics.Color
 import android.graphics.Paint
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -35,14 +36,13 @@ class TariffAdapter(
     private var currentDistanceMeters: Int = 0
     private var currentExtraCost: Double = 0.0
 
-    // Ручна зміна ціни юзером (Чайові)
     private val customPrices = mutableMapOf<Long, Double>()
-
     private var currentDiscountPercent: Double = 0.0
     private var maxDiscountAmount: Double = 0.0
 
-    // ВАЖЛИВО: Замініть на реальний IP вашого сервера, якщо тестуєте на реальному пристрої
-    private val SERVER_IP = "192.168.0.104"
+    // НАЛАШТУВАННЯ СЕРВЕРА
+    private val SERVER_IP = "192.168.0.104" // Твій IP
+    private val SERVER_PORT = "8080"
 
     inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val cardView: MaterialCardView = view.findViewById(R.id.tariff_card)
@@ -65,25 +65,22 @@ class TariffAdapter(
                 desc.visibility = View.GONE
             }
 
-            // Іконка
-            if (!tariff.iconUrl.isNullOrEmpty()) {
-                val fullUrl = if (tariff.iconUrl.startsWith("http")) {
-                    tariff.iconUrl
-                } else {
-                    val path = if (tariff.iconUrl.startsWith("/")) tariff.iconUrl else "/${tariff.iconUrl}"
-                    "http://$SERVER_IP:8080$path"
-                }
+            // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
+            if (!tariff.imageUrl.isNullOrEmpty()) {
+                val fullUrl = "http://$SERVER_IP:$SERVER_PORT/uploads/${tariff.imageUrl}"
+                Log.d("TariffAdapter", "Loading: $fullUrl")
 
                 Glide.with(itemView.context)
                     .load(fullUrl)
-                    .placeholder(R.drawable.ic_car_marker_info)
-                    .error(R.drawable.ic_car_marker_info)
+                    .placeholder(R.drawable.ic_taxi_model_standard)
+                    .error(R.drawable.ic_taxi_model_standard)
                     .into(image)
             } else {
-                image.setImageResource(R.drawable.ic_car_marker_info)
+                image.setImageResource(R.drawable.ic_taxi_model_standard)
             }
+            // -----------------------------
 
-            // Логіка відображення ціни зі знижкою
+            // Знижки
             if (currentDiscountPercent > 0.0) {
                 oldPrice.visibility = View.VISIBLE
                 oldPrice.text = "${item.priceValue.roundToInt()} ₴"
@@ -117,7 +114,7 @@ class TariffAdapter(
                 price.text = "${item.priceValue.roundToInt()} ₴"
             }
 
-            // Стиль обраної картки
+            // Стиль виділення
             if (isSelected) {
                 cardView.cardElevation = 0f
                 cardView.strokeWidth = 6
@@ -129,7 +126,7 @@ class TariffAdapter(
 
             itemView.setOnClickListener {
                 val prev = selectedPosition
-                selectedPosition = bindingAdapterPosition
+                selectedPosition = bindingAdapterPosition // Використовуємо bindingAdapterPosition замість adapterPosition
                 notifyItemChanged(prev)
                 notifyItemChanged(selectedPosition)
                 onTariffSelected(item)
@@ -138,6 +135,8 @@ class TariffAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TariffViewHolder {
+        // ВИПРАВЛЕННЯ: Повертаємо правильний layout 'tariff_item' (велика картка),
+        // а не 'item_tariff_card' (маленька картка для HelpActivity)
         val view = LayoutInflater.from(parent.context).inflate(R.layout.tariff_item, parent, false)
         return TariffViewHolder(view)
     }
@@ -154,13 +153,7 @@ class TariffAdapter(
         recalculateItems()
     }
 
-    // Цей метод можна видалити або залишити пустим, якщо він викликається з HomeActivity,
-    // але ми тепер покладаємось на submitList з calculatedPrice
-    fun updatePrices(newPrices: Map<Long, Double>) {
-        // Ми ігноруємо старий спосіб передачі цін мапою,
-        // тому що тепер ціна приходить всередині об'єкта CarTariffDto (calculatedPrice)
-        // recalculateItems() // Не потрібно викликати
-    }
+    fun updatePrices(newPrices: Map<Long, Double>) { }
 
     fun setDiscount(percent: Double, limit: Double) {
         this.currentDiscountPercent = percent
@@ -196,33 +189,18 @@ class TariffAdapter(
 
     private fun recalculateItems() {
         items = rawTariffs.map { tariff ->
-
-            // 1. ВИЗНАЧАЄМО БАЗОВУ ЦІНУ ПОЇЗДКИ
             val basePriceForCalc = if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
-                // ВАРІАНТ А: Сервер надіслав точну ціну (Smart Pricing)
                 tariff.calculatedPrice!!
             } else {
-                // ВАРІАНТ Б: Фолбек (рахуємо на телефоні, якщо немає інтернету)
-                // ТУТ БУЛА ПОМИЛКА: ми виправляємо формулу, щоб враховувати 3 км!
-
                 val totalKm = currentDistanceMeters / 1000.0
                 val INCLUDED_KM = 3.0
-
-                // Рахуємо тільки ті км, які перевищують 3 км
                 val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
-
                 val manualCalc = tariff.basePrice + (billableKm * tariff.pricePerKm)
-
-                // Округляємо і гарантуємо, що не менше бази
                 max(ceil(manualCalc), tariff.basePrice)
             }
 
-            // 2. Додаємо вартість послуг (якщо обрані в ServicesActivity)
             val withServices = basePriceForCalc + currentExtraCost
-
-            // 3. Додаємо "чайові" (якщо юзер накрутив)
             val userAdded = customPrices[tariff.id] ?: 0.0
-
             val finalPrice = withServices + userAdded
             val priceString = String.format("%.0f", finalPrice)
 

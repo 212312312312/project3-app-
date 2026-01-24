@@ -2123,34 +2123,38 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         val ivOrderTariffIcon = findViewById<ImageView>(R.id.iv_order_tariff_icon)
 
+        // 1. Ищем тариф
         val matchingTariff = availableTariffs.find { it.name == order.tariffName }
-        
-        val iconUrl = matchingTariff?.iconUrl 
 
-        if (iconUrl != null && iconUrl.isNotEmpty()) {
-            ivOrderTariffIcon.imageTintList = null 
-            
-            var finalUrl = iconUrl
-            if (finalUrl.contains("localhost")) finalUrl = finalUrl.replace("localhost", "10.0.2.2")
+        // 2. ИСПРАВЛЕНИЕ: Берем imageUrl (так теперь называется поле в DTO)
+        val imageFileName = matchingTariff?.imageUrl
+
+        // 3. ИСПРАВЛЕНИЕ: Правильная проверка и формирование ссылки
+        if (!imageFileName.isNullOrEmpty()) {
+            ivOrderTariffIcon.imageTintList = null
+
+            // Формируем полный URL (используй свой IP)
+            val fullUrl = "http://192.168.0.104:8080/uploads/$imageFileName"
 
             Glide.with(this)
-                .load(finalUrl)
+                .load(fullUrl)
                 .placeholder(R.drawable.ic_taxi_model_standard)
                 .error(R.drawable.ic_taxi_model_standard)
                 .into(ivOrderTariffIcon)
         } else {
+            // Фоллбек, если картинки нет
             ivOrderTariffIcon.setImageResource(R.drawable.ic_taxi_model_standard)
             ivOrderTariffIcon.setColorFilter(ContextCompat.getColor(this, R.color.text_secondary))
         }
 
+        // Обработка услуг
         if (order.services.isNotEmpty()) {
             tvOrderServices.visibility = View.VISIBLE
             val servicesText = order.services.joinToString(separator = ", ") { it.name }
             tvOrderServices.text = "+ $servicesText"
-        } else if (!order.serviceIds.isNullOrEmpty()) {
-            tvOrderServices.visibility = View.VISIBLE
-            tvOrderServices.text = "+ Додаткові послуги"
-        } else {
+        }
+        // Здесь удалил проверку serviceIds, так как services уже заполнен сервером
+        else {
             tvOrderServices.visibility = View.GONE
         }
 
