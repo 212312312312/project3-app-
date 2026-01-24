@@ -433,7 +433,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         setupSystemBars(isDark)
 
-        val myApiKey = "AIzaSyDp1blRHORukZ08uYYpvh52fN0mGe7Rnu4" 
+        val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI" 
         if (!Places.isInitialized()) {
             Places.initialize(applicationContext, myApiKey, Locale("uk", "UA"))
         }
@@ -1414,7 +1414,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             null
         }
 
-        val myApiKey = "AIzaSyDp1blRHORukZ08uYYpvh52fN0mGe7Rnu4"
+        val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI"
 
         DirectionsApiClient.instance.getDirections(originApiString, destApiString, waypointsString, myApiKey)
             .enqueue(object : Callback<DirectionsResponse> {
