@@ -656,7 +656,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         btnChangePrice = findViewById(R.id.btn_change_price)
         btnChangePrice.setOnClickListener {
-        showPriceAdjustmentDialog()
+        showChangePriceDialog() // Викликаємо нову функцію
         }
         
         try {
@@ -1623,7 +1623,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun fetchTariffsAndShowPanel() {
-    // 1. Налаштування UI (Видимість панелей)
+    // 1. Налаштування UI
     addressPanel.visibility = View.GONE
     tariffsPanel.visibility = View.VISIBLE
     tariffsProgressBar.visibility = View.VISIBLE
@@ -1632,20 +1632,17 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
-    // Скидання списку перед завантаженням
     tariffAdapter.submitList(emptyList(), 0)
     
-    // Зміна іконки меню на "Назад"
     ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
     val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
     ivMenuIcon.setColorFilter(adaptiveColor)
 
-    // 2. Логіка отримання знижок (Промокоди)
+    // 2. Знижки
     val promoPercent = sessionManager.fetchPromoDiscount()
     val promoLimit = sessionManager.fetchPromoLimit()
     val token = sessionManager.fetchAuthToken()
 
-    // Внутрішня функція: що робити, коли зі знижками розібралися
     fun proceedToLoadTariffs(finalPercent: Double, finalLimit: Double) {
         tariffAdapter.setDiscount(finalPercent, finalLimit)
 
@@ -1654,39 +1651,50 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         // === SMART PRICING LOGIC ===
         if (currentRoute != null && currentDist > 0) {
-            // ВАРІАНТ А: Є маршрут -> Просимо сервер порахувати точну ціну (Місто/Загород)
             val request = CalculatePriceRequestDto(currentRoute, currentDist)
             
             ApiClient.instance.calculatePrice(request).enqueue(object : Callback<List<CarTariffDto>> {
                 override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
                     tariffsProgressBar.visibility = View.GONE
-                    if (response.isSuccessful) {
-                        availableTariffs = response.body() ?: emptyList()
-                        // Сервер повернув тарифи вже з полем calculatedPrice -> показуємо їх
+                    
+                    if (response.isSuccessful && response.body() != null) {
+                        // УСПІХ!
+                        availableTariffs = response.body()!!
+                        
+                        // ДЕБАГ: Перевіряємо, чи прийшла ціна
+                        val firstPrice = availableTariffs.firstOrNull()?.calculatedPrice
+                        android.util.Log.d("TaxiPrice", "Server responded. First tariff price: $firstPrice")
+                        
                         displayTariffs() 
                     } else {
-                        // Якщо сервер не зміг порахувати -> вантажимо звичайні тарифи
+                        // ПОМИЛКА СЕРВЕРА
+                        // Важливо: виводимо код помилки, щоб зрозуміти причину (404, 500, 400?)
+                        val errorMsg = "Помилка розрахунку: ${response.code()} ${response.message()}"
+                        android.util.Log.e("TaxiPrice", errorMsg)
+                        showToast(errorMsg) 
+                        
+                        // Фолбек (рахуємо самі, тому і виходить 130)
                         loadTariffs() 
                     }
                 }
+                
                 override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
-                    // Помилка мережі -> вантажимо звичайні тарифи
+                    // ПОМИЛКА МЕРЕЖІ
+                    android.util.Log.e("TaxiPrice", "Network fail: ${t.message}")
+                    showToast("Помилка мережі: ${t.message}")
                     loadTariffs() 
                 }
             })
         } else {
-            // ВАРІАНТ Б: Маршруту немає -> Просто вантажимо список тарифів
             loadTariffs()
         }
     }
 
-    // 3. Запит на сервер за актуальною знижкою
     if (token != null) {
         ApiClient.instance.getActiveDiscount("Bearer $token").enqueue(object : Callback<ActiveDiscountDto> {
             override fun onResponse(call: Call<ActiveDiscountDto>, response: Response<ActiveDiscountDto>) {
                 var finalPercent = promoPercent
                 var finalLimit = promoLimit
-                
                 if (response.isSuccessful && response.body() != null) {
                     val taskDiscount = response.body()!!
                     if (taskDiscount.percent > finalPercent) {
@@ -1696,7 +1704,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
                 proceedToLoadTariffs(finalPercent, finalLimit)
             }
-
             override fun onFailure(call: Call<ActiveDiscountDto>, t: Throwable) {
                 proceedToLoadTariffs(promoPercent, promoLimit)
             }
@@ -1848,84 +1855,73 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun displayTariffs() {
-        if (availableTariffs.isEmpty()) {
-            showToast("Немає тарифів")
-            return
-        }
+    if (availableTariffs.isEmpty()) {
+        showToast("Немає тарифів")
+        return
+    }
 
-        // 1. Оновлюємо список в адаптері (передаємо тарифи та дистанцію)
-        tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
+    // 1. Оновлюємо мапу БАЗОВИХ цін (tariffCustomPrices)
+    // Ця мапа має зберігати ТІЛЬКИ ціну маршруту (без чайових)
+    
+    val INCLUDED_KM = 3.0
+    val totalKm = routeDistanceMeters / 1000.0
+    // Рахуємо "білінг" км (все що більше 3 км)
+    val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
 
-        // 2. ВІДНОВЛЮЄМО ЦІНИ З УРАХУВАННЯМ МІНІМАЛКИ (3 КМ)
-        // Якщо tariffCustomPrices порожній (наприклад, перший запуск), треба його порахувати ПРАВИЛЬНО
-        if (tariffCustomPrices.isEmpty() && routeDistanceMeters > 0) {
-             // Спроба розрахунку "на льоту", якщо маршрут вже є
-             val INCLUDED_KM = 3.0
-             val totalKm = routeDistanceMeters / 1000.0
-             // Якщо ми ще не знаємо секторів (loadedSectors порожній), 
-             // припускаємо, що все це "місто", але віднімаємо 3 км
-             val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
-             
-             availableTariffs.forEach { tariff ->
-                 val price = tariff.basePrice + (billableKm * tariff.pricePerKm)
-                 tariffCustomPrices[tariff.id] = ceil(price)
-             }
-        }
-
-        // Застосовуємо розраховані (або збережені) ціни
-        tariffAdapter.updatePrices(tariffCustomPrices) 
-        
-        // Відновлюємо "чайові"
-        tariffCustomPrices.forEach { (tariffId, _) ->
-             // У нас в map лежить ПОВНА ціна. А setCustomPrice очікує ДОДАТКОВУ.
-             // Тут була логічна помилка. tariffCustomPrices зберігає ПОВНУ ціну маршруту.
-             // А "чайові" (addedValue) ми повинні зберігати окремо або витягувати з selectedTariffItem.
-             
-             // Виправлення: ми просто оновлюємо базові ціни через updatePrices вище.
-             // А "чайові" (addedValue) адаптер зберігає у себе всередині (customPrices).
-             // Тому тут нічого робити не треба, якщо ми не хочемо відновити стан після повороту екрану.
-        }
-
-        tariffsPanel.post {
-            updateMapPadding(tariffsPanel, 0f, 10f)
-        }
-
-        // Логіка вибору тарифу за замовчуванням
-        if (selectedTariffItem == null) {
-            val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) } 
-                ?: availableTariffs.firstOrNull()
-
-            if (defaultTariff != null) {
-                // Беремо ПРАВИЛЬНУ ціну з нашої мапи
-                val finalPrice = tariffCustomPrices[defaultTariff.id] ?: defaultTariff.basePrice
-                
-                val item = TariffItem(
-                    tariff = defaultTariff, 
-                    priceString = String.format("%.0f", finalPrice), 
-                    priceValue = finalPrice, 
-                    addedValue = 0.0
-                ) 
-                
-                selectedTariffItem = item
-                tariffAdapter.setSelectedTariffId(defaultTariff.id)
-                
-                btnOrderTaxi.isEnabled = true
-                btnOrderTaxi.text = "Замовити"
-            }
-        } else {
-            // Якщо тариф вже був обраний, оновлюємо кнопку з його ціною
-            val item = selectedTariffItem!!
-            // Актуалізуємо ціну, якщо вона змінилась через перерахунок маршруту
-            val updatedPrice = tariffCustomPrices[item.tariff.id] ?: item.priceValue
-            
-            // Зберігаємо стару надбавку
-            val added = item.addedValue
-            val finalWithTips = updatedPrice + added
-            
-            btnOrderTaxi.isEnabled = true
-            btnOrderTaxi.text = "Замовити ${finalWithTips.toInt()} ₴"
+    availableTariffs.forEach { tariff ->
+        // ПРІОРИТЕТ 1: Якщо сервер прислав точну ціну (calculatedPrice)
+        if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
+            tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
+        } 
+        // ПРІОРИТЕТ 2: Рахуємо самі (Фолбек)
+        else {
+            val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
+            tariffCustomPrices[tariff.id] = ceil(localPrice)
         }
     }
+
+    // 2. Оновлюємо список в адаптері
+    // tariffAdapter сам додасть чайові (які він зберігає у себе) до цієї базової ціни
+    tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
+    tariffAdapter.updatePrices(tariffCustomPrices)
+
+    tariffsPanel.post {
+        updateMapPadding(tariffsPanel, 0f, 10f)
+    }
+
+    // Логіка вибору тарифу за замовчуванням
+    if (selectedTariffItem == null) {
+        val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) } 
+            ?: availableTariffs.firstOrNull()
+
+        if (defaultTariff != null) {
+            val finalPrice = tariffCustomPrices[defaultTariff.id] ?: defaultTariff.basePrice
+            
+            // Створюємо початковий ітем без чайових
+            val item = TariffItem(
+                tariff = defaultTariff, 
+                priceString = String.format("%.0f", finalPrice), 
+                priceValue = finalPrice, 
+                addedValue = 0.0
+            ) 
+            
+            selectedTariffItem = item
+            tariffAdapter.setSelectedTariffId(defaultTariff.id)
+            
+            btnOrderTaxi.isEnabled = true
+            btnOrderTaxi.text = "Замовити"
+        }
+    } else {
+        // Оновлюємо кнопку, якщо ціна змінилась (наприклад, змінився маршрут)
+        val item = selectedTariffItem!!
+        val basePrice = tariffCustomPrices[item.tariff.id] ?: item.priceValue
+        // Додаємо старі чайові до нової бази
+        val finalWithTips = basePrice + item.addedValue
+        
+        btnOrderTaxi.isEnabled = true
+        btnOrderTaxi.text = "Замовити ${finalWithTips.toInt()} ₴"
+    }
+}
 
     private fun setLocationButtonAnchor(anchorId: Int) {
         val btnLocation = findViewById<View>(R.id.btn_recenter_location)
@@ -1939,178 +1935,142 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
     
     private fun createOrder(tariff: CarTariffDto, price: Double) { 
-        val token = sessionManager.fetchAuthToken() ?: return
-        btnOrderTaxi.isEnabled = false
-        btnOrderTaxi.text = "Замовлення..."
+    val token = sessionManager.fetchAuthToken() ?: return
+    btnOrderTaxi.isEnabled = false
+    btnOrderTaxi.text = "Замовлення..."
+    
+    val waypointsDto = currentWaypoints.map { pair ->
+        WaypointDto(
+            address = pair.second,
+            lat = pair.first.latitude,
+            lng = pair.first.longitude
+        )
+    }
+    
+    // !!! ВИПРАВЛЕННЯ ТУТ !!!
+    // Ми беремо addedValue прямо з обраного елемента (де зберігаються чайові)
+    // А НЕ з tariffCustomPrices (де лежить повна ціна)
+    val myAddedValue = selectedTariffItem?.addedValue ?: 0.0
+    
+    val request = CreateOrderRequestDto(
+        fromAddress = originPlace!!.name ?: "А",
+        toAddress = destinationPlace!!.name ?: "Б",
+        tariffId = tariff.id,
+        price = price, 
+        originLat = originPlace!!.latLng?.latitude,
+        originLng = originPlace!!.latLng?.longitude,
+        destLat = destinationPlace!!.latLng?.latitude,
+        destLng = destinationPlace!!.latLng?.longitude,
+        googleRoutePolyline = currentRoutePolyline,
+        waypoints = if (waypointsDto.isNotEmpty()) waypointsDto else null,
+        distanceMeters = routeDistanceMeters,
+        durationSeconds = routeDurationSeconds,
         
-        val waypointsDto = currentWaypoints.map { pair ->
-            WaypointDto(
-                address = pair.second,
-                lat = pair.first.latitude,
-                lng = pair.first.longitude
-            )
-        }
-        
-        val myAddedValue = tariffCustomPrices[tariff.id] ?: 0.0
-        
-        val request = CreateOrderRequestDto(
-            fromAddress = originPlace!!.name ?: "А",
-            toAddress = destinationPlace!!.name ?: "Б",
-            tariffId = tariff.id,
-            price = price, 
-            originLat = originPlace!!.latLng?.latitude,
-            originLng = originPlace!!.latLng?.longitude,
-            destLat = destinationPlace!!.latLng?.latitude,
-            destLng = destinationPlace!!.latLng?.longitude,
-            googleRoutePolyline = currentRoutePolyline,
-            waypoints = if (waypointsDto.isNotEmpty()) waypointsDto else null,
-            distanceMeters = routeDistanceMeters,
-            durationSeconds = routeDurationSeconds,
-            
-            comment = if (orderComment.isBlank()) null else orderComment,
+        comment = if (orderComment.isBlank()) null else orderComment,
 
-            paymentMethod = currentPaymentMethod,
-            serviceIds = selectedServiceIds,
-            
-            addedValue = myAddedValue
+        paymentMethod = currentPaymentMethod,
+        serviceIds = selectedServiceIds,
+        
+        // Відправляємо серверу ТІЛЬКИ суму надбавки (напр. 10.0), а не 200.0
+        addedValue = myAddedValue
+    )
+    
+    ApiClient.instance.createOrder("Bearer $token", request).enqueue(object : Callback<TaxiOrderDto> {
+        override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+            if (response.isSuccessful) {
+                val order = response.body()!!
+                activeOrderId = order.id
+                sessionManager.saveActiveOrderId(order.id)
+
+                showActiveOrderPanel(order)
+
+                startStatusPolling()
+            } else {
+                showToast("Помилка: ${response.message()}")
+                btnOrderTaxi.isEnabled = true
+                btnOrderTaxi.text = "Спробувати ще раз"
+            }
+        }
+         override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
+             showToast("Помилка мережі")
+             btnOrderTaxi.isEnabled = true
+         }
+     })
+}
+
+    private fun showChangePriceDialog() {
+    // Перевірка, чи обраний тариф
+    if (selectedTariffItem == null) {
+        showToast("Спочатку оберіть тариф")
+        return
+    }
+
+    val item = selectedTariffItem!!
+    
+    val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+    val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
+    dialog.setContentView(view)
+    dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+    val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
+    
+    // !!! ВИПРАВЛЕННЯ: Шукаємо як View або FrameLayout, а не ImageView !!!
+    val btnMinus = view.findViewById<View>(R.id.btn_price_minus) 
+    val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
+    
+    val btnSave = view.findViewById<Button>(R.id.btn_save_price)
+    val btnClose = view.findViewById<View>(R.id.btn_close_dialog) // Тут теж краще View, хоча там ImageView
+
+    // 1. Рахуємо чисту базу (Ціна тарифу + Послуги)
+    val currentTotal = item.priceValue
+    val currentTip = item.addedValue
+    val basePrice = currentTotal - currentTip
+
+    // Локальна змінна для редагування
+    var newTotalPrice = currentTotal
+
+    fun updateText() {
+        tvPrice.text = "${newTotalPrice.toInt()} ₴"
+    }
+    updateText()
+
+    // Логіка кнопок
+    btnPlus.setOnClickListener {
+        newTotalPrice += 10.0
+        updateText()
+    }
+
+    btnMinus.setOnClickListener {
+        if (newTotalPrice - 10.0 >= basePrice) {
+            newTotalPrice -= 10.0
+            updateText()
+        } else {
+            newTotalPrice = basePrice
+            updateText()
+        }
+    }
+
+    btnSave.setOnClickListener {
+        // 2. Рахуємо чисту надбавку
+        val newAddedValue = newTotalPrice - basePrice
+        
+        // 3. Оновлюємо адаптер (візуально)
+        tariffAdapter.setCustomPrice(item.tariff.id, newAddedValue)
+        
+        // 4. Оновлюємо обраний елемент (щоб createOrder бачив нову надбавку)
+        selectedTariffItem = item.copy(
+            priceValue = newTotalPrice,
+            priceString = String.format("%.0f", newTotalPrice),
+            addedValue = newAddedValue
         )
         
-        ApiClient.instance.createOrder("Bearer $token", request).enqueue(object : Callback<TaxiOrderDto> {
-            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
-                if (response.isSuccessful) {
-                    val order = response.body()!!
-                    activeOrderId = order.id
-                    sessionManager.saveActiveOrderId(order.id)
-
-                    showActiveOrderPanel(order)
-
-                    startStatusPolling()
-                } else {
-                    showToast("Помилка: ${response.message()}")
-                    btnOrderTaxi.isEnabled = true
-                    btnOrderTaxi.text = "Спробувати ще раз"
-                }
-            }
-             override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
-                 showToast("Помилка мережі")
-                 btnOrderTaxi.isEnabled = true
-             }
-         })
+        btnOrderTaxi.text = "Замовити ${newTotalPrice.toInt()} ₴"
+        dialog.dismiss()
     }
 
-    private fun showPriceAdjustmentDialog() {
-        if (selectedTariffItem == null) {
-            showToast("Спочатку оберіть тариф")
-            return
-        }
-
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
-        val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
-        dialog.setContentView(view)
-
-        val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
-        val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
-        val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
-        val seekBar = view.findViewById<android.widget.SeekBar>(R.id.seekbar_price)
-        val btnSave = view.findViewById<Button>(R.id.btn_save_price)
-        val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
-
-        
-        val currentTariffId = selectedTariffItem!!.tariff.id
-        
-        val currentTotalPrice = selectedTariffItem!!.priceValue
-        
-        val savedAddedValue = tariffCustomPrices[currentTariffId] ?: 0.0
-        
-        val trueBasePrice = currentTotalPrice - savedAddedValue
-        
-        val maxAddition = trueBasePrice * 2.0 
-
-        fun updateDialogUI(currentAddition: Double) {
-            val finalPrice = trueBasePrice + currentAddition
-            tvPrice.text = "${finalPrice.toInt()} ₴"
-            
-            val progress = if (maxAddition > 0) {
-                ((currentAddition / maxAddition) * 100).toInt()
-            } else 0
-            
-            seekBar.progress = progress
-            
-            btnMinus.isEnabled = currentAddition > 0
-            btnMinus.alpha = if (currentAddition > 0) 1.0f else 0.5f
-            
-            btnPlus.isEnabled = currentAddition < maxAddition
-            btnPlus.alpha = if (currentAddition < maxAddition) 1.0f else 0.5f
-        }
-
-        updateDialogUI(savedAddedValue)
-
-        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(p0: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    val newAddition = (progress / 100.0) * maxAddition
-                    
-                    val roundedAddition = (Math.round(newAddition / 10.0) * 10).toDouble()
-                    
-                    val finalPrice = trueBasePrice + roundedAddition
-                    tvPrice.text = "${finalPrice.toInt()} ₴"
-                    
-                    btnMinus.isEnabled = roundedAddition > 0
-                    btnMinus.alpha = if (roundedAddition > 0) 1.0f else 0.5f
-                }
-            }
-            override fun onStartTrackingTouch(p0: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(p0: android.widget.SeekBar?) {
-                val currentPrice = tvPrice.text.toString().replace(" ₴", "").toDouble()
-                val addition = currentPrice - trueBasePrice
-                updateDialogUI(addition)
-            }
-        })
-
-        btnPlus.setOnClickListener {
-            val currentPrice = tvPrice.text.toString().replace(" ₴", "").toDouble()
-            val currentAddition = currentPrice - trueBasePrice
-            
-            var newAddition = currentAddition + 10.0
-            if (newAddition > maxAddition) newAddition = maxAddition
-            
-            updateDialogUI(newAddition)
-        }
-
-        btnMinus.setOnClickListener {
-            val currentPrice = tvPrice.text.toString().replace(" ₴", "").toDouble()
-            val currentAddition = currentPrice - trueBasePrice
-            
-            var newAddition = currentAddition - 10.0
-            if (newAddition < 0) newAddition = 0.0
-            
-            updateDialogUI(newAddition)
-        }
-
-        btnSave.setOnClickListener {
-            val finalPrice = tvPrice.text.toString().replace(" ₴", "").toDouble()
-            
-            val addedValue = finalPrice - trueBasePrice
-            
-            tariffCustomPrices[currentTariffId] = addedValue
-            
-            tariffAdapter.setCustomPrice(currentTariffId, addedValue)
-            
-            selectedTariffItem = selectedTariffItem?.copy(
-                priceString = finalPrice.toInt().toString(), 
-                priceValue = finalPrice,
-                addedValue = addedValue
-            )
-            
-            btnOrderTaxi.text = "Замовити"
-            
-            dialog.dismiss()
-        }
-
-        btnClose.setOnClickListener { dialog.dismiss() }
-
-        dialog.show()
-    }
+    btnClose.setOnClickListener { dialog.dismiss() }
+    dialog.show()
+}
     
     private fun cancelCurrentOrder() {
         val orderId = activeOrderId ?: return

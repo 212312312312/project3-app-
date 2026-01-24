@@ -5,7 +5,6 @@ import com.taxiapp.client.data.model.TaxiService
 import retrofit2.Call
 import retrofit2.http.*
 
-// Прості класи відповідей
 data class ErrorResponse(val message: String)
 data class MessageResponse(val message: String)
 
@@ -28,21 +27,17 @@ interface ApiService {
     @GET("public/tariffs")
     fun getActiveTariffs(): Call<List<CarTariffDto>>
 
-    @GET("/api/v1/public/tariffs")
+    // Тут теж краще прибрати повний шлях, якщо він дублюється, але поки хай буде, якщо працює
+    @GET("public/tariffs")
     fun getTariffs(@Header("Authorization") token: String): Call<List<CarTariffDto>>
 
     // --- АКЦІЇ ТА ПРОМОКОДИ ---
     @GET("client/promos")
-    fun getClientPromos(
-        @Header("Authorization") token: String
-    ): Call<List<ClientPromoProgressDto>>
+    fun getClientPromos(@Header("Authorization") token: String): Call<List<ClientPromoProgressDto>>
 
     @GET("client/promos/discount")
-    fun getActiveDiscount(
-        @Header("Authorization") token: String
-    ): Call<ActiveDiscountDto>
+    fun getActiveDiscount(@Header("Authorization") token: String): Call<ActiveDiscountDto>
 
-    // Наш новый метод для активации
     @POST("client/promos/apply")
     fun applyPromo(
         @Header("Authorization") token: String,
@@ -68,19 +63,18 @@ interface ApiService {
         @Path("id") orderId: Long
     ): Call<TaxiOrderDto>
 
-    @POST("/public/calculate-price")
+    // !!! ВИПРАВЛЕННЯ ТУТ: ПРИБРАЛИ СЛЕШ "/" НА ПОЧАТКУ !!!
+    // Було: @POST("/public/calculate-price") -> Стало: @POST("public/calculate-price")
+    @POST("public/calculate-price")
     fun calculatePrice(@Body request: CalculatePriceRequestDto): Call<List<CarTariffDto>>
 
     @DELETE("client/account")
     fun deleteAccount(@Header("Authorization") token: String): Call<MessageResponse>
 
-    // --- ІСТОРІЯ (Для HomeActivity та інших) ---
+    // --- ІСТОРІЯ ---
     @GET("client/orders")
     fun getHistory(@Header("Authorization") token: String): Call<List<TaxiOrderDto>>
 
-    // --- ІСТОРІЯ (Для StatsActivity) ---
-    // Я повернув цей метод, щоб StatsActivity не світився червоним.
-    // Він робить те саме, що і getHistory - отримує список замовлень клієнта.
     @GET("client/orders")
     fun getOrderHistory(@Header("Authorization") token: String): Call<List<TaxiOrderDto>>
 
