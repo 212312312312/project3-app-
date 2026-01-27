@@ -187,6 +187,13 @@ class TariffAdapter(
         }
     }
 
+    fun getSelectedTariff(): TariffItem? {
+        if (selectedPosition >= 0 && selectedPosition < items.size) {
+            return items[selectedPosition]
+        }
+        return null
+    }
+
     private fun recalculateItems() {
         items = rawTariffs.map { tariff ->
             val basePriceForCalc = if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {

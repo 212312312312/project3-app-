@@ -3,15 +3,12 @@ package com.taxiapp.client.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import androidx.core.view.marginBottom
-import androidx.core.view.marginTop
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.taxiapp.client.R
@@ -23,17 +20,12 @@ object BitmapHelper {
         title: String,
         isPointB: Boolean,
         distanceText: String? = null,
-        isBubbleUp: Boolean = true // <-- НОВИЙ ПАРАМЕТР (за замовчуванням зверху)
+        isBubbleUp: Boolean = true
     ): BitmapDescriptor {
 
         val view = LayoutInflater.from(context).inflate(R.layout.layout_custom_marker, null) as LinearLayout
 
-        val cardView = view.findViewById<View>(R.id.info_card_container) // Треба додати ID в XML (див. нижче) або знайти CardView
-        // Оскільки в layout_custom_marker.xml кореневий елемент LinearLayout,
-        // а всередині CardView і FrameLayout, знайдемо їх за типами або індексами,
-        // але надійніше додати ID в XML.
-        // ДАВАЙТЕ ПРИПУСТИМО, ЩО ВИ ДОДАЛИ ID. ЯКЩО НІ - КОД НИЖЧЕ ЗРОБИТЬ ЦЕ ПРОГРАМНО.
-
+        // Пытаемся найти по ID, если они есть
         val tvAddress = view.findViewById<TextView>(R.id.tv_address)
         val layoutBottom = view.findViewById<LinearLayout>(R.id.layout_bottom_info)
         val tvDistance = view.findViewById<TextView>(R.id.tv_distance)
@@ -52,18 +44,14 @@ object BitmapHelper {
 
         // --- ЛОГІКА ВІДДЗЕРКАЛЕННЯ (ВГОРУ/ВНИЗ) ---
         if (!isBubbleUp) {
-            // Якщо бульбашка має бути ЗНИЗУ:
-            // 1. Видаляємо CardView (вона перша)
             val card = view.getChildAt(0)
             view.removeView(card)
-            // 2. Додаємо її в кінець (після маркера)
             view.addView(card)
 
-            // 3. Міняємо Margin (був bottom, стане top)
             val params = card.layoutParams as LinearLayout.LayoutParams
             val oldBottom = params.bottomMargin
             params.bottomMargin = 0
-            params.topMargin = oldBottom // Переносимо відступ наверх
+            params.topMargin = oldBottom
             card.layoutParams = params
         }
         // -----------------------------------------
@@ -89,16 +77,31 @@ object BitmapHelper {
         return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
-    fun vectorToBitmap(context: Context, @androidx.annotation.DrawableRes id: Int): com.google.android.gms.maps.model.BitmapDescriptor {
-        val vectorDrawable = androidx.core.content.ContextCompat.getDrawable(context, id)!!
+    // Твой старый метод (оставляем, если он где-то используется)
+    fun vectorToBitmap(context: Context, @androidx.annotation.DrawableRes id: Int): BitmapDescriptor {
+        val vectorDrawable = ContextCompat.getDrawable(context, id)!!
         vectorDrawable.setBounds(0, 0, vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight)
-        val bitmap = android.graphics.Bitmap.createBitmap(
+        val bitmap = Bitmap.createBitmap(
             vectorDrawable.intrinsicWidth,
             vectorDrawable.intrinsicHeight,
-            android.graphics.Bitmap.Config.ARGB_8888
+            Bitmap.Config.ARGB_8888
         )
-        val canvas = android.graphics.Canvas(bitmap)
+        val canvas = Canvas(bitmap)
         vectorDrawable.draw(canvas)
-        return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
+        return BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+
+    // --- ДОБАВЛЕННЫЙ МЕТОД (Исправляет ошибку компиляции) ---
+    fun vectorToBitmapDescriptor(context: Context, @androidx.annotation.DrawableRes id: Int): BitmapDescriptor? {
+        val vectorDrawable = ContextCompat.getDrawable(context, id) ?: return null
+        vectorDrawable.setBounds(0, 0, vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight)
+        val bitmap = Bitmap.createBitmap(
+            vectorDrawable.intrinsicWidth,
+            vectorDrawable.intrinsicHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        vectorDrawable.draw(canvas)
+        return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 }

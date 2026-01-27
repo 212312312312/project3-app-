@@ -1,6 +1,6 @@
 pluginManagement {
     repositories {
-        google() // <-- Убедитесь, что это ЕСТЬ
+        google()
         mavenCentral()
         gradlePluginPortal()
     }
@@ -8,8 +8,11 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        google() // <-- И ЭТО САМОЕ ВАЖНОЕ
+        google()
         mavenCentral()
+        // --- ДОБАВЛЕНО JITPACK ДЛЯ WEBSOCKET ---
+        maven { url 'https://jitpack.io' }
+        // ---------------------------------------
     }
 }
 

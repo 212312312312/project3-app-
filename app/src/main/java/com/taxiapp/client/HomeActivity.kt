@@ -1,5 +1,13 @@
 package com.taxiapp.client
 
+import android.util.Log
+import com.taxiapp.client.network.MessageResponse // <--- ВАЖНО
+import com.taxiapp.client.network.RateDriverRequest // <--- ВАЖНО
+import android.graphics.drawable.Drawable // Нужно для onLoadCleared
+import com.bumptech.glide.request.target.CustomTarget // Нужно для CustomTarget
+import com.bumptech.glide.request.transition.Transition
+import com.taxiapp.client.network.WebSocketManager // <-- Обязательно
+import com.taxiapp.client.network.dto.TrackingLocationDto
 import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -138,6 +146,12 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private var routeAnimator: ValueAnimator? = null
 
 
+
+    private var webSocketManager: WebSocketManager? = null
+    private var driverMarker: Marker? = null
+    private var customCarIcon: BitmapDescriptor? = null
+    private var isDriverTrackingActive = false
+
     private var originMarker: Marker? = null
     private var destinationMarker: Marker? = null
     
@@ -229,6 +243,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     
     // --- НОВА ЗМІННА: СПИСОК СЕКТОРІВ ---
     private var loadedSectors: List<SectorDto> = emptyList()
+
+    private var isRatingDialogVisible = false
     
     private var originPlace: Place? = null
     private var destinationPlace: Place? = null
@@ -238,6 +254,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private var availableTariffs: List<CarTariffDto> = emptyList()
     private var currentCity: CityData? = null
+
+    private var isRouteMode = false
 
     private val MODE_ORIGIN = 1
     private val MODE_DESTINATION = 2
@@ -421,6 +439,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         sessionManager = SessionManager(applicationContext)
+
+        webSocketManager = WebSocketManager(ApiClient.BASE_URL)
+        fetchCustomCarIcon()
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val isDark = sessionManager.isDarkMode()
@@ -870,26 +891,35 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun setupProfileLogic() {
         val name = sessionManager.getUserName() ?: "User"
         profileUserName.text = name
-        
+
         val firstLetter = if (name.isNotEmpty()) name.first().toString().uppercase() else "U"
         findViewById<TextView>(R.id.tv_avatar_letter).text = firstLetter
 
         profileCityText.text = currentCity?.name ?: "Не обрано"
-        
+
+        // --- НОВОЕ: Установка рейтинга ---
+        // Пока ставим 5.0, так как API логина еще не возвращает рейтинг.
+        // В будущем здесь будет: sessionManager.getUserRating()
+        try {
+            findViewById<TextView>(R.id.tv_user_rating).text = "5.0"
+        } catch (e: Exception) {
+            // Игнорируем, если view не найдена
+        }
+        // ---------------------------------
+
         val isDark = sessionManager.isDarkMode()
         updateThemeSwitchUI(isDark, animate = false, updateColors = true)
 
         themeSwitchContainer.setOnClickListener {
+            // ... (остальной код метода без изменений)
             val currentTime = System.currentTimeMillis()
-            if (currentTime - lastSwitchTime < 1000) {
-                return@setOnClickListener
-            }
+            if (currentTime - lastSwitchTime < 1000) return@setOnClickListener
             lastSwitchTime = currentTime
 
             val currentMode = sessionManager.isDarkMode()
             val newMode = !currentMode
             sessionManager.saveThemeMode(newMode)
-            
+
             updateThemeSwitchUI(newMode, animate = true, updateColors = false) {
                 applyTheme(newMode)
             }
@@ -1139,6 +1169,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onDestroy() {
         super.onDestroy()
         statusHandler.removeCallbacks(statusRunnable)
+        stopDriverTracking()
     }
 
     private fun recenterMapOnUser() {
@@ -1163,8 +1194,54 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         intent.putExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, isOrigin)
         intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_ADDRESS, tvOrigin.text.toString())
         
+        var latToSend = 0.0
+        var lngToSend = 0.0
+        
+        if (isOrigin) {
+            // --- РЕЖИМ 1: Выбираем "ЗВІДКИ" ---
+            // Нам нужно искать места рядом с НАМИ (GPS).
+            try {
+                val myLoc = mMap?.myLocation
+                if (myLoc != null) {
+                    latToSend = myLoc.latitude
+                    lngToSend = myLoc.longitude
+                }
+            } catch (e: SecurityException) { }
+            
+            // Если GPS нет, берем последнюю известную точку originPlace как фолбек
+            if (latToSend == 0.0 && originPlace?.latLng != null) {
+                latToSend = originPlace!!.latLng!!.latitude
+                lngToSend = originPlace!!.latLng!!.longitude
+            }
+        } else {
+            // --- РЕЖИМ 2: Выбираем "КУДИ" ---
+            // !!! ИСПРАВЛЕНИЕ БАГА !!!
+            // Мы должны передать координаты ВЫБРАННОЙ ТОЧКИ А.
+            // Если мы передадим GPS, пикер подумает, что мы едем от GPS и сбросит точку А.
+            if (originPlace != null && originPlace!!.latLng != null) {
+                latToSend = originPlace!!.latLng!!.latitude
+                lngToSend = originPlace!!.latLng!!.longitude
+            } else {
+                // Только если точка А еще не выбрана вообще, берем GPS
+                try {
+                    val myLoc = mMap?.myLocation
+                    if (myLoc != null) {
+                        latToSend = myLoc.latitude
+                        lngToSend = myLoc.longitude
+                    }
+                } catch (e: SecurityException) { }
+            }
+        }
+
+        // Отправляем правильные координаты (либо GPS, либо выбранную Точку А)
+        if (latToSend != 0.0 && lngToSend != 0.0) {
+            intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LAT, latToSend)
+            intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LNG, lngToSend)
+        }
+        
         if (hideMyLocation) intent.putExtra(AddressPickerActivity.EXTRA_HIDE_MY_LOCATION, true)
         
+        // Центр карты для старта (не влияет на логику адресов, только на визуал карты)
         val mapTarget = mMap?.cameraPosition?.target
         if (mapTarget != null) {
             intent.putExtra("city_lat", mapTarget.latitude)
@@ -1279,8 +1356,11 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         mMap?.setOnCameraIdleListener {
             updateSmartLabels()
 
-            if (currentRoutePolyline != null) return@setOnCameraIdleListener
+            // ЖЕЛЕЗНАЯ БЛОКИРОВКА:
+            // Если мы в режиме маршрута ИЛИ маршрут уже есть — ничего не делаем с пином и адресом
+            if (isRouteMode || currentRoutePolyline != null) return@setOnCameraIdleListener
 
+            // Логика выбора адреса (работает только когда нет маршрута)
             val center = mMap!!.cameraPosition.target
             getAddressForOrigin(center)
 
@@ -1289,9 +1369,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 .setInterpolator(BounceInterpolator())
                 .setDuration(500)
                 .start()
-             try {
-                 pinShadow.animate().scaleX(1.0f).scaleY(1.0f).alpha(0.5f).setDuration(250).start()
-             } catch (e: Exception) {}
+            try {
+                pinShadow.animate().scaleX(1.0f).scaleY(1.0f).alpha(0.5f).setDuration(250).start()
+            } catch (e: Exception) {}
         }
 
         mMap?.setOnMapLoadedCallback {
@@ -1378,33 +1458,54 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun tryDrawRoute() {
         if (originPlace == null || destinationPlace == null) return
-        clearMapForRoute() // Очищаем старое
+
+        // 1. ВКЛЮЧАЕМ РЕЖИМ МАРШРУТА
+        isRouteMode = true 
+
+        // 2. СРАЗУ ПРЯЧЕМ ЦЕНТРАЛЬНЫЙ ПИН
+        centerPin.visibility = View.GONE
+        centerPin.animate().cancel() 
+        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
 
         val originLatLng = originPlace!!.latLng!!
         val destinationLatLng = destinationPlace!!.latLng!!
 
-        // --- 1. Метки ---
+        // --- 3. Обновляем текстовые метки (оверлеи) ---
         tvOverlayOrigin.text = cleanAddress(originPlace!!.name ?: "А")
         tvOverlayDest.text = cleanAddress(destinationPlace!!.name ?: "Б")
 
         overlayOrigin.visibility = View.VISIBLE
         overlayDest.visibility = View.VISIBLE
-
         overlayOrigin.post { updateSmartLabels() }
 
-        // --- 2. Маркеры ---
-        val iconA = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
-        mMap?.addMarker(MarkerOptions().position(originLatLng).icon(iconA).anchor(0.5f, 0.5f).zIndex(100f))
+        // --- 4. Ставим МАРКЕРЫ (чтобы карта не была пустой) ---
+        mMap?.clear() 
+        
+        val iconA = BitmapHelper.vectorToBitmap(this, R.drawable.ic_marker_base_yellow)
+        originMarker = mMap?.addMarker(MarkerOptions()
+            .position(originLatLng)
+            .icon(iconA)
+            .anchor(0.5f, 0.5f)
+            .zIndex(1000f))
 
-        val iconB = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
-        mMap?.addMarker(MarkerOptions().position(destinationLatLng).icon(iconB).anchor(0.5f, 0.5f).zIndex(100f))
+        val iconB = BitmapHelper.vectorToBitmap(this, R.drawable.ic_marker_base_white)
+        destinationMarker = mMap?.addMarker(MarkerOptions()
+            .position(destinationLatLng)
+            .icon(iconB)
+            .anchor(0.5f, 0.5f)
+            .zIndex(1000f))
 
         val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
         for (wpPair in currentWaypoints) {
             mMap?.addMarker(MarkerOptions().position(wpPair.first).icon(waypointIcon).anchor(0.5f, 0.5f).title(wpPair.second))
         }
+        
+        val builder = LatLngBounds.Builder()
+        builder.include(originLatLng)
+        builder.include(destinationLatLng)
+        try { mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100)) } catch (e: Exception){}
 
-        // --- 3. Запрос маршрута ---
+        // --- 5. Запрос маршрута ---
         val originApiString = "${originLatLng.latitude},${originLatLng.longitude}"
         val destApiString = "${destinationLatLng.latitude},${destinationLatLng.longitude}"
         
@@ -1423,25 +1524,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                         val route = response.body()!!.routes[0]
                         currentRoutePolyline = route.overviewPolyline.points
 
-                        // Малюємо маршрут
-                        decodedRoutePoints = PolyUtil.decode(currentRoutePolyline)
-                        drawStylishRoute(decodedRoutePoints!!)
-
-                        // Центруємо камеру
-                        val boundsBuilder = LatLngBounds.Builder()
-                        boundsBuilder.include(originLatLng)
-                        boundsBuilder.include(destinationLatLng)
-                        currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                        decodedRoutePoints!!.forEach { point -> boundsBuilder.include(point) }
-
-                        val extraRoutePadding = convertDpToPixel(80f).toInt()
-                        try {
-                            mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), extraRoutePadding), 600, null)
-                        } catch (e: Exception) {}
-
-                        btnRecenterRoute.visibility = View.GONE
-
-                        // Рахуємо дистанцію
+                        // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: СНАЧАЛА СЧИТАЕМ, ПОТОМ РИСУЕМ ---
+                        
+                        // 1. Считаем дистанцию
                         var totalDistance = 0L
                         var totalSeconds = 0L
                         for (leg in route.legs) {
@@ -1451,13 +1536,14 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                         routeDistanceMeters = totalDistance.toInt()
                         routeDurationSeconds = totalSeconds.toInt()
 
-                        // !!! ВИДАЛЯЄМО ВЕСЬ СТАРИЙ БЛОК "НОВА ЛОГІКА РОЗРАХУНКУ ЦІНИ" ЗВІДСИ !!!
-                        // Замість нього просто викликаємо метод, який запитає ціну у сервера:
+                        // 2. Теперь рисуем (переменная routeDistanceMeters уже обновлена!)
+                        decodedRoutePoints = PolyUtil.decode(currentRoutePolyline)
+                        drawStylishRoute(decodedRoutePoints!!) 
 
                         fetchTariffsAndShowPanel()
 
                     } else {
-                        showToast("Маршрут не знайдено")
+                        showToast("Маршрут не знайдено (код ${response.code()})")
                     }
                 }
 
@@ -1474,76 +1560,167 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun drawStylishRoute(path: List<LatLng>) {
         if (mMap == null) return
 
+        // Остановка предыдущих анимаций, если они были
         try {
-            mMap?.isMyLocationEnabled = false
-        } catch (e: SecurityException) { }
+            polylineMain?.remove()
+            polylineBorder?.remove()
+            originMarker?.remove()
+            destinationMarker?.remove()
+        } catch (e: Exception) {}
 
-        originMarker?.remove()
-        destinationMarker?.remove()
-        mMap?.clear() 
+        // 1. Очистка
+        centerPin.visibility = View.GONE
+        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
+        try { mMap?.isMyLocationEnabled = false } catch (e: SecurityException) { }
+        mMap?.clear()
 
-        val borderOpts = PolylineOptions().addAll(path).width(20f).color(ContextCompat.getColor(this, R.color.route_border)).startCap(RoundCap()).endCap(RoundCap()).zIndex(1f)
+        // Цвета
+        val colorMain = ContextCompat.getColor(this, R.color.route_main)
+        val colorBorder = ContextCompat.getColor(this, R.color.route_border)
+
+        // --- 2. Создаем элементы ПРОЗРАЧНЫМИ (Alpha = 0) ---
+        val transparentMain = Color.argb(0, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+        val transparentBorder = Color.argb(0, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
+
+        val borderOpts = PolylineOptions().addAll(path).width(20f).color(transparentBorder).startCap(RoundCap()).endCap(RoundCap()).zIndex(1f)
         polylineBorder = mMap?.addPolyline(borderOpts)
 
-        val mainOpts = PolylineOptions().addAll(path).width(14f).color(ContextCompat.getColor(this, R.color.route_main)).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
+        val mainOpts = PolylineOptions().addAll(path).width(14f).color(transparentMain).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
         polylineMain = mMap?.addPolyline(mainOpts)
 
-        if (originPlace != null) {
+        // Маркеры (невидимые)
+        if (originPlace != null && originPlace!!.latLng != null) {
             originMarker = mMap?.addMarker(MarkerOptions()
                 .position(originPlace!!.latLng!!)
                 .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
                 .anchor(0.5f, 0.5f)
-                .zIndex(1000f)) 
+                .alpha(0f) 
+                .zIndex(1000f))
 
             val uiText = tvOrigin.text.toString()
-            val isBadText = uiText.contains("Визначення", true) || uiText.contains("Звідки", true) || uiText.contains("...", true) || uiText.isBlank()
-            val finalOriginText = if (!isBadText) uiText else (originPlace?.address ?: originPlace?.name ?: "Точка А")
+            val finalOriginText = if (uiText.contains("...") || uiText.isBlank()) (originPlace?.name ?: "А") else uiText
             tvOverlayOrigin.text = finalOriginText
+            overlayOrigin.alpha = 0f
             overlayOrigin.visibility = View.VISIBLE
         }
 
-        if (destinationPlace != null) {
+        if (destinationPlace != null && destinationPlace!!.latLng != null) {
             destinationMarker = mMap?.addMarker(MarkerOptions()
                 .position(destinationPlace!!.latLng!!)
                 .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
                 .anchor(0.5f, 0.5f)
-                .zIndex(1000f)) 
+                .alpha(0f)
+                .zIndex(1000f))
 
-            val uiDestText = tvDestination.text.toString()
-            val isBadDest = uiDestText.contains("Куди", true) || uiDestText.contains("Визначення", true) || uiDestText.isBlank()
-            val finalDestText = if (!isBadDest) uiDestText else (destinationPlace?.address ?: destinationPlace?.name ?: "Точка Б")
+            val uiText = tvDestination.text.toString()
+            val finalDestText = if (uiText.contains("...") || uiText.isBlank()) (destinationPlace?.name ?: "Б") else uiText
             tvOverlayDest.text = finalDestText
 
-            var calculatedDistanceMeters = 0.0
-            if (path.size > 1) {
-                for (i in 0 until path.size - 1) {
-                    calculatedDistanceMeters += SphericalUtil.computeDistanceBetween(path[i], path[i + 1])
-                }
-            } else {
-                calculatedDistanceMeters = routeDistanceMeters.toDouble()
-            }
-            val km = calculatedDistanceMeters / 1000.0
-            val detailsText = String.format("%.1f км", km)
-            tvOverlayDestDetails.text = detailsText
+            val calendar = java.util.Calendar.getInstance()
+            calendar.add(java.util.Calendar.SECOND, routeDurationSeconds)
+            val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            val arrivalTime = sdf.format(calendar.time)
+            tvOverlayDestDetails.text = "Приїдемо о $arrivalTime"
 
+            overlayDest.alpha = 0f
             overlayDest.visibility = View.VISIBLE
         }
-        
+
         val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
         for (wpPair in currentWaypoints) {
-            mMap?.addMarker(MarkerOptions()
-                .position(wpPair.first)
-                .icon(waypointIcon)
-                .anchor(0.5f, 0.5f)
-                .zIndex(500f)
-                .title(wpPair.second))
+            mMap?.addMarker(MarkerOptions().position(wpPair.first).icon(waypointIcon).anchor(0.5f, 0.5f).alpha(0f).zIndex(500f))
         }
 
-        animateRoute(path)
+        // --- 3. Движение Камеры и запуск анимации ---
+        val boundsBuilder = LatLngBounds.Builder()
+        if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
+        if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
+        path.forEach { boundsBuilder.include(it) }
+
+        try {
+            val width = resources.displayMetrics.widthPixels
+            val height = resources.displayMetrics.heightPixels
+            val paddingBottom = (height * 0.45).toInt() 
+            val paddingSide = convertDpToPixel(60f).toInt()
+
+            mMap?.setPadding(0, 0, 0, 0) // Сброс системного паддинга
+
+            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), width, height, paddingSide)
+
+            mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
+                override fun onFinish() {
+                    // Корректируем низ под тарифы
+                    val shiftUpdate = CameraUpdateFactory.scrollBy(0f, paddingBottom / 2.5f)
+                    mMap?.animateCamera(shiftUpdate, 300, object : GoogleMap.CancelableCallback {
+                        override fun onFinish() {
+                            // ВАЖНО: Запускаем строго в UI-потоке
+                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                        }
+                        override fun onCancel() {
+                            // Если прервали - все равно показываем!
+                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                        }
+                    })
+                }
+
+                override fun onCancel() {
+                    // Если прервали первую анимацию - сразу показываем маршрут
+                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                }
+            })
+
+        } catch (e: Exception) {
+            // Фолбек при ошибке bounds
+            startRouteRevealAnimation(colorMain, colorBorder, path)
+        }
         
+        btnRecenterRoute.visibility = View.GONE
         contentBottomSheet.post { updateSmartLabels() }
     }
 
+    private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
+        if (polylineMain == null || polylineBorder == null) return
+
+        // 1. Аниматор Линий (было 600 -> стало 1000)
+        val polylineAnimator = ValueAnimator.ofInt(0, 255)
+        polylineAnimator.duration = 1000 
+        polylineAnimator.addUpdateListener { animator ->
+            val alpha = animator.animatedValue as Int
+            try {
+                val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+                val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
+                
+                polylineMain?.color = newMainColor
+                polylineBorder?.color = newBorderColor
+            } catch (e: Exception) {}
+        }
+
+        // 2. Аниматор Маркеров (было 600 -> стало 1000)
+        val markerAnimator = ValueAnimator.ofFloat(0f, 1f)
+        markerAnimator.duration = 1000
+        markerAnimator.addUpdateListener { animator ->
+            val alpha = animator.animatedValue as Float
+            try {
+                originMarker?.alpha = alpha
+                destinationMarker?.alpha = alpha
+            } catch (e: Exception) {}
+        }
+
+        // 3. UI плашки (было 600 -> стало 1000)
+        overlayOrigin.animate().alpha(1f).setDuration(1000).start()
+        overlayDest.animate().alpha(1f).setDuration(1000).start()
+
+        // Старт
+        polylineAnimator.start()
+        markerAnimator.start()
+
+        polylineAnimator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                super.onAnimationEnd(animation)
+                animateRoute(path)
+            }
+        })
+    }
     private fun animateRoute(path: List<LatLng>) {
         if (path.isEmpty()) return
         val animOpts = PolylineOptions().width(14f).color(Color.WHITE).zIndex(3f).startCap(RoundCap()).endCap(RoundCap())
@@ -1732,6 +1909,147 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun handleLocalPromoFallback(percent: Double, limit: Double) {
         tariffAdapter.setDiscount(percent, limit)
         loadTariffs()
+    }
+
+
+    // =========================================================
+    // НОВЫЕ МЕТОДЫ ДЛЯ ТРЕКИНГА ВОДИТЕЛЯ
+    // =========================================================
+
+    private fun fetchCustomCarIcon() {
+        ApiClient.instance.getCarIconUrl().enqueue(object : Callback<Map<String, String>> {
+            override fun onResponse(call: Call<Map<String, String>>, response: Response<Map<String, String>>) {
+                var url = response.body()?.get("url")
+                
+                if (!url.isNullOrEmpty()) {
+                    android.util.Log.d("CarIcon", "Server returned URL: $url")
+
+                    // --- ИСПРАВЛЕНИЕ URL ---
+                    // Если сервер вернул localhost, а мы на телефоне/эмуляторе, 
+                    // заменяем localhost на IP из ApiClient (192.168.0.104)
+                    if (url!!.contains("localhost")) {
+                        // Вытаскиваем чистый IP из твоего ApiClient.BASE_URL
+                        // Например, из "http://192.168.0.104:8080/api/v1/" берем "192.168.0.104"
+                        val myIp = "192.168.0.104" // Можешь вписать жестко, так надежнее всего
+                        url = url!!.replace("localhost", myIp)
+                    }
+                    // -----------------------
+
+                    Glide.with(this@HomeActivity)
+                        .asBitmap()
+                        .load(url)
+                        .into(object : CustomTarget<Bitmap>() {
+                            override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
+                                // Делаем иконку чуть больше (например, 100x100 или 120x120), чтобы её было хорошо видно
+                                val scaled = Bitmap.createScaledBitmap(resource, 130, 130, false)
+                                customCarIcon = BitmapDescriptorFactory.fromBitmap(scaled)
+                                
+                                // Если водитель уже на карте - обновим ему иконку прямо сейчас
+                                if (driverMarker != null) {
+                                    driverMarker?.setIcon(customCarIcon)
+                                }
+                            }
+                            override fun onLoadCleared(placeholder: android.graphics.drawable.Drawable?) {}
+                        })
+                } else {
+                    android.util.Log.d("CarIcon", "URL is empty or null")
+                }
+            }
+            override fun onFailure(call: Call<Map<String, String>>, t: Throwable) {
+                android.util.Log.e("CarIcon", "Failed to fetch icon: ${t.message}")
+            }
+        })
+    }
+
+    private fun startDriverTracking(orderId: Long) {
+        if (isDriverTrackingActive) return
+        isDriverTrackingActive = true
+
+        val token = sessionManager.fetchAuthToken()
+        webSocketManager?.connect(token)
+        
+        webSocketManager?.subscribeToDriverLocation(orderId) { locationDto ->
+            runOnUiThread {
+                updateDriverMarker(locationDto)
+            }
+        }
+    }
+
+    private fun stopDriverTracking() {
+        isDriverTrackingActive = false
+        webSocketManager?.disconnect()
+        driverMarker?.remove()
+        driverMarker = null
+    }
+
+    private fun updateDriverMarker(loc: TrackingLocationDto) {
+        // Исходная "сырая" точка от GPS водителя
+        var targetPos = LatLng(loc.lat, loc.lng)
+        
+        // --- УМНАЯ ПРИВЯЗКА (SMART SNAP) ---
+        if (decodedRoutePoints != null && decodedRoutePoints!!.isNotEmpty()) {
+            val (snappedPoint, distance) = getSnapPointAndDistance(targetPos, decodedRoutePoints!!)
+            
+            // Если водитель ближе 50 метров к маршруту -> Клеим к дороге (убираем шум GPS)
+            // Если дальше 50 метров -> Верим GPS (водитель поехал в объезд)
+            if (distance < 50.0) {
+                targetPos = snappedPoint
+            }
+        }
+        // -----------------------------------
+
+        if (driverMarker == null) {
+            // Создаем маркер первый раз
+            val icon = customCarIcon ?: BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_sun)
+            val initialBearing = loc.bearing ?: 0f
+            
+            driverMarker = mMap?.addMarker(MarkerOptions()
+                .position(targetPos)
+                .icon(icon)
+                .anchor(0.5f, 0.5f)
+                .rotation(initialBearing)
+                .flat(true)) 
+        } else {
+            // --- РАСЧЕТ ПОВОРОТА (ПО ДВИЖЕНИЮ) ---
+            val oldPos = driverMarker!!.position
+            
+            // Считаем, сколько проехала машина
+            val distanceMoved = com.google.maps.android.SphericalUtil.computeDistanceBetween(oldPos, targetPos)
+            
+            var newBearing = driverMarker!!.rotation
+            
+            // Меняем угол, только если машина реально сдвинулась (> 2 метров), 
+            // чтобы она не крутилась на светофоре
+            if (distanceMoved > 2.0) {
+                newBearing = com.google.maps.android.SphericalUtil.computeHeading(oldPos, targetPos).toFloat()
+            }
+
+            // Плавная анимация
+            animateMarker(driverMarker!!, targetPos, newBearing)
+        }
+    }
+
+    private fun animateMarker(marker: Marker, toPosition: LatLng, toRotation: Float) {
+        val startPos = marker.position
+        val startRotation = marker.rotation
+        
+        val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
+        valueAnimator.duration = 2000 // Анимация длится 2 секунды (интервал обновлений)
+        valueAnimator.interpolator = LinearInterpolator()
+        
+        valueAnimator.addUpdateListener { animation ->
+            val v = animation.animatedFraction
+            val lng = v * toPosition.longitude + (1 - v) * startPos.longitude
+            val lat = v * toPosition.latitude + (1 - v) * startPos.latitude
+            marker.position = LatLng(lat, lng)
+            
+            // Плавный поворот (хитрая математика, чтобы не крутился на 360 градусов лишний раз)
+            var rot = toRotation - startRotation
+            while (rot < -180) rot += 360
+            while (rot > 180) rot -= 360
+            marker.rotation = startRotation + rot * v
+        }
+        valueAnimator.start()
     }
     
     private fun loadTariffs() {
@@ -1951,7 +2269,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     // Ми беремо addedValue прямо з обраного елемента (де зберігаються чайові)
     // А НЕ з tariffCustomPrices (де лежить повна ціна)
     val myAddedValue = selectedTariffItem?.addedValue ?: 0.0
-    
+    Log.d("ORDER_DEBUGORDER_DEBUG", "Point A: ${originPlace?.name}")
+    Log.d("ORDER_DEBUG", "Coords A: ${originPlace?.latLng}")    
     val request = CreateOrderRequestDto(
         fromAddress = originPlace!!.name ?: "А",
         toAddress = destinationPlace!!.name ?: "Б",
@@ -1999,78 +2318,121 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 }
 
     private fun showChangePriceDialog() {
-    // Перевірка, чи обраний тариф
-    if (selectedTariffItem == null) {
-        showToast("Спочатку оберіть тариф")
-        return
-    }
-
-    val item = selectedTariffItem!!
-    
-    val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
-    val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
-    dialog.setContentView(view)
-    dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-    val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
-    
-    // !!! ВИПРАВЛЕННЯ: Шукаємо як View або FrameLayout, а не ImageView !!!
-    val btnMinus = view.findViewById<View>(R.id.btn_price_minus) 
-    val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
-    
-    val btnSave = view.findViewById<Button>(R.id.btn_save_price)
-    val btnClose = view.findViewById<View>(R.id.btn_close_dialog) // Тут теж краще View, хоча там ImageView
-
-    // 1. Рахуємо чисту базу (Ціна тарифу + Послуги)
-    val currentTotal = item.priceValue
-    val currentTip = item.addedValue
-    val basePrice = currentTotal - currentTip
-
-    // Локальна змінна для редагування
-    var newTotalPrice = currentTotal
-
-    fun updateText() {
-        tvPrice.text = "${newTotalPrice.toInt()} ₴"
-    }
-    updateText()
-
-    // Логіка кнопок
-    btnPlus.setOnClickListener {
-        newTotalPrice += 10.0
-        updateText()
-    }
-
-    btnMinus.setOnClickListener {
-        if (newTotalPrice - 10.0 >= basePrice) {
-            newTotalPrice -= 10.0
-            updateText()
-        } else {
-            newTotalPrice = basePrice
-            updateText()
+        val selectedItem = tariffAdapter.getSelectedTariff()
+        if (selectedItem == null) {
+            showToast("Спочатку оберіть тариф")
+            return
         }
-    }
 
-    btnSave.setOnClickListener {
-        // 2. Рахуємо чисту надбавку
-        val newAddedValue = newTotalPrice - basePrice
-        
-        // 3. Оновлюємо адаптер (візуально)
-        tariffAdapter.setCustomPrice(item.tariff.id, newAddedValue)
-        
-        // 4. Оновлюємо обраний елемент (щоб createOrder бачив нову надбавку)
-        selectedTariffItem = item.copy(
-            priceValue = newTotalPrice,
-            priceString = String.format("%.0f", newTotalPrice),
-            addedValue = newAddedValue
-        )
-        
-        btnOrderTaxi.text = "Замовити ${newTotalPrice.toInt()} ₴"
-        dialog.dismiss()
-    }
+        // 1. Считаем БАЗОВУЮ цену
+        val currentTotalInAdapter = selectedItem.priceValue
+        val oldAddedValue = selectedItem.addedValue
+        val basePriceWithServices = currentTotalInAdapter - oldAddedValue
 
-    btnClose.setOnClickListener { dialog.dismiss() }
-    dialog.show()
-}
+        // 2. Лимиты
+        val minPrice = basePriceWithServices.toInt()
+        val maxPrice = (basePriceWithServices * 3).toInt()
+        
+        var currentPrice = (basePriceWithServices + oldAddedValue).toInt()
+
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+        val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
+        dialog.setContentView(view)
+        
+        // --- ИСПРАВЛЕНИЕ: НАСТРОЙКА БАРОВ (STATUS BAR & NAV BAR) ---
+        dialog.window?.let { window ->
+            // Разрешаем рисовать фоны баров
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            
+            // Навигационный бар (с кнопками назад/домой) делаем черным (или цвет фона диалога)
+            window.navigationBarColor = ContextCompat.getColor(this, android.R.color.black)
+            
+            // Статус бар (верхний) делаем прозрачным, чтобы было видно затемнение карты
+            // Но можно поставить и полупрозрачный черный
+            window.statusBarColor = Color.TRANSPARENT 
+
+            // Логика иконок (Время, Батарея)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val decorView = window.decorView
+                var flags = decorView.systemUiVisibility
+                
+                // Мы хотим СВЕТЛЫЕ иконки (для темной темы), поэтому УБИРАЕМ флаг Light Status Bar
+                // Если бы мы хотели черные иконки, мы бы добавили этот флаг.
+                flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                
+                decorView.systemUiVisibility = flags
+            }
+        }
+        // -----------------------------------------------------------
+
+        // UI Элементы
+        val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
+        val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
+        val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
+        val seekBar = view.findViewById<android.widget.SeekBar>(R.id.seekbar_price)
+        val btnSave = view.findViewById<Button>(R.id.btn_save_price)
+        val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
+
+        // 3. Настройка SeekBar
+        val range = maxPrice - minPrice
+        seekBar.max = range
+        
+        fun updateUI() {
+            tvPrice.text = "$currentPrice ₴"
+            val progress = currentPrice - minPrice
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                seekBar.setProgress(progress, true)
+            } else {
+                seekBar.progress = progress
+            }
+        }
+
+        updateUI()
+
+        // 4. Логика Ползунка
+        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(p0: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    currentPrice = minPrice + progress
+                    tvPrice.text = "$currentPrice ₴"
+                }
+            }
+            override fun onStartTrackingTouch(p0: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(p0: android.widget.SeekBar?) {}
+        })
+
+        // 5. Логика Кнопок
+        btnPlus.setOnClickListener {
+            if (currentPrice + 10 <= maxPrice) {
+                currentPrice += 10
+                updateUI()
+            } else {
+                currentPrice = maxPrice
+                updateUI()
+            }
+        }
+
+        btnMinus.setOnClickListener {
+            if (currentPrice - 10 >= minPrice) {
+                currentPrice -= 10
+                updateUI()
+            } else {
+                currentPrice = minPrice
+                updateUI()
+            }
+        }
+
+        // 6. Сохранение
+        btnSave.setOnClickListener {
+            val newAddedValue = (currentPrice - minPrice).toDouble()
+            servicesExtraCost = newAddedValue 
+            tariffAdapter.setCustomPrice(selectedItem.tariff.id, newAddedValue)
+            dialog.dismiss()
+        }
+
+        btnClose.setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
     
     private fun cancelCurrentOrder() {
         val orderId = activeOrderId ?: return
@@ -2182,7 +2544,182 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {}
         })
     }
+
+    private fun getSnapPointAndDistance(rawLocation: LatLng, route: List<LatLng>): Pair<LatLng, Double> {
+        if (route.size < 2) return Pair(rawLocation, 0.0)
+
+        var closestPoint = rawLocation
+        var minDistance = Double.MAX_VALUE
+
+        // Проходим по всем отрезкам маршрута и ищем самый близкий
+        for (i in 0 until route.size - 1) {
+            val start = route[i]
+            val end = route[i + 1]
+
+            // Находим проекцию точки на отрезок
+            val pointOnSegment = findNearestPointOnSegment(rawLocation, start, end)
+            
+            // Считаем расстояние от реального GPS до проекции
+            val distance = com.google.maps.android.SphericalUtil.computeDistanceBetween(rawLocation, pointOnSegment)
+
+            if (distance < minDistance) {
+                minDistance = distance
+                closestPoint = pointOnSegment
+            }
+        }
+
+        return Pair(closestPoint, minDistance)
+    }
+
+    private fun findNearestPointOnSegment(p: LatLng, start: LatLng, end: LatLng): LatLng {
+        if (start == end) return start
+
+        val sLat = Math.toRadians(start.latitude)
+        val sLng = Math.toRadians(start.longitude)
+        val eLat = Math.toRadians(end.latitude)
+        val eLng = Math.toRadians(end.longitude)
+        val pLat = Math.toRadians(p.latitude)
+        val pLng = Math.toRadians(p.longitude)
+
+        val sinSLat = Math.sin(sLat)
+        val cosSLat = Math.cos(sLat)
+        val sinELat = Math.sin(eLat)
+        val cosELat = Math.cos(eLat)
+        val sinPLat = Math.sin(pLat)
+        val cosPLat = Math.cos(pLat)
+
+        val x1 = cosSLat * Math.cos(sLng)
+        val y1 = cosSLat * Math.sin(sLng)
+        val z1 = sinSLat
+
+        val x2 = cosELat * Math.cos(eLng)
+        val y2 = cosELat * Math.sin(eLng)
+        val z2 = sinELat
+
+        val x = cosPLat * Math.cos(pLng)
+        val y = cosPLat * Math.sin(pLng)
+        val z = sinPLat
+
+        val t = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1) + (z - z1) * (z2 - z1)) /
+                ((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1) + (z2 - z1) * (z2 - z1))
+
+        return if (t <= 0) {
+            start
+        } else if (t >= 1) {
+            end
+        } else {
+            val xRes = x1 + t * (x2 - x1)
+            val yRes = y1 + t * (y2 - y1)
+            val zRes = z1 + t * (z2 - z1)
+
+            val latRes = Math.atan2(zRes, Math.sqrt(xRes * xRes + yRes * yRes))
+            val lngRes = Math.atan2(yRes, xRes)
+            LatLng(Math.toDegrees(latRes), Math.toDegrees(lngRes))
+        }
+    }
     
+    // --- ДЛЯ ДИАЛОГА ОЦЕНКИ ---
+    private fun showRatingDialog(orderId: Long, driverName: String?) {
+        // Если диалог уже виден - выходим, чтобы не плодить копии
+        if (isRatingDialogVisible) return
+
+        isRatingDialogVisible = true // Ставим флаг
+
+        val dialog = Dialog(this)
+        dialog.setContentView(R.layout.dialog_rate_driver)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.setCancelable(false)
+
+        val ratingBar = dialog.findViewById<android.widget.RatingBar>(R.id.rating_bar)
+        val etComment = dialog.findViewById<android.widget.EditText>(R.id.et_comment)
+        val btnSubmit = dialog.findViewById<Button>(R.id.btn_submit_rating)
+        val tvTitle = dialog.findViewById<TextView>(R.id.tv_rating_title)
+
+        tvTitle.text = "Оцініть поїздку з $driverName"
+
+        btnSubmit.setOnClickListener {
+            val score = ratingBar.rating.toInt()
+            if (score == 0) {
+                showToast("Будь ласка, поставте оцінку")
+                return@setOnClickListener
+            }
+
+            // Блокируем кнопку, чтобы не нажать дважды
+            btnSubmit.isEnabled = false
+            btnSubmit.text = "Відправка..."
+
+            val comment = etComment.text.toString()
+            sendRating(orderId, score, comment, dialog)
+        }
+
+        // Если диалог закрыли программно или через кнопку назад (хотя тут false)
+        dialog.setOnDismissListener {
+            isRatingDialogVisible = false
+        }
+
+        dialog.show()
+    }
+
+    private fun sendRating(orderId: Long, score: Int, comment: String, dialog: Dialog) {
+        val token = sessionManager.fetchAuthToken()
+        if (token == null) {
+            showToast("Помилка авторизації")
+            isRatingDialogVisible = false
+            dialog.dismiss()
+            return
+        }
+        
+        val request = RateDriverRequest(orderId, score, comment)
+
+        ApiClient.instance.rateDriver("Bearer $token", request).enqueue(object : Callback<MessageResponse> {
+            override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
+                // Функция для успешного завершения
+                fun finishRatingProcess() {
+                    showToast("Дякуємо за відгук!")
+                    try { dialog.dismiss() } catch (e: Exception) {}
+                    isRatingDialogVisible = false
+                    sessionManager.clearActiveOrderId()
+                    activeOrderId = null
+                    showAddressPanel()
+                }
+
+                if (response.isSuccessful) {
+                    finishRatingProcess()
+                } else {
+                    // Обработка ошибок
+                    val code = response.code()
+                    val errorBody = try { response.errorBody()?.string() ?: "" } catch (e: Exception) { "" }
+
+                    // Если код 500 и текст ошибки содержит "вже оцінили" (или закодированную версию)
+                    // Мы считаем это УСПЕХОМ, так как оценка уже есть в базе.
+                    if (code == 500 || code == 400) {
+                        // Проверка на ключевые слова (на случай проблем с кодировкой проверяем и RuntimeException)
+                        if (errorBody.contains("вже оцінили") || errorBody.contains("RuntimeException")) {
+                            finishRatingProcess()
+                            return
+                        }
+                    }
+                    
+                    showToast("Помилка: $code")
+                    // Разблокируем кнопку, если ошибка реальная (не "уже оценили")
+                    try {
+                        val btn = dialog.findViewById<Button>(R.id.btn_submit_rating)
+                        btn.isEnabled = true
+                        btn.text = "Відправити"
+                    } catch (e: Exception) {}
+                }
+            }
+
+            override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
+                showToast("Помилка мережі")
+                try {
+                    val btn = dialog.findViewById<Button>(R.id.btn_submit_rating)
+                    btn.isEnabled = true
+                    btn.text = "Відправити"
+                } catch (e: Exception) {}
+            }
+        })
+    }
     private fun updateStatusUI(order: TaxiOrderDto) {
         orderStatusText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         
@@ -2196,80 +2733,119 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             "REQUESTED", "OFFERING" -> {
                 orderStatusText.text = "Пошук водія..."
                 startStatusBlinking()
-
                 layoutSearchDetails.visibility = View.VISIBLE
                 layoutDriverDetails.visibility = View.GONE
+                stopDriverTracking()
             }
             
             "ACCEPTED" -> {
                 stopStatusBlinking()
                 orderStatusText.text = "Водій їде до вас"
-
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.VISIBLE
-                
                 updateDriverInfo(order)
+
+                order.driver?.let { drv ->
+                    val lat = drv.latitude
+                    val lng = drv.longitude
+                    
+                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                        val initialLoc = TrackingLocationDto(
+                            lat = lat,
+                            lng = lng,
+                            bearing = drv.bearing ?: 0f 
+                        )
+                        updateDriverMarker(initialLoc)
+                    }
+                }
+                startDriverTracking(order.id)
             }
 
             "DRIVER_ARRIVED" -> {
                 stopStatusBlinking()
                 orderStatusText.text = "Водій на місці" 
-
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.VISIBLE
-                
                 btnCancelOrder.visibility = View.GONE 
-
                 updateDriverInfo(order)
+                
+                order.driver?.let { drv ->
+                    val lat = drv.latitude
+                    val lng = drv.longitude
+                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                        val initialLoc = TrackingLocationDto(
+                            lat = lat, 
+                            lng = lng, 
+                            bearing = drv.bearing ?: 0f
+                        )
+                        updateDriverMarker(initialLoc)
+                    }
+                }
+
+                startDriverTracking(order.id)
             }
 
             "IN_PROGRESS" -> {
                 stopStatusBlinking()
                 orderStatusText.text = "В дорозі"
-
                 layoutActiveOrderPrice.visibility = View.GONE 
-
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.VISIBLE
-                
                 btnCancelOrder.visibility = View.GONE 
-
                 updateDriverInfo(order)
+
+                order.driver?.let { drv ->
+                    val lat = drv.latitude
+                    val lng = drv.longitude
+                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                        val initialLoc = TrackingLocationDto(
+                            lat = lat, 
+                            lng = lng, 
+                            bearing = drv.bearing ?: 0f
+                        )
+                        updateDriverMarker(initialLoc)
+                    }
+                }
+
+                startDriverTracking(order.id)
             }
             
             "COMPLETED" -> {
                 stopStatusBlinking()
                 orderStatusText.text = "Поїздку завершено"
-                
                 layoutActiveOrderPrice.visibility = View.GONE
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.GONE
-                
                 btnCancelOrder.visibility = View.GONE
+                stopDriverTracking()
                 
-                sessionManager.clearActiveOrderId()
+                // ВАЖНО: Останавливаем таймер обновлений, чтобы он не дергал этот метод снова
                 statusHandler.removeCallbacks(statusRunnable)
-                Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 4000)
+
+                if (!order.isRatedByClient) {
+                    showRatingDialog(order.id, order.driver?.fullName ?: "водієм")
+                } else {
+                    sessionManager.clearActiveOrderId()
+                    activeOrderId = null
+                    showAddressPanel()
+                }
             }
             
             "CANCELLED" -> {
                 stopStatusBlinking()
                 orderStatusText.text = "Скасовано"
                 orderStatusText.setTextColor(Color.RED)
-                
                 layoutActiveOrderPrice.visibility = View.GONE
                 layoutSearchDetails.visibility = View.GONE
                 layoutDriverDetails.visibility = View.GONE
-                
                 btnCancelOrder.visibility = View.GONE
-                
+                stopDriverTracking()
                 sessionManager.clearActiveOrderId()
                 statusHandler.removeCallbacks(statusRunnable)
                 Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
             }
         }
     }
-
     private fun updateDriverInfo(order: TaxiOrderDto) {
         order.driver?.let { drv ->
             tvCarPlateLarge.text = drv.carPlateNumber ?: "---"
@@ -2313,6 +2889,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
+    
+
     private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f) {
         bottomPanel.post {
             if (mMap != null) {
@@ -2348,6 +2926,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun showAddressPanel() {
+
+        isRouteMode = false
+        currentRoutePolyline = null // Сбрасываем полилайн
         creationPanelCard.visibility = View.VISIBLE
         activeOrderCard.visibility = View.GONE
         addressPanel.visibility = View.VISIBLE

@@ -13,8 +13,9 @@ interface DirectionsApiService {
         @Query("origin") origin: String,
         @Query("destination") destination: String,
 
-        // !!! ВИПРАВЛЕННЯ: encoded = true !!!
-        @Query("waypoints", encoded = true) waypoints: String?,
+        // ИСПРАВЛЕНИЕ: Убрали encoded = true.
+        // Retrofit сам закодирует символы '|' в '%7C', что предотвратит ошибки 400 Bad Request.
+        @Query("waypoints") waypoints: String?,
 
         @Query("key") apiKey: String
     ): Call<DirectionsResponse>

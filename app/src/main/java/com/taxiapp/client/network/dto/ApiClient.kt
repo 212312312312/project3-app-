@@ -3,13 +3,11 @@ package com.taxiapp.client.network
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-object  ApiClient {
+object ApiClient {
 
-    // !!! ВАЖЛИВО !!!
-    // ЗАМІНІТЬ ЦЕ НА ВАШУ IP-АДРЕСУ З `ipconfig`
-    private const val BASE_URL = "http://192.168.0.104:8080/api/v1/"
+    // Сделали public, чтобы WebSocketManager мог его видеть
+    const val BASE_URL = "http://192.168.0.104:8080/api/v1/"
 
-    // Створюємо "одинака" (singleton) для Retrofit
     val instance: ApiService by lazy {
         val retrofit = Retrofit.Builder()
             .baseUrl(BASE_URL)

@@ -5,8 +5,16 @@ import com.taxiapp.client.data.model.TaxiService
 import retrofit2.Call
 import retrofit2.http.*
 
+// === ВАЖНО: Эти классы должны быть здесь ===
 data class ErrorResponse(val message: String)
 data class MessageResponse(val message: String)
+
+data class RateDriverRequest(
+    val orderId: Long,
+    val score: Int,
+    val comment: String?
+)
+// ==========================================
 
 interface ApiService {
 
@@ -27,7 +35,6 @@ interface ApiService {
     @GET("public/tariffs")
     fun getActiveTariffs(): Call<List<CarTariffDto>>
 
-    // Тут теж краще прибрати повний шлях, якщо він дублюється, але поки хай буде, якщо працює
     @GET("public/tariffs")
     fun getTariffs(@Header("Authorization") token: String): Call<List<CarTariffDto>>
 
@@ -63,13 +70,18 @@ interface ApiService {
         @Path("id") orderId: Long
     ): Call<TaxiOrderDto>
 
-    // !!! ВИПРАВЛЕННЯ ТУТ: ПРИБРАЛИ СЛЕШ "/" НА ПОЧАТКУ !!!
-    // Було: @POST("/public/calculate-price") -> Стало: @POST("public/calculate-price")
     @POST("public/calculate-price")
     fun calculatePrice(@Body request: CalculatePriceRequestDto): Call<List<CarTariffDto>>
 
     @DELETE("client/account")
     fun deleteAccount(@Header("Authorization") token: String): Call<MessageResponse>
+
+    // --- ОЦЕНКА (ИСПРАВЛЕНО) ---
+    @POST("client/rate")
+    fun rateDriver(
+        @Header("Authorization") token: String,
+        @Body request: RateDriverRequest
+    ): Call<MessageResponse>
 
     // --- ІСТОРІЯ ---
     @GET("client/orders")
@@ -87,4 +99,7 @@ interface ApiService {
 
     @GET("public/sectors")
     fun getSectors(): Call<List<SectorDto>>
+
+    @GET("public/settings/car-icon")
+    fun getCarIconUrl(): Call<Map<String, String>>
 }

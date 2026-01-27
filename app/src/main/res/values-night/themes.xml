@@ -18,7 +18,11 @@
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">#FFFFFF</item> </style>
-
+    <style name="RatingBarNoRipple" parent="Widget.AppCompat.RatingBar">
+        <item name="colorControlNormal">#CCCCCC</item>
+        <item name="colorControlActivated">#FFD700</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:colorControlHighlight">@android:color/transparent</item> </style>
 
     <style name="BottomSheetDialogTheme" parent="Theme.Design.Light.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>

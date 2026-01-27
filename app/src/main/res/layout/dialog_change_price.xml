@@ -4,9 +4,11 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_dialog"
-    android:padding="24dp">
-
+    android:background="@drawable/bg_bottom_sheet_top_rounded"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="24dp"
+    android:paddingBottom="16dp"> 
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
