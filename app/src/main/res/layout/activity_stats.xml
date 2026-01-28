@@ -5,7 +5,8 @@
     android:layout_height="match_parent"
     android:background="@color/unified_block_bg"
     android:orientation="vertical"
-    android:fitsSystemWindows="true"> <LinearLayout
+    android:fitsSystemWindows="true">
+    <LinearLayout
         android:id="@+id/header_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -14,8 +15,8 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:paddingBottom="16dp"
-        android:paddingTop="16dp" 
-        android:background="@color/unified_block_bg"> 
+        android:paddingTop="16dp"
+        android:background="@color/unified_block_bg">
         <ImageView
             android:id="@+id/btn_back"
             android:layout_width="32dp"
@@ -24,7 +25,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            app:tint="@color/text_primary"/>
+            app:tint="@color/text_primary" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -33,7 +34,7 @@
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
-            android:layout_marginStart="16dp"/>
+            android:layout_marginStart="16dp" />
     </LinearLayout>
 
     <ScrollView
@@ -41,7 +42,7 @@
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:paddingBottom="24dp">
-        
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -55,8 +56,8 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="16sp"
                 android:fontFamily="sans-serif-medium"
-                android:layout_marginTop="8dp" 
-                android:layout_marginBottom="16dp"/>
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="16dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -82,7 +83,7 @@
                             android:layout_height="40dp"
                             android:src="@drawable/ic_stat_distance"
                             app:tint="@color/text_primary"
-                            android:padding="8dp"/>
+                            android:padding="8dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -94,7 +95,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="Проїхано"
                                 android:textSize="13sp"
-                                android:textColor="@color/text_secondary"/>
+                                android:textColor="@color/text_secondary" />
                             <TextView
                                 android:id="@+id/tv_stat_km"
                                 android:layout_width="wrap_content"
@@ -103,7 +104,7 @@
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_primary"
-                                android:layout_marginTop="2dp"/>
+                                android:layout_marginTop="2dp" />
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -127,7 +128,7 @@
                             android:layout_height="40dp"
                             android:src="@drawable/ic_stat_time"
                             app:tint="@color/text_primary"
-                            android:padding="8dp"/>
+                            android:padding="8dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -139,7 +140,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="В дорозі"
                                 android:textSize="13sp"
-                                android:textColor="@color/text_secondary"/>
+                                android:textColor="@color/text_secondary" />
                             <TextView
                                 android:id="@+id/tv_stat_hours"
                                 android:layout_width="wrap_content"
@@ -148,7 +149,7 @@
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_primary"
-                                android:layout_marginTop="2dp"/>
+                                android:layout_marginTop="2dp" />
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -172,7 +173,7 @@
                             android:layout_height="40dp"
                             android:src="@drawable/ic_stat_check"
                             app:tint="@color/text_primary"
-                            android:padding="8dp"/>
+                            android:padding="8dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -184,7 +185,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="Всього поїздок"
                                 android:textSize="13sp"
-                                android:textColor="@color/text_secondary"/>
+                                android:textColor="@color/text_secondary" />
                             <TextView
                                 android:id="@+id/tv_stat_orders"
                                 android:layout_width="wrap_content"
@@ -193,7 +194,7 @@
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_primary"
-                                android:layout_marginTop="2dp"/>
+                                android:layout_marginTop="2dp" />
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -217,7 +218,7 @@
                             android:layout_height="40dp"
                             android:src="@drawable/ic_stat_star"
                             app:tint="@color/text_primary"
-                            android:padding="8dp"/>
+                            android:padding="8dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -229,7 +230,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="Улюблений тариф"
                                 android:textSize="13sp"
-                                android:textColor="@color/text_secondary"/>
+                                android:textColor="@color/text_secondary" />
                             <TextView
                                 android:id="@+id/tv_stat_tariff"
                                 android:layout_width="wrap_content"
@@ -238,7 +239,7 @@
                                 android:textSize="18sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_primary"
-                                android:layout_marginTop="2dp"/>
+                                android:layout_marginTop="2dp" />
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -262,7 +263,7 @@
                             android:layout_height="40dp"
                             android:src="@drawable/ic_calendar_today"
                             app:tint="@color/text_primary"
-                            android:padding="8dp"/>
+                            android:padding="8dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -274,7 +275,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="Найактивніший день"
                                 android:textSize="13sp"
-                                android:textColor="@color/text_secondary"/>
+                                android:textColor="@color/text_secondary" />
                             <TextView
                                 android:id="@+id/tv_stat_day"
                                 android:layout_width="wrap_content"
@@ -283,7 +284,7 @@
                                 android:textSize="18sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_primary"
-                                android:layout_marginTop="2dp"/>
+                                android:layout_marginTop="2dp" />
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
