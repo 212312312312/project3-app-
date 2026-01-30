@@ -11,6 +11,9 @@ import com.taxiapp.client.network.dto.TrackingLocationDto
 import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import android.widget.DatePicker
+import android.widget.TimePicker
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.Dialog
@@ -104,6 +107,7 @@ import com.taxiapp.client.utils.SessionManager
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.util.Calendar
 import java.util.Locale
 import kotlin.math.ceil // Додано
 
@@ -255,6 +259,12 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private var availableTariffs: List<CarTariffDto> = emptyList()
     private var currentCity: CityData? = null
 
+    private lateinit var btnSchedule: ImageButton 
+
+    // Переменная для хранения выбранного времени
+    private var scheduledDate: Calendar? = null
+
+
     private var isRouteMode = false
 
     private val MODE_ORIGIN = 1
@@ -398,6 +408,14 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             tariffAdapter.updateExtraCost(servicesExtraCost)
 
             btnOrderTaxi.isEnabled = false
+            try {
+                btnSchedule = findViewById(R.id.btn_schedule)
+                btnSchedule.setOnClickListener {
+                    showCustomScheduleDialog() // Вызываем новый диалог
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeActivity", "btn_schedule not found in layout!")
+            }
             btnOrderTaxi.text = "Оберіть тариф"
             selectedTariffItem = null
             
@@ -690,11 +708,20 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         tariffsPanel = findViewById(R.id.tariffs_panel)
         tariffsProgressBar = findViewById(R.id.tariffs_progress_bar)
         btnOrderTaxi = findViewById(R.id.btn_order_taxi)
+        btnOrderTaxi.setOnClickListener {
+            if (selectedTariffItem != null) {
+                // Если есть custom price (из ползунка), берем его, иначе из тарифа
+                val finalPrice = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
+                createOrder(selectedTariffItem!!.tariff, finalPrice)
+            } else {
+                showToast("Оберіть тариф")
+            }
+        }
 
-        try {
-            tvPrice = findViewById(R.id.tv_active_order_price) 
-        } catch (e: Exception) {
-            e.printStackTrace()
+        btnSchedule = findViewById(R.id.btn_schedule)
+        btnSchedule.setOnClickListener {
+            android.util.Log.d("HomeActivity", "Schedule button clicked!") // Лог для проверки
+            showCustomScheduleDialog()
         }
 
         btnOpenComment = findViewById(R.id.btn_open_comment)
@@ -1890,6 +1917,110 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 }
 
+    private fun showCustomScheduleDialog() {
+        val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+        val view = layoutInflater.inflate(R.layout.dialog_schedule_ride, null)
+        dialog.setContentView(view)
+
+        // UI Элементы
+        val tabDate = view.findViewById<TextView>(R.id.tab_date)
+        val tabTime = view.findViewById<TextView>(R.id.tab_time)
+        val datePicker = view.findViewById<DatePicker>(R.id.date_picker_widget)
+        val timePicker = view.findViewById<TimePicker>(R.id.time_picker_widget)
+        val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_schedule)
+
+        // Настраиваем DatePicker (Минимум сегодня, Максимум +7 дней)
+        val today = Calendar.getInstance()
+        datePicker.minDate = today.timeInMillis
+        val maxDate = Calendar.getInstance()
+        maxDate.add(Calendar.DAY_OF_MONTH, 7)
+        datePicker.maxDate = maxDate.timeInMillis
+
+        // Устанавливаем TimePicker в 24-часовой формат
+        timePicker.setIs24HourView(true)
+
+        // Логика переключения вкладок
+        fun updateTabs(isDateSelected: Boolean) {
+            if (isDateSelected) {
+                tabDate.setBackgroundResource(R.drawable.bg_button_primary)
+                tabDate.setTextColor(Color.WHITE)
+                tabTime.background = null
+                tabTime.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                
+                datePicker.visibility = View.VISIBLE
+                timePicker.visibility = View.GONE
+            } else {
+                tabTime.setBackgroundResource(R.drawable.bg_button_primary)
+                tabTime.setTextColor(Color.WHITE)
+                tabDate.background = null
+                tabDate.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                
+                datePicker.visibility = View.GONE
+                timePicker.visibility = View.VISIBLE
+            }
+        }
+
+        tabDate.setOnClickListener { updateTabs(true) }
+        tabTime.setOnClickListener { updateTabs(false) }
+
+        btnConfirm.setOnClickListener {
+            val selectedCalendar = Calendar.getInstance()
+            selectedCalendar.set(Calendar.YEAR, datePicker.year)
+            selectedCalendar.set(Calendar.MONTH, datePicker.month)
+            selectedCalendar.set(Calendar.DAY_OF_MONTH, datePicker.dayOfMonth)
+            
+            // Получаем время (поддержка старых и новых API)
+            val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
+            val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
+            
+            selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
+            selectedCalendar.set(Calendar.MINUTE, minute)
+            selectedCalendar.set(Calendar.SECOND, 0)
+
+            // Валидация
+            val now = Calendar.getInstance()
+            if (selectedCalendar.before(now)) {
+                showToast("Не можна обрати час у минулому")
+                // Переключаем на время, чтобы пользователь исправил
+                updateTabs(false) 
+            } else {
+                // Успех
+                scheduledDate = selectedCalendar
+                updateOrderButtonWithTime()
+                dialog.dismiss()
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun updateOrderButtonWithTime() {
+        if (scheduledDate != null) {
+            val sdf = java.text.SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
+            val dateStr = sdf.format(scheduledDate!!.time)
+            
+            // Если тариф выбран, показываем цену
+            if (selectedTariffItem != null) {
+                val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
+                btnOrderTaxi.text = "Запланувати на $dateStr (${price.toInt()} ₴)"
+            } else {
+                btnOrderTaxi.text = "Запланувати на $dateStr"
+            }
+            btnSchedule.setColorFilter(ContextCompat.getColor(this, R.color.taxi_yellow)) // Подсвечиваем иконку
+        } else {
+            // Сброс
+            if (selectedTariffItem != null) {
+                val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
+                btnOrderTaxi.text = "Замовити ${price.toInt()} ₴"
+            } else {
+                btnOrderTaxi.text = "Оберіть тариф"
+            }
+            // Сброс цвета иконки (для темной/светлой темы)
+            val isDark = sessionManager.isDarkMode()
+            val color = if (isDark) Color.WHITE else Color.BLACK
+            try { btnSchedule.setColorFilter(color) } catch (e: Exception){}
+        }
+    }
 
     private fun loadSectors() {
         // !!! ВИПРАВЛЕННЯ: Правильний виклик ApiClient !!!
@@ -2173,73 +2304,80 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun displayTariffs() {
-    if (availableTariffs.isEmpty()) {
-        showToast("Немає тарифів")
-        return
-    }
-
-    // 1. Оновлюємо мапу БАЗОВИХ цін (tariffCustomPrices)
-    // Ця мапа має зберігати ТІЛЬКИ ціну маршруту (без чайових)
-    
-    val INCLUDED_KM = 3.0
-    val totalKm = routeDistanceMeters / 1000.0
-    // Рахуємо "білінг" км (все що більше 3 км)
-    val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
-
-    availableTariffs.forEach { tariff ->
-        // ПРІОРИТЕТ 1: Якщо сервер прислав точну ціну (calculatedPrice)
-        if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
-            tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
-        } 
-        // ПРІОРИТЕТ 2: Рахуємо самі (Фолбек)
-        else {
-            val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
-            tariffCustomPrices[tariff.id] = ceil(localPrice)
+        if (availableTariffs.isEmpty()) {
+            showToast("Немає тарифів")
+            return
         }
-    }
 
-    // 2. Оновлюємо список в адаптері
-    // tariffAdapter сам додасть чайові (які він зберігає у себе) до цієї базової ціни
-    tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
-    tariffAdapter.updatePrices(tariffCustomPrices)
+        // 1. Оновлюємо мапу БАЗОВИХ цін (tariffCustomPrices)
+        val INCLUDED_KM = 3.0
+        val totalKm = routeDistanceMeters / 1000.0
+        // Рахуємо "білінг" км (все що більше 3 км)
+        val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
 
-    tariffsPanel.post {
-        updateMapPadding(tariffsPanel, 0f, 10f)
-    }
+        availableTariffs.forEach { tariff ->
+            // ПРІОРИТЕТ 1: Якщо сервер прислав точну ціну
+            if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
+                tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
+            } 
+            // ПРІОРИТЕТ 2: Рахуємо самі (Фолбек)
+            else {
+                val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
+                tariffCustomPrices[tariff.id] = ceil(localPrice)
+            }
+        }
 
-    // Логіка вибору тарифу за замовчуванням
-    if (selectedTariffItem == null) {
-        val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) } 
-            ?: availableTariffs.firstOrNull()
+        // 2. Оновлюємо список в адаптері
+        tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
+        tariffAdapter.updatePrices(tariffCustomPrices)
 
-        if (defaultTariff != null) {
-            val finalPrice = tariffCustomPrices[defaultTariff.id] ?: defaultTariff.basePrice
+        tariffsPanel.post {
+            updateMapPadding(tariffsPanel, 0f, 10f)
+        }
+
+        // Логіка вибору тарифу за замовчуванням
+        if (selectedTariffItem == null) {
+            val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) } 
+                ?: availableTariffs.firstOrNull()
+
+            if (defaultTariff != null) {
+                val finalPrice = tariffCustomPrices[defaultTariff.id] ?: defaultTariff.basePrice
+                
+                val item = TariffItem(
+                    tariff = defaultTariff, 
+                    priceString = String.format("%.0f", finalPrice), 
+                    priceValue = finalPrice, 
+                    addedValue = 0.0
+                ) 
+                
+                selectedTariffItem = item
+                tariffAdapter.setSelectedTariffId(defaultTariff.id)
+                
+                btnOrderTaxi.isEnabled = true
+                
+                // ВАЖЛИВО: Викликаємо метод оновлення кнопки, щоб врахувати час (календар)
+                updateOrderButtonWithTime()
+            }
+        } else {
+            // Якщо тариф вже був обраний (наприклад, при оновленні маршруту)
+            // Оновлюємо ціну всередині selectedTariffItem, бо вона могла змінитись через нову відстань
+            val item = selectedTariffItem!!
+            val newBasePrice = tariffCustomPrices[item.tariff.id]
             
-            // Створюємо початковий ітем без чайових
-            val item = TariffItem(
-                tariff = defaultTariff, 
-                priceString = String.format("%.0f", finalPrice), 
-                priceValue = finalPrice, 
-                addedValue = 0.0
-            ) 
-            
-            selectedTariffItem = item
-            tariffAdapter.setSelectedTariffId(defaultTariff.id)
+            if (newBasePrice != null) {
+                // Оновлюємо об'єкт, щоб кнопка показувала актуальну ціну
+                selectedTariffItem = item.copy(
+                    priceValue = newBasePrice,
+                    priceString = String.format("%.0f", newBasePrice)
+                )
+            }
             
             btnOrderTaxi.isEnabled = true
-            btnOrderTaxi.text = "Замовити"
+            
+            // ВАЖЛИВО: Викликаємо метод оновлення кнопки
+            updateOrderButtonWithTime()
         }
-    } else {
-        // Оновлюємо кнопку, якщо ціна змінилась (наприклад, змінився маршрут)
-        val item = selectedTariffItem!!
-        val basePrice = tariffCustomPrices[item.tariff.id] ?: item.priceValue
-        // Додаємо старі чайові до нової бази
-        val finalWithTips = basePrice + item.addedValue
-        
-        btnOrderTaxi.isEnabled = true
-        btnOrderTaxi.text = "Замовити ${finalWithTips.toInt()} ₴"
     }
-}
 
     private fun setLocationButtonAnchor(anchorId: Int) {
         val btnLocation = findViewById<View>(R.id.btn_recenter_location)
@@ -2252,70 +2390,76 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         btnLocation.layoutParams = params
     }
     
-    private fun createOrder(tariff: CarTariffDto, price: Double) { 
-    val token = sessionManager.fetchAuthToken() ?: return
-    btnOrderTaxi.isEnabled = false
-    btnOrderTaxi.text = "Замовлення..."
-    
-    val waypointsDto = currentWaypoints.map { pair ->
-        WaypointDto(
-            address = pair.second,
-            lat = pair.first.latitude,
-            lng = pair.first.longitude
-        )
-    }
-    
-    // !!! ВИПРАВЛЕННЯ ТУТ !!!
-    // Ми беремо addedValue прямо з обраного елемента (де зберігаються чайові)
-    // А НЕ з tariffCustomPrices (де лежить повна ціна)
-    val myAddedValue = selectedTariffItem?.addedValue ?: 0.0
-    Log.d("ORDER_DEBUGORDER_DEBUG", "Point A: ${originPlace?.name}")
-    Log.d("ORDER_DEBUG", "Coords A: ${originPlace?.latLng}")    
-    val request = CreateOrderRequestDto(
-        fromAddress = originPlace!!.name ?: "А",
-        toAddress = destinationPlace!!.name ?: "Б",
-        tariffId = tariff.id,
-        price = price, 
-        originLat = originPlace!!.latLng?.latitude,
-        originLng = originPlace!!.latLng?.longitude,
-        destLat = destinationPlace!!.latLng?.latitude,
-        destLng = destinationPlace!!.latLng?.longitude,
-        googleRoutePolyline = currentRoutePolyline,
-        waypoints = if (waypointsDto.isNotEmpty()) waypointsDto else null,
-        distanceMeters = routeDistanceMeters,
-        durationSeconds = routeDurationSeconds,
-        
-        comment = if (orderComment.isBlank()) null else orderComment,
+    private fun createOrder(tariff: CarTariffDto, price: Double) {
+        val token = sessionManager.fetchAuthToken() ?: return
+        btnOrderTaxi.isEnabled = false
+        btnOrderTaxi.text = "Обробка..."
 
-        paymentMethod = currentPaymentMethod,
-        serviceIds = selectedServiceIds,
-        
-        // Відправляємо серверу ТІЛЬКИ суму надбавки (напр. 10.0), а не 200.0
-        addedValue = myAddedValue
-    )
-    
-    ApiClient.instance.createOrder("Bearer $token", request).enqueue(object : Callback<TaxiOrderDto> {
-        override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
-            if (response.isSuccessful) {
-                val order = response.body()!!
-                activeOrderId = order.id
-                sessionManager.saveActiveOrderId(order.id)
-
-                showActiveOrderPanel(order)
-
-                startStatusPolling()
-            } else {
-                showToast("Помилка: ${response.message()}")
-                btnOrderTaxi.isEnabled = true
-                btnOrderTaxi.text = "Спробувати ще раз"
-            }
+        val waypointsDto = currentWaypoints.map { pair ->
+            WaypointDto(
+                address = pair.second,
+                lat = pair.first.latitude,
+                lng = pair.first.longitude
+            )
         }
-         override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
-             showToast("Помилка мережі")
-             btnOrderTaxi.isEnabled = true
-         }
-     })
-}
+
+        val myAddedValue = selectedTariffItem?.addedValue ?: 0.0
+
+        var scheduledAtString: String? = null
+        if (scheduledDate != null) {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:00", Locale.getDefault())
+            scheduledAtString = sdf.format(scheduledDate!!.time)
+        }
+
+        val request = CreateOrderRequestDto(
+            fromAddress = originPlace!!.name ?: "А",
+            toAddress = destinationPlace!!.name ?: "Б",
+            tariffId = tariff.id,
+            price = price,
+            originLat = originPlace!!.latLng?.latitude,
+            originLng = originPlace!!.latLng?.longitude,
+            destLat = destinationPlace!!.latLng?.latitude,
+            destLng = destinationPlace!!.latLng?.longitude,
+            googleRoutePolyline = currentRoutePolyline,
+            waypoints = if (waypointsDto.isNotEmpty()) waypointsDto else null,
+            distanceMeters = routeDistanceMeters,
+            durationSeconds = routeDurationSeconds,
+            comment = if (orderComment.isBlank()) null else orderComment,
+            paymentMethod = currentPaymentMethod,
+            serviceIds = selectedServiceIds,
+            addedValue = myAddedValue,
+            scheduledAt = scheduledAtString
+        )
+
+        ApiClient.instance.createOrder("Bearer $token", request).enqueue(object : Callback<TaxiOrderDto> {
+            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+                if (response.isSuccessful) {
+                    val order = response.body()!!
+
+                    if (order.status == "SCHEDULED") {
+                        showToast("Замовлення заплановано на ${order.scheduledAt?.replace("T", " ")}")
+                        showAddressPanel()
+                        startActivity(Intent(this@HomeActivity, HistoryActivity::class.java))
+                    } else {
+                        activeOrderId = order.id
+                        sessionManager.saveActiveOrderId(order.id)
+                        showActiveOrderPanel(order)
+                        startStatusPolling()
+                    }
+                } else {
+                    showToast("Помилка: ${response.message()}")
+                    btnOrderTaxi.isEnabled = true
+                    updateOrderButtonWithTime()
+                }
+            }
+
+            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
+                showToast("Помилка мережі")
+                btnOrderTaxi.isEnabled = true
+                updateOrderButtonWithTime()
+            }
+        })
+    }
 
     private fun showChangePriceDialog() {
         val selectedItem = tariffAdapter.getSelectedTariff()
@@ -2926,38 +3070,44 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun showAddressPanel() {
-
         isRouteMode = false
-        currentRoutePolyline = null // Сбрасываем полилайн
+        currentRoutePolyline = null
         creationPanelCard.visibility = View.VISIBLE
         activeOrderCard.visibility = View.GONE
         addressPanel.visibility = View.VISIBLE
         tariffsPanel.visibility = View.GONE
         btnRecenter.visibility = View.VISIBLE
-        
+
         setLocationButtonAnchor(R.id.bottom_sheet_card)
         btnMenu.visibility = View.VISIBLE
-        
+
         mMap?.setPadding(0, 0, 0, 0)
-        
+
         try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
 
         ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
-        
-        clearMapForRoute() 
-        
+
+        clearMapForRoute()
+
         sessionManager.clearActiveOrderId()
         tariffAdapter.submitList(emptyList(), 0)
 
         tariffCustomPrices.clear()
         tariffAdapter.clearCustomPrices()
-        
+
         selectedServiceIds.clear()
         servicesExtraCost = 0.0
         tariffAdapter.updateExtraCost(0.0)
 
         orderComment = ""
         updateCommentIconState()
+        
+        scheduledDate = null
+        try {
+            val isDark = sessionManager.isDarkMode()
+            val color = if (isDark) Color.WHITE else Color.BLACK
+            btnSchedule.setColorFilter(color)
+        } catch (e: Exception){}
 
         tvOrigin.text = "Звідки?"
         tvDestination.text = "Куди?"
@@ -2966,19 +3116,19 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         centerPin.visibility = View.VISIBLE
         centerPin.translationY = convertDpToPixel(-48f)
-        try { 
-            pinShadow.visibility = View.VISIBLE 
+        try {
+            pinShadow.visibility = View.VISIBLE
             pinShadow.alpha = 0.3f
             pinShadow.scaleX = 0.6f
             pinShadow.scaleY = 0.6f
-        } catch(e: Exception){}
+        } catch (e: Exception) {}
 
         centerPin.animate()
             .translationY(convertDpToPixel(-32f))
             .setInterpolator(BounceInterpolator())
             .setDuration(500)
             .start()
-            
+
         try {
             pinShadow.animate()
                 .scaleX(1.0f)

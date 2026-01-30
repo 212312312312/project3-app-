@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.tabs.TabLayout
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.TaxiOrderDto
 import com.taxiapp.client.ui.HistoryAdapter
@@ -26,6 +27,9 @@ class HistoryActivity : AppCompatActivity() {
     private lateinit var btnBack: ImageView
     private lateinit var adapter: HistoryAdapter
     private lateinit var sessionManager: SessionManager
+    private lateinit var tabLayout: TabLayout
+
+    private var fullOrderList: List<TaxiOrderDto> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,10 +48,35 @@ class HistoryActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progress_bar)
         btnBack = findViewById(R.id.btn_back)
 
+        try {
+            tabLayout = findViewById(R.id.history_tabs)
+
+            if (tabLayout.tabCount == 0) {
+                tabLayout.addTab(tabLayout.newTab().setText("Активні"))
+                tabLayout.addTab(tabLayout.newTab().setText("Архів"))
+            }
+
+            tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(tab: TabLayout.Tab?) {
+                    filterList(tab?.position ?: 0)
+                }
+                override fun onTabUnselected(tab: TabLayout.Tab?) {}
+                override fun onTabReselected(tab: TabLayout.Tab?) {}
+            })
+        } catch (e: Exception) {
+            // Игнорируем ошибки UI если табов нет
+        }
+
         btnBack.setOnClickListener { finish() }
 
         recyclerView.layoutManager = LinearLayoutManager(this)
-        adapter = HistoryAdapter(emptyList())
+
+        // --- ВАЖНО: Передаем функцию отмены заказа в адаптер ---
+        adapter = HistoryAdapter(emptyList()) { orderId ->
+            if (orderId > 0) {
+                cancelOrder(orderId)
+            }
+        }
         recyclerView.adapter = adapter
     }
 
@@ -64,18 +93,10 @@ class HistoryActivity : AppCompatActivity() {
             override fun onResponse(call: Call<List<TaxiOrderDto>>, response: Response<List<TaxiOrderDto>>) {
                 progressBar.visibility = View.GONE
                 if (response.isSuccessful && response.body() != null) {
-                    val allOrders = response.body()!!
+                    fullOrderList = response.body()!!
 
-                    // ФИЛЬТР: ТОЛЬКО УСПЕШНЫЕ (COMPLETED)
-                    val successfulOrders = allOrders.filter { it.status == "COMPLETED" }
-
-                    if (successfulOrders.isNotEmpty()) {
-                        adapter.submitList(successfulOrders)
-                        emptyView.visibility = View.GONE
-                        recyclerView.visibility = View.VISIBLE
-                    } else {
-                        showEmpty()
-                    }
+                    val currentTab = try { tabLayout.selectedTabPosition } catch (e: Exception) { 0 }
+                    filterList(if (currentTab < 0) 0 else currentTab)
                 } else {
                     showEmpty()
                 }
@@ -89,8 +110,61 @@ class HistoryActivity : AppCompatActivity() {
         })
     }
 
+    private fun filterList(tabIndex: Int) {
+        val filtered = if (tabIndex == 0) {
+            // АКТИВНІ
+            fullOrderList.filter {
+                it.status == "SCHEDULED" ||
+                        it.status == "REQUESTED" ||
+                        it.status == "OFFERING" ||
+                        it.status == "ACCEPTED" ||
+                        it.status == "DRIVER_ARRIVED" ||
+                        it.status == "IN_PROGRESS"
+            }
+        } else {
+            // АРХІВ
+            fullOrderList.filter {
+                it.status == "COMPLETED" ||
+                        it.status == "CANCELLED"
+            }
+        }
+
+        if (filtered.isNotEmpty()) {
+            adapter.submitList(filtered)
+            emptyView.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
+        } else {
+            showEmpty()
+        }
+    }
+
     private fun showEmpty() {
         recyclerView.visibility = View.GONE
         emptyView.visibility = View.VISIBLE
+    }
+
+    // --- НОВЫЙ МЕТОД: Отмена заказа ---
+    private fun cancelOrder(orderId: Long) {
+        val token = sessionManager.fetchAuthToken() ?: return
+
+        // Показываем простой Toast, что процесс пошел
+        Toast.makeText(this, "Скасування...", Toast.LENGTH_SHORT).show()
+
+        ApiClient.instance.cancelOrder("Bearer $token", orderId).enqueue(object : Callback<TaxiOrderDto> {
+            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+                if (response.isSuccessful) {
+                    Toast.makeText(this@HistoryActivity, "Замовлення скасовано", Toast.LENGTH_SHORT).show()
+                    // Перезагружаем список, чтобы заказ улетел в архив
+                    loadHistory()
+                } else {
+                    val msg = try { response.errorBody()?.string() } catch (e: Exception) { response.message() }
+                    Toast.makeText(this@HistoryActivity, "Помилка: $msg", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
+                Toast.makeText(this@HistoryActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
+            }
+        })
     }
 }

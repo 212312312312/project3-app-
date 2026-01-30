@@ -14,7 +14,9 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:paddingBottom="16dp"
-        android:paddingTop="50dp"> <ImageView
+        android:paddingTop="50dp">
+
+        <ImageView
             android:id="@+id/btn_back"
             android:layout_width="32dp"
             android:layout_height="32dp"
@@ -22,7 +24,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            app:tint="@color/text_primary"/>
+            app:tint="@color/text_primary" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -31,32 +33,44 @@
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
-            android:layout_marginStart="16dp"/>
+            android:layout_marginStart="16dp" />
     </LinearLayout>
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/history_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/header_layout"
+        android:background="@color/card_background"
+        app:tabIndicatorColor="@color/text_primary"
+        app:tabSelectedTextColor="@color/text_primary"
+        app:tabTextColor="@color/text_secondary"
+        app:tabMode="fixed"
+        app:tabGravity="fill" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/history_recycler_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/header_layout"
+        android:layout_below="@id/history_tabs"
         android:clipToPadding="false"
-        android:paddingBottom="20dp"/>
+        android:paddingBottom="20dp" />
 
     <TextView
         android:id="@+id/tv_empty_history"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Тут будуть твої поїздки."
+        android:text="Список порожній."
         android:textSize="18sp"
         android:textColor="@color/text_secondary"
         android:layout_centerInParent="true"
-        android:visibility="gone"/>
+        android:visibility="gone" />
 
     <ProgressBar
         android:id="@+id/progress_bar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
-        android:visibility="gone"/>
+        android:visibility="gone" />
 
 </RelativeLayout>

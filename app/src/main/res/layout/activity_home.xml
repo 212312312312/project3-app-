@@ -588,20 +588,44 @@
                     android:background="@drawable/shadow_gradient_up"
                     android:layout_marginBottom="0dp" />
 
-                <Button
-                    android:id="@+id/btn_order_taxi"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="72dp"
-                    android:text="Замовити"
-                    android:textAllCaps="false"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#232426"
-                    android:backgroundTint="@color/taxi_yellow"
-                    app:cornerRadius="12dp"
+                    android:layout_height="60dp"
+                    android:orientation="horizontal"
                     android:layout_marginHorizontal="8dp"
                     android:layout_marginBottom="16dp"
-                    android:enabled="false" />
+                    android:background="@drawable/bg_button_yellow"
+                    android:gravity="center_vertical">
+
+                    <Button
+                        android:id="@+id/btn_order_taxi"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:text="Замовити"
+                        android:textAllCaps="false"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="#232426"
+                        android:background="?attr/selectableItemBackground"
+                        android:enabled="false" />
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginVertical="10dp"
+                        android:background="#33000000" />
+
+                    <ImageButton
+                        android:id="@+id/btn_schedule"
+                        android:layout_width="60dp"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/ic_calendar_today"
+                        android:background="?attr/selectableItemBackground"
+                        android:padding="18dp"
+                        app:tint="#232426" />
+
+                </LinearLayout>
 
             </LinearLayout>
         </androidx.cardview.widget.CardView>

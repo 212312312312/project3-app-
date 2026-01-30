@@ -34,6 +34,8 @@ data class TaxiOrderDto(
     @SerializedName("services")
     val services: List<OrderServiceDto> = emptyList(),
 
+    val isRatedByClient: Boolean = false,
+
     // --- НОВОЕ ПОЛЕ ---
-    val isRatedByClient: Boolean = false
+    val scheduledAt: String? = null
 )
