@@ -16,7 +16,6 @@ data class OrderDriverDto(
     val monthsInService: Int,
 
     // --- ВАЖЛИВО: Поля локації для відображення авто ---
-    // Сервер відправляє їх у об'єкті водія, тепер ми їх приймаємо.
     @SerializedName("latitude")
     val latitude: Double?,
 
@@ -24,5 +23,11 @@ data class OrderDriverDto(
     val longitude: Double?,
 
     @SerializedName("bearing")
-    val bearing: Float? = 0f
+    val bearing: Float? = 0f,
+
+    // --- НОВЫЕ ПОЛЯ (Медицинская информация) ---
+    val hasMovementIssue: Boolean = false,
+    val hasHearingIssue: Boolean = false,
+    val isDeaf: Boolean = false,
+    val hasSpeechIssue: Boolean = false
 )

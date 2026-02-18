@@ -236,6 +236,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var tvDriverRidesCount: TextView
     private lateinit var ivDriverPhoto: ImageView
     private lateinit var btnCallDriver: ImageButton
+    private lateinit var tvDriverHealthInfo: TextView
 
     private lateinit var tvActiveOrderPrice: TextView
     private lateinit var ivActiveOrderPayment: ImageView
@@ -777,6 +778,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         tvDriverRidesCount = findViewById(R.id.tv_driver_rides_count)
         ivDriverPhoto = findViewById(R.id.iv_driver_photo)
         btnCallDriver = findViewById(R.id.btn_call_driver)
+        tvDriverHealthInfo = findViewById(R.id.tv_driver_health_info)
 
         tvActiveOrderPrice = findViewById(R.id.tv_active_order_price)
         ivActiveOrderPayment = findViewById(R.id.iv_active_order_payment)
@@ -3018,9 +3020,28 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
             activeOrderCard.tag = drv.phoneNumber
 
+            // --- БЛОК МЕДИЧНИХ ПОПЕРЕДЖЕНЬ (НОВЕ) ---
+            val healthIssues = mutableListOf<String>()
+            if (drv.hasMovementIssue) healthIssues.add("порушення опорно-рухового апарату")
+            if (drv.hasHearingIssue) healthIssues.add("порушення слуху")
+            if (drv.isDeaf) healthIssues.add("водій не чує (глухий)")
+            if (drv.hasSpeechIssue) healthIssues.add("порушення мовлення")
+
+            if (healthIssues.isNotEmpty()) {
+                tvDriverHealthInfo.visibility = View.VISIBLE
+                // Формуємо текст: "Увага! У водія: порушення слуху, порушення мовлення"
+                tvDriverHealthInfo.text = "ℹ️ Увага! Особливості водія: ${healthIssues.joinToString(", ")}"
+            } else {
+                tvDriverHealthInfo.visibility = View.GONE
+            }
+            // ------------------------------------------
+
             if (!drv.photoUrl.isNullOrEmpty()) {
                 var finalUrl = drv.photoUrl!!
+                // Если эмулятор
                 if (finalUrl.contains("localhost")) finalUrl = finalUrl.replace("localhost", "10.0.2.2")
+                // Если реальное устройство - поменяй на свой IP (например 192.168.0.104)
+                if (finalUrl.contains("localhost")) finalUrl = finalUrl.replace("localhost", "192.168.0.104")
 
                 Glide.with(this@HomeActivity)
                     .load(finalUrl)
@@ -3032,7 +3053,6 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
     }
-
     
 
     private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f) {

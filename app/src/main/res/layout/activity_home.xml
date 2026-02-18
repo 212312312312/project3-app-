@@ -852,6 +852,19 @@
                             android:layout_alignParentEnd="true"
                             android:layout_centerVertical="true" />
                     </RelativeLayout>
+                    <TextView
+                        android:id="@+id/tv_driver_health_info"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="4dp"
+                        android:background="#26D32F2F"
+                        android:textColor="#D32F2F"
+                        android:padding="8dp"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:visibility="gone"
+                        android:text="У водія є медичні особливості" />
                 </LinearLayout>
 
                 <Button
