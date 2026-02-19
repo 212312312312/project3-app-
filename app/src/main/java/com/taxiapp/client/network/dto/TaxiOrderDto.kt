@@ -27,7 +27,6 @@ data class TaxiOrderDto(
     val googleRoutePolyline: String?,
     val formattedWaypoints: String?,
     val paymentMethod: String? = "CASH",
-
     val serviceIds: List<Long>? = null,
     val comment: String? = null,
 
@@ -35,6 +34,12 @@ data class TaxiOrderDto(
     val services: List<OrderServiceDto> = emptyList(),
 
     val isRatedByClient: Boolean = false,
+    val arrivedAt: String? = null,
+    val startedAt: String? = null,
+    val waitingPrice: Double = 0.0,
+    val freeWaitingMinutes: Int = 3,
+    val pricePerWaitingMinute: Double = 0.0,
+
 
     // --- НОВОЕ ПОЛЕ ---
     val scheduledAt: String? = null

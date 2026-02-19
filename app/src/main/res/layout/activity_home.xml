@@ -742,7 +742,27 @@
                         android:layout_marginBottom="4dp"
                         android:visibility="gone" />
                 </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/layout_waiting_info"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    android:background="@drawable/bg_discount_filled"
+                    android:backgroundTint="#EBFBEE"
+                    android:padding="8dp"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical">
 
+                    <TextView
+                        android:id="@+id/tv_waiting_timer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⏱ Очікування: 00:00"
+                        android:textColor="#2B8A3E"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
                 <LinearLayout
                     android:id="@+id/layout_driver_assigned_details"
                     android:layout_width="match_parent"
