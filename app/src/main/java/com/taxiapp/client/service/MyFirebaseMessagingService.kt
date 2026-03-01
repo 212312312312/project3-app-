@@ -8,6 +8,10 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.taxiapp.client.ChatEventBus
 import com.google.firebase.messaging.RemoteMessage
 import com.taxiapp.client.MainActivity
 import com.taxiapp.client.R
@@ -18,6 +22,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     // Цей метод викликається, коли приходить повідомлення, а додаток відкритий
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
+
+        // Перевіряємо, чи це системне повідомлення чату
+        val type = remoteMessage.data["type"]
+        if (type == "CHAT_MESSAGE") {
+            // Перевіряємо, чи відкритий екран чату
+            if (com.taxiapp.client.ChatEventBus.isChatScreenOpen) {
+                // Екран відкрито - тихо оновлюємо чат (без пуш-банера)
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    com.taxiapp.client.ChatEventBus.triggerUpdate()
+                }
+                return // Блокуємо показ візуального пуша
+            }
+            // Якщо екран закрито - код піде нижче і покаже стандартне сповіщення!
+        }
 
         // Якщо у повідомлення є заголовок і текст -> показуємо його
         remoteMessage.notification?.let {

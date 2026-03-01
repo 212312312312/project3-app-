@@ -6,7 +6,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 object ApiClient {
 
     // Сделали public, чтобы WebSocketManager мог его видеть
-    const val BASE_URL = "http://192.168.0.106:8080/api/v1/"
+    const val BASE_URL = "http://192.168.0.104:8080/api/v1/"
 
     val instance: ApiService by lazy {
         val retrofit = Retrofit.Builder()

@@ -128,23 +128,21 @@ class HomeMapManager(private val context: Context) {
         boundsBuilder.include(destLatLng)
         path.forEach { boundsBuilder.include(it) }
 
+        // НОВЫЙ КОД: Убираем принудительный scrollBy и сброс паддингов.
+        // Карта сама подстроится под паддинги, которые задала Activity.
         try {
             val metrics = context.resources.displayMetrics
-            val paddingBottom = (metrics.heightPixels * 0.45).toInt()
             val paddingSide = (metrics.densityDpi / 160f * 60f).toInt() // 60dp
 
-            googleMap?.setPadding(0, 0, 0, 0)
-            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), metrics.widthPixels, metrics.heightPixels, paddingSide)
+            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
 
             googleMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
                 override fun onFinish() {
-                    val shiftUpdate = CameraUpdateFactory.scrollBy(0f, paddingBottom / 2.5f)
-                    googleMap?.animateCamera(shiftUpdate, 300, object : GoogleMap.CancelableCallback {
-                        override fun onFinish() { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                        override fun onCancel() { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                    })
+                    startRouteRevealAnimation(colorMain, colorBorder, path)
                 }
-                override fun onCancel() { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                override fun onCancel() {
+                    startRouteRevealAnimation(colorMain, colorBorder, path)
+                }
             })
         } catch (e: Exception) {
             startRouteRevealAnimation(colorMain, colorBorder, path)

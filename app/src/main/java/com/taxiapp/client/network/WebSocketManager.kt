@@ -7,6 +7,8 @@ import ua.naiksoftware.stomp.dto.LifecycleEvent
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
+import android.annotation.SuppressLint
+import com.taxiapp.client.network.dto.ChatMessageDto
 import com.google.gson.Gson
 import com.taxiapp.client.network.dto.TrackingLocationDto
 
@@ -73,6 +75,30 @@ class WebSocketManager(private val baseUrl: String) {
                 }
             }, { throwable ->
                 Log.e("WebSocket", "Subscription Error", throwable)
+            })
+
+        compositeDisposable.add(disp)
+    }
+
+    @SuppressLint("CheckResult")
+    fun subscribeToChat(orderId: Long, onMessageReceived: (ChatMessageDto) -> Unit) {
+        val topic = "/topic/chat/$orderId"
+        Log.d("WebSocketManager", "Subscribing to chat: $topic")
+
+        val client = stompClient ?: return // Защита от Null
+
+        val disp = client.topic(topic)
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe({ topicMessage ->
+                try {
+                    val message = gson.fromJson(topicMessage.payload, ChatMessageDto::class.java)
+                    onMessageReceived(message)
+                } catch (e: Exception) {
+                    Log.e("WebSocketManager", "Error parsing chat message: ${e.message}")
+                }
+            }, { error ->
+                Log.e("WebSocketManager", "Chat subscription error", error)
             })
 
         compositeDisposable.add(disp)

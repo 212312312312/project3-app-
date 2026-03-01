@@ -200,6 +200,11 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     
     private lateinit var layoutDriverDetails: LinearLayout
     private lateinit var tvCarPlateLarge: TextView
+
+    private lateinit var btnChatDriver: ImageButton
+    private lateinit var tvChatBadge: TextView
+    private var unreadChatMessages = 0
+
     private lateinit var tvCarDetailsSubtitle: TextView
     private lateinit var tvDriverFirstName: TextView
     private lateinit var tvDriverExperience: TextView
@@ -467,6 +472,23 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         // --- ПОДПИСКА НА VIEWMODEL ---
         setupViewModelObservers()
         
+        // ДОБАВЛЕНО: Обработка системной кнопки/жеста "Назад"
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (activeOrderCard.visibility == View.VISIBLE) {
+                    // Если есть активный заказ, не даем просто закрыть апп, сворачиваем его
+                    moveTaskToBack(true)
+                } else if (tariffsPanel.visibility == View.VISIBLE) {
+                    // Если мы в тарифах — возвращаемся к полноэкранной карте с адресами
+                    showAddressPanel()
+                } else if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    drawerLayout.closeDrawer(GravityCompat.START)
+                } else {
+                    finish()
+                }
+            }
+        })
+        
         // Первичная загрузка тарифов (базовая)
         viewModel.loadTariffsAndCalculatePrice(null, 0)
     }
@@ -477,15 +499,32 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun setupViewModelObservers() {
         // 1. Маршрут
         viewModel.decodedRoute.observe(this) { points ->
-            if (points != null) {
+            if (points != null && points.isNotEmpty()) {
+                // ДОБАВЛЕНО: Защита от кэша LiveData. Проверяем, наш ли это маршрут
+                val origin = originPlace?.latLng
+                val dest = destinationPlace?.latLng
+                
+                if (origin != null && dest != null) {
+                    val startDist = SphericalUtil.computeDistanceBetween(points.first(), origin)
+                    val endDist = SphericalUtil.computeDistanceBetween(points.last(), dest)
+                    
+                    // Если маршрут начинается/заканчивается дальше чем в 2 км от наших точек — это старый кэш, игнорируем!
+                    if (startDist > 2000.0 || endDist > 2000.0) {
+                        return@observe 
+                    }
+                }
+
                 decodedRoutePoints = points
                 drawStylishRoute(points)
             }
         }
+        
         viewModel.routeInfo.observe(this) { (dist, dur) ->
             routeDistanceMeters = dist
             routeDurationSeconds = dur
         }
+        
+       
         
         // 2. Тарифы
         viewModel.availableTariffs.observe(this) { tariffs ->
@@ -499,6 +538,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             if (order != null) {
                 activeOrderId = order.id
                 if (order.status == "COMPLETED" || order.status == "CANCELLED") {
+                    unreadChatMessages = 0
+                    updateChatBadgeUI()
                     // Статус обработается внутри updateStatusUI (остановка трекинга и т.д.)
                 } else {
                     showActiveOrderPanel(order)
@@ -658,6 +699,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         centerPin = findViewById(R.id.center_pin)
         val shadowView = findViewById<ImageView>(R.id.pin_shadow)
         pinShadow = shadowView ?: centerPin 
+        centerPin.alpha = 0f
+        try { pinShadow.alpha = 0f } catch (e: Exception) {}
 
         mapLoadingCurtain = findViewById(R.id.map_loading_curtain)
         contentBottomSheet = findViewById(R.id.content_bottom_sheet)
@@ -904,6 +947,21 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             val intent = Intent(this, ServicesActivity::class.java)
             intent.putExtra("SELECTED_IDS", selectedServiceIds)
             servicesLauncher.launch(intent)
+        }
+
+        btnChatDriver = findViewById(R.id.btn_chat_driver)
+        tvChatBadge = findViewById(R.id.tv_chat_badge)
+
+        btnChatDriver.setOnClickListener {
+            activeOrderId?.let { orderId ->
+                unreadChatMessages = 0
+                updateChatBadgeUI()
+                
+                // Открываем экран чата
+                val intent = Intent(this@HomeActivity, ChatActivity::class.java)
+                intent.putExtra("ORDER_ID", orderId)
+                startActivity(intent)
+            }
         }
     }
 
@@ -1339,14 +1397,18 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         mMap?.setOnCameraMoveStartedListener { reason ->
             if (viewModel.currentRoutePolyline == null) {
                 tvOrigin.text = "Визначення..."
-                centerPin.animate()
-                    .translationY(convertDpToPixel(-48f))
-                    .setInterpolator(AccelerateDecelerateInterpolator())
-                    .setDuration(250)
-                    .start()
-                try {
-                    pinShadow.animate().scaleX(0.6f).scaleY(0.6f).alpha(0.3f).setDuration(250).start()
-                } catch (e: Exception) {}
+                
+                // ДОБАВЛЕНО: Анимируем подпрыгивание только если интерфейс уже загружен
+                if (isInterfaceRevealed) {
+                    centerPin.animate()
+                        .translationY(convertDpToPixel(-48f))
+                        .setInterpolator(AccelerateDecelerateInterpolator())
+                        .setDuration(250)
+                        .start()
+                    try {
+                        pinShadow.animate().scaleX(0.6f).scaleY(0.6f).alpha(0.3f).setDuration(250).start()
+                    } catch (e: Exception) {}
+                }
             } else {
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     btnRecenterRoute.visibility = View.VISIBLE
@@ -1365,14 +1427,17 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             val center = mMap!!.cameraPosition.target
             getAddressForOrigin(center)
 
-            centerPin.animate()
-                .translationY(convertDpToPixel(-32f))
-                .setInterpolator(BounceInterpolator())
-                .setDuration(500)
-                .start()
-            try {
-                pinShadow.animate().scaleX(1.0f).scaleY(1.0f).alpha(0.5f).setDuration(250).start()
-            } catch (e: Exception) {}
+            // ДОБАВЛЕНО: Анимируем падение только если интерфейс уже загружен
+            if (isInterfaceRevealed) {
+                centerPin.animate()
+                    .translationY(convertDpToPixel(-32f))
+                    .setInterpolator(BounceInterpolator())
+                    .setDuration(500)
+                    .start()
+                try {
+                    pinShadow.animate().scaleX(1.0f).scaleY(1.0f).alpha(0.5f).setDuration(250).start()
+                } catch (e: Exception) {}
+            }
         }
 
         mMap?.setOnMapLoadedCallback {
@@ -1418,6 +1483,24 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                     .start()
             } catch (e: Exception) {}
         }
+
+        // ДОБАВЛЕНО: Плавно проявляем центральный пин
+        centerPin.animate()
+            .alpha(1f)
+            .setDuration(500)
+            .setStartDelay(200)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+
+        // ДОБАВЛЕНО: Плавно проявляем тень пина (тень должна быть полупрозрачной)
+        try {
+            pinShadow.animate()
+                .alpha(0.5f) 
+                .setDuration(500)
+                .setStartDelay(200)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        } catch (e: Exception) {}
     }
 
     private fun convertDpToPixel(dp: Float): Float {
@@ -1471,34 +1554,19 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         tvOverlayOrigin.text = cleanAddress(originPlace!!.name ?: "А")
         tvOverlayDest.text = cleanAddress(destinationPlace!!.name ?: "Б")
 
-        overlayOrigin.visibility = View.VISIBLE
-        overlayDest.visibility = View.VISIBLE
-        overlayOrigin.post { updateSmartLabels() }
+        // Скрываем оверлеи до тех пор, пока маршрут не начнет плавно рисоваться
+        overlayOrigin.visibility = View.GONE
+        overlayDest.visibility = View.GONE
 
+        // Очищаем карту сразу, но маркеры пока НЕ ставим, чтобы они не мигали перед анимацией
         mMap?.clear() 
-        
-        val iconA = BitmapHelper.vectorToBitmap(this, R.drawable.ic_marker_base_yellow)
-        originMarker = mMap?.addMarker(MarkerOptions()
-            .position(originLatLng)
-            .icon(iconA)
-            .anchor(0.5f, 0.5f)
-            .zIndex(1000f))
 
-        val iconB = BitmapHelper.vectorToBitmap(this, R.drawable.ic_marker_base_white)
-        destinationMarker = mMap?.addMarker(MarkerOptions()
-            .position(destinationLatLng)
-            .icon(iconB)
-            .anchor(0.5f, 0.5f)
-            .zIndex(1000f))
-
-        val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
-        for (wpPair in currentWaypoints) {
-            mMap?.addMarker(MarkerOptions().position(wpPair.first).icon(waypointIcon).anchor(0.5f, 0.5f).title(wpPair.second))
-        }
-        
+        // Запускаем предварительный зум камеры, чтобы не было задержки
         val builder = LatLngBounds.Builder()
         builder.include(originLatLng)
         builder.include(destinationLatLng)
+        currentWaypoints.forEach { builder.include(it.first) }
+        
         try { mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100)) } catch (e: Exception){}
 
         // ДЕЛЕГИРУЕМ В VIEWMODEL
@@ -1590,36 +1658,33 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
         path.forEach { boundsBuilder.include(it) }
 
-        try {
-            val width = resources.displayMetrics.widthPixels
-            val height = resources.displayMetrics.heightPixels
-            val paddingBottom = (height * 0.45).toInt() 
-            val paddingSide = convertDpToPixel(60f).toInt()
+        tariffsPanel.post {
+            try {
+                val panelHeight = if (tariffsPanel.visibility == View.VISIBLE) tariffsPanel.height else 0
+                
+                // УБРАЛИ лишние 20dp снизу, чтобы логотип сразу лег ровно на панель тарифов
+                val paddingBottom = panelHeight 
+                // Синхронизируем верхний отступ (10dp) и боковой (80dp), как в updateMapPadding
+                val paddingTop = convertDpToPixel(10f).toInt() 
+                val paddingSide = convertDpToPixel(80f).toInt() 
 
-            mMap?.setPadding(0, 0, 0, 0) 
+                // Честно задаем карте отступы ДО анимации
+                mMap?.setPadding(0, paddingTop, 0, paddingBottom) 
 
-            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), width, height, paddingSide)
+                val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
 
-            mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
-                override fun onFinish() {
-                    val shiftUpdate = CameraUpdateFactory.scrollBy(0f, paddingBottom / 2.5f)
-                    mMap?.animateCamera(shiftUpdate, 300, object : GoogleMap.CancelableCallback {
-                        override fun onFinish() {
-                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                        }
-                        override fun onCancel() {
-                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                        }
-                    })
-                }
+                mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
+                    override fun onFinish() {
+                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                    }
 
-                override fun onCancel() {
-                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                }
-            })
-
-        } catch (e: Exception) {
-            startRouteRevealAnimation(colorMain, colorBorder, path)
+                    override fun onCancel() {
+                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                    }
+                })
+            } catch (e: Exception) {
+                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+            }
         }
         
         btnRecenterRoute.visibility = View.GONE
@@ -1707,6 +1772,23 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             } catch (e: Exception) {}
         }
         routeAnimator?.start()
+    }
+
+    fun incrementUnreadMessages() {
+        unreadChatMessages++
+        updateChatBadgeUI()
+        showToast("Нове повідомлення від водія!")
+    }
+
+    private fun updateChatBadgeUI() {
+        runOnUiThread {
+            if (unreadChatMessages > 0) {
+                tvChatBadge.visibility = View.VISIBLE
+                tvChatBadge.text = unreadChatMessages.toString()
+            } else {
+                tvChatBadge.visibility = View.GONE
+            }
+        }
     }
 
     private fun clearMapForRoute() {
@@ -2747,6 +2829,10 @@ private fun stopWaitingTimer() {
                 // ---> НОВЕ: Ховаємо таймер <---
                 stopWaitingTimer()
                 layoutWaitingInfo.visibility = View.GONE
+
+                // ДОБАВЛЕНО: Заставляем карту пересчитать отступы для похудевшей карточки!
+                // Теперь логотип Google моментально опустится вниз.
+                updateMapPadding(activeOrderCard, 0f, 20f)
                 
                 viewModel.clearOrderState()
                 
@@ -2814,57 +2900,66 @@ private fun stopWaitingTimer() {
     }
     
     private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f) {
-        bottomPanel.post {
-            if (mMap != null) {
-                val panelHeight = bottomPanel.height
-                if (panelHeight == 0) return@post
+    bottomPanel.post {
+        if (mMap != null) {
+            // ДОБАВЛЕНО: Если панель была скрыта до окончания расчетов, сбрасываем отступы
+            if (bottomPanel.visibility != View.VISIBLE) {
+                mMap?.setPadding(0, 0, 0, 0)
+                return@post
+            }
 
-                val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
-                val totalBottomPadding = panelHeight + extraBuffer
-                val topPadding = convertDpToPixel(topPaddingDp).toInt()
+            val panelHeight = bottomPanel.height
+            if (panelHeight == 0) return@post
 
-                mMap?.setPadding(0, topPadding, 0, totalBottomPadding)
+            val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
+            val totalBottomPadding = panelHeight + extraBuffer
+            val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
-                if (viewModel.currentRoutePolyline != null) {
-                    try {
-                        val boundsBuilder = LatLngBounds.Builder()
-                        if (originPlace != null && destinationPlace != null) {
-                            boundsBuilder.include(originPlace!!.latLng!!)
-                            boundsBuilder.include(destinationPlace!!.latLng!!)
-                            
-                            currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                            decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+            mMap?.setPadding(0, topPadding, 0, totalBottomPadding)
 
-                            val labelSafePadding = convertDpToPixel(80f).toInt()
+            if (viewModel.currentRoutePolyline != null) {
+                try {
+                    val boundsBuilder = LatLngBounds.Builder()
+                    if (originPlace != null && destinationPlace != null) {
+                        boundsBuilder.include(originPlace!!.latLng!!)
+                        boundsBuilder.include(destinationPlace!!.latLng!!)
+                        
+                        currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                        decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                            mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
-                            
-                            btnRecenterRoute.visibility = View.GONE
-                        }
-                    } catch (e: Exception) {}
-                }
+                        val labelSafePadding = convertDpToPixel(80f).toInt()
+
+                        mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
+                        
+                        btnRecenterRoute.visibility = View.GONE
+                    }
+                } catch (e: Exception) {}
             }
         }
     }
+}
 
     private fun showAddressPanel() {
-        isRouteMode = false
-        creationPanelCard.visibility = View.VISIBLE
-        activeOrderCard.visibility = View.GONE
-        addressPanel.visibility = View.VISIBLE
-        tariffsPanel.visibility = View.GONE
-        btnRecenter.visibility = View.VISIBLE
+    isRouteMode = false
+    creationPanelCard.visibility = View.VISIBLE
+    activeOrderCard.visibility = View.GONE
+    addressPanel.visibility = View.VISIBLE
+    tariffsPanel.visibility = View.GONE
+    btnRecenter.visibility = View.VISIBLE
 
-        setLocationButtonAnchor(R.id.bottom_sheet_card)
-        btnMenu.visibility = View.VISIBLE
+    setLocationButtonAnchor(R.id.bottom_sheet_card)
+    btnMenu.visibility = View.VISIBLE
 
+    // ДОБАВЛЕНО: Сброс отступов на всю ширину завернут в post, чтобы перекрыть старые расчеты
+    tariffsPanel.post {
         mMap?.setPadding(0, 0, 0, 0)
+    }
 
-        try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
+    try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
 
-        ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
+    ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
 
-        clearMapForRoute()
+    clearMapForRoute()
 
         sessionManager.clearActiveOrderId()
         tariffAdapter.submitList(emptyList(), 0)
@@ -2892,6 +2987,7 @@ private fun stopWaitingTimer() {
         destinationPlace = null
 
         centerPin.visibility = View.VISIBLE
+        centerPin.alpha = 1f // ДОБАВЛЕНО: подстраховка прозрачности
         centerPin.translationY = convertDpToPixel(-48f)
         try {
             pinShadow.visibility = View.VISIBLE

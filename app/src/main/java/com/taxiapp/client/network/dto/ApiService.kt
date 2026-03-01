@@ -100,6 +100,19 @@ interface ApiService {
     @GET("public/sectors")
     fun getSectors(): Call<List<SectorDto>>
 
+    @GET("chat/{orderId}")
+    fun getChatMessages(
+        @Header("Authorization") token: String,
+        @Path("orderId") orderId: Long
+    ): Call<List<ChatMessageDto>>
+
+    @POST("chat/client/{orderId}")
+    fun sendChatMessage(
+        @Header("Authorization") token: String,
+        @Path("orderId") orderId: Long,
+        @Body request: SendMessageRequest
+    ): Call<ChatMessageDto>
+
     @GET("public/settings/car-icon")
     fun getCarIconUrl(): Call<Map<String, String>>
 }

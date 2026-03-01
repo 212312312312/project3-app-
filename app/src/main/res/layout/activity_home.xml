@@ -861,16 +861,57 @@
                                 android:textColor="@color/text_secondary" />
                         </LinearLayout>
 
-                        <ImageButton
-                            android:id="@+id/btn_call_driver"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:src="@android:drawable/ic_menu_call"
-                            android:background="@drawable/bg_button_primary"
-                            android:padding="12dp"
-                            app:tint="@color/white"
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
                             android:layout_alignParentEnd="true"
-                            android:layout_centerVertical="true" />
+                            android:layout_centerVertical="true"
+                            android:clipChildren="false"
+                            android:clipToPadding="false">
+
+                            <RelativeLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="12dp"
+                                android:clipChildren="false">
+
+                                <ImageButton
+                                    android:id="@+id/btn_chat_driver"
+                                    android:layout_width="48dp"
+                                    android:layout_height="48dp"
+                                    android:src="@drawable/ic_comment"
+                                    android:background="@drawable/bg_button_primary"
+                                    android:padding="12dp"
+                                    app:tint="@color/white" />
+
+                                <TextView
+                                    android:id="@+id/tv_chat_badge"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:layout_alignTop="@id/btn_chat_driver"
+                                    android:layout_alignEnd="@id/btn_chat_driver"
+                                    android:layout_marginTop="-4dp"
+                                    android:layout_marginEnd="-4dp"
+                                    android:background="@drawable/bg_status_pill"
+                                    android:backgroundTint="#FF3B30"
+                                    android:gravity="center"
+                                    android:text="1"
+                                    android:textColor="@color/white"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold"
+                                    android:visibility="gone" />
+                            </RelativeLayout>
+
+                            <ImageButton
+                                android:id="@+id/btn_call_driver"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:src="@android:drawable/ic_menu_call"
+                                android:background="@drawable/bg_button_primary"
+                                android:padding="12dp"
+                                app:tint="@color/white" />
+                        </LinearLayout>
                     </RelativeLayout>
                     <TextView
                         android:id="@+id/tv_driver_health_info"

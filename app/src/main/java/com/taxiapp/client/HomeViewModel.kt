@@ -181,7 +181,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
-    // --- API: Отмена заказа ---
+    // --- API: Отмена заказа ----
     fun cancelOrder() {
         val id = activeOrderId ?: return
         val token = sessionManager.fetchAuthToken() ?: return
@@ -190,11 +190,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         ApiClient.instance.cancelOrder("Bearer $token", id).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 _isLoading.value = false
-                if (response.isSuccessful) {
+                if (response.isSuccessful && response.body() != null) {
                     stopStatusPolling()
-                    activeOrderId = null
-                    sessionManager.clearActiveOrderId()
-                    _orderStatus.value = "CANCELLED"
+
+                    // ДОБАВЛЕНО: Передаем отмененный заказ прямо в UI!
+                    // HomeActivity сама увидит статус "CANCELLED", покажет его на 3 секунды
+                    // и затем вызовет clearOrderState() для очистки ID.
+                    _activeOrder.value = response.body()
                 } else {
                     _errorMessage.value = "Не вдалося скасувати"
                 }
