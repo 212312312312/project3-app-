@@ -72,11 +72,25 @@ class HistoryActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
 
         // --- ВАЖНО: Передаем функцию отмены заказа в адаптер ---
-        adapter = HistoryAdapter(emptyList()) { orderId ->
-            if (orderId > 0) {
+        adapter = HistoryAdapter(
+            orders = emptyList(),
+            onItemClick = { orderId ->
+                val currentTab = try { tabLayout.selectedTabPosition } catch (e: Exception) { 0 }
+                if (currentTab == 0) { // Вкладка "Активні"
+                    sessionManager.saveActiveOrderId(orderId)
+                    val intent = android.content.Intent(this@HistoryActivity, HomeActivity::class.java)
+                    intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    startActivity(intent)
+                    finish()
+                } else {
+                    android.widget.Toast.makeText(this@HistoryActivity, "Це замовлення знаходиться в архіві", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            onCancelClick = { orderId ->
+                // Вызываем твою старую добрую функцию отмены!
                 cancelOrder(orderId)
             }
-        }
+        )
         recyclerView.adapter = adapter
     }
 

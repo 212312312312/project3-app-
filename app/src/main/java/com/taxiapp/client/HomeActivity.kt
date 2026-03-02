@@ -238,6 +238,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private var isRouteMode = false
 
+    private lateinit var btnAddNewOrder: ImageButton
+
     private val MODE_ORIGIN = 1
     private val MODE_DESTINATION = 2
     private val MODE_ADD_HOME = 3
@@ -476,8 +478,11 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (activeOrderCard.visibility == View.VISIBLE) {
-                    // Если есть активный заказ, не даем просто закрыть апп, сворачиваем его
-                    moveTaskToBack(true)
+                    // Згортаємо замовлення: очищаємо UI та зупиняємо полінг, 
+                    // але НЕ скасовуємо саме замовлення на сервері!
+                    sessionManager.clearActiveOrderId()
+                    viewModel.clearOrderState()
+                    showAddressPanel()
                 } else if (tariffsPanel.visibility == View.VISIBLE) {
                     // Если мы в тарифах — возвращаемся к полноэкранной карте с адресами
                     showAddressPanel()
@@ -540,8 +545,10 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
                 if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                     unreadChatMessages = 0
                     updateChatBadgeUI()
-                    // Статус обработается внутри updateStatusUI (остановка трекинга и т.д.)
+                    // Статус обработается внутри updateStatusUI
                 } else {
+                    // ВІДНОВЛЮЄМО МАРШРУТ ПЕРЕД ПОКАЗОМ ПАНЕЛІ
+                    restoreOrderOnMap(order) 
                     showActiveOrderPanel(order)
                 }
                 updateStatusUI(order)
@@ -753,6 +760,26 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
 
+
+        btnAddNewOrder = findViewById(R.id.btn_add_new_order)
+        btnAddNewOrder.setOnClickListener {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Нове замовлення")
+                .setMessage("Бажаєте створити ще одне замовлення?")
+                .setPositiveButton("Так") { dialog, _ ->
+                    dialog.dismiss()
+                    // Очищаємо локальний стан, щоб сховати поточне замовлення
+                    sessionManager.clearActiveOrderId()
+                    viewModel.clearOrderState()
+                    // Повертаємо інтерфейс до початкового стану (вибір адреси)
+                    showAddressPanel()
+                }
+                .setNegativeButton("Ні") { dialog, _ ->
+                    dialog.dismiss()
+                }
+                .show()
+        }
+
         btnSchedule = findViewById(R.id.btn_schedule)
         btnSchedule.setOnClickListener {
             showCustomScheduleDialog()
@@ -817,7 +844,13 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         ivActiveOrderPayment = findViewById(R.id.iv_active_order_payment)
 
         btnMenu.setOnClickListener {
-            if (tariffsPanel.visibility == View.VISIBLE) {
+            if (activeOrderCard.visibility == View.VISIBLE) {
+                // Вирішення 4: Працює як кнопка НАЗАД (Згортає активне замовлення)
+                sessionManager.clearActiveOrderId()
+                viewModel.clearOrderState()
+                showAddressPanel()
+            } else if (tariffsPanel.visibility == View.VISIBLE) {
+                // Працює як кнопка НАЗАД (Виходить з тариФів)
                 showAddressPanel()
             } else {
                 drawerLayout.openDrawer(GravityCompat.START)
@@ -833,27 +866,23 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         btnRecenterRoute.setOnClickListener {
-            val visiblePanel = if (activeOrderCard.visibility == View.VISIBLE) {
-                activeOrderCard
-            } else if (tariffsPanel.visibility == View.VISIBLE) {
-                tariffsPanel
-            } else {
-                null
-            }
+            // Перевіряємо, чи є маршрут і точки
+            if (viewModel.currentRoutePolyline != null && originPlace != null && destinationPlace != null) {
+                 try {
+                     val boundsBuilder = LatLngBounds.Builder()
+                     boundsBuilder.include(originPlace!!.latLng!!)
+                     boundsBuilder.include(destinationPlace!!.latLng!!)
+                     
+                     currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                     decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-            if (visiblePanel != null) {
-                updateMapPadding(visiblePanel, 0f, 10f)
-            } else {
-                if (viewModel.currentRoutePolyline != null) {
-                     try {
-                         val boundsBuilder = LatLngBounds.Builder()
-                         boundsBuilder.include(originPlace!!.latLng!!)
-                         boundsBuilder.include(destinationPlace!!.latLng!!)
-                         decodedRoutePoints?.forEach { boundsBuilder.include(it) }
-                         mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 100))
-                         btnRecenterRoute.visibility = View.GONE
-                     } catch (e: Exception) {}
-                }
+                     // Використовуємо універсальний відступ 80dp для боків, як при першому малюванні
+                     val paddingSide = convertDpToPixel(80f).toInt()
+
+                     mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide))
+                     
+                     btnRecenterRoute.visibility = View.GONE
+                 } catch (e: Exception) {}
             }
         }
 
@@ -1658,17 +1687,16 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
         path.forEach { boundsBuilder.include(it) }
 
-        tariffsPanel.post {
+        val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
+
+        visibleBottomPanel.post {
             try {
-                val panelHeight = if (tariffsPanel.visibility == View.VISIBLE) tariffsPanel.height else 0
+                val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
                 
-                // УБРАЛИ лишние 20dp снизу, чтобы логотип сразу лег ровно на панель тарифов
                 val paddingBottom = panelHeight 
-                // Синхронизируем верхний отступ (10dp) и боковой (80dp), как в updateMapPadding
                 val paddingTop = convertDpToPixel(10f).toInt() 
                 val paddingSide = convertDpToPixel(80f).toInt() 
 
-                // Честно задаем карте отступы ДО анимации
                 mMap?.setPadding(0, paddingTop, 0, paddingBottom) 
 
                 val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
@@ -2072,6 +2100,45 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         statusBlinkAnimator.start()
     }
 
+    private fun restoreOrderOnMap(order: TaxiOrderDto) {
+        if (isRouteMode && activeOrderId == order.id) return // Вже відмальовано
+
+        isRouteMode = true
+        centerPin.visibility = View.GONE
+        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
+
+        val originLat = order.originLat ?: return
+        val originLng = order.originLng ?: return
+        val destLat = order.destLat ?: return
+        val destLng = order.destLng ?: return
+
+        val originLoc = LatLng(originLat, originLng)
+        val destLoc = LatLng(destLat, destLng)
+
+        // Вирішення 1: Відновлюємо логіку точок А та Б для правильного фокусу камери
+        originPlace = Place.builder().setName(order.fromAddress).setLatLng(originLoc).build()
+        destinationPlace = Place.builder().setName(order.toAddress).setLatLng(destLoc).build()
+
+        tvOrigin.text = cleanAddress(order.fromAddress ?: "А")
+        tvDestination.text = cleanAddress(order.toAddress ?: "Б")
+
+        currentWaypoints.clear()
+
+        val polyline = order.googleRoutePolyline
+        if (!polyline.isNullOrEmpty()) {
+            viewModel.currentRoutePolyline = polyline 
+            val points = com.google.maps.android.PolyUtil.decode(polyline)
+            decodedRoutePoints = points
+            
+            // Гарантуємо правильні відступи перед відмальовуванням
+            creationPanelCard.visibility = View.GONE
+            addressPanel.visibility = View.GONE
+            activeOrderCard.visibility = View.VISIBLE
+            
+            drawStylishRoute(points)
+        }
+    }
+
     private fun stopStatusBlinking() {
         if (::statusBlinkAnimator.isInitialized) {
             statusBlinkAnimator.cancel()
@@ -2454,15 +2521,28 @@ private fun stopWaitingTimer() {
     }
 
     private fun showActiveOrderPanel(order: TaxiOrderDto) {
-        findViewById<View>(R.id.active_order_card).visibility = View.VISIBLE
-        findViewById<View>(R.id.tariffs_panel).visibility = View.GONE
-        findViewById<View>(R.id.btn_menu).visibility = View.GONE
+        activeOrderCard.visibility = View.VISIBLE
+        tariffsPanel.visibility = View.GONE
+        
+        // Вирішення 5: Приховуємо панель вводу А і Б, щоб не було накладання
+        creationPanelCard.visibility = View.GONE
+        addressPanel.visibility = View.GONE
+
+        // Вирішення 3: Приховуємо кнопку "Моє місцезнаходження"
+        btnRecenter.visibility = View.GONE
+
+        // Вирішення 4: Робимо кнопку меню видимою і перетворюємо її на кнопку "Назад"
+        btnMenu.visibility = View.VISIBLE
+        ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
+        val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
+        ivMenuIcon.setColorFilter(adaptiveColor)
 
         setLocationButtonAnchor(R.id.active_order_card)
         updateMapPadding(activeOrderCard, 0f, 20f)
 
         try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
+        // Далі йде твій код без змін...
         tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
 
         if (order.paymentMethod == "CARD") {
@@ -3012,6 +3092,18 @@ private fun stopWaitingTimer() {
         } catch (e: Exception) {}
 
         recenterMapOnUser()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        
+        // Перевіряємо, чи з'явився новий активний ID (наприклад, після кліку в Історії)
+        val savedId = sessionManager.fetchActiveOrderId()
+        if (savedId != -1L) {
+            viewModel.activeOrderId = savedId
+            viewModel.startStatusPolling() // Це запустить запит до сервера і розгорне замовлення
+        }
     }
     
     private fun resetUI() {

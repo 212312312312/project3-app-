@@ -23,23 +23,28 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        // Перевіряємо, чи це системне повідомлення чату
         val type = remoteMessage.data["type"]
         if (type == "CHAT_MESSAGE") {
-            // Перевіряємо, чи відкритий екран чату
             if (com.taxiapp.client.ChatEventBus.isChatScreenOpen) {
-                // Екран відкрито - тихо оновлюємо чат (без пуш-банера)
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                     com.taxiapp.client.ChatEventBus.triggerUpdate()
                 }
-                return // Блокуємо показ візуального пуша
+                return
             }
-            // Якщо екран закрито - код піде нижче і покаже стандартне сповіщення!
         }
 
-        // Якщо у повідомлення є заголовок і текст -> показуємо його
-        remoteMessage.notification?.let {
-            showNotification(it.title ?: "Сповіщення", it.body ?: "")
+        // Якщо є стандартна нотифікація
+        if (remoteMessage.notification != null) {
+            showNotification(remoteMessage.notification?.title ?: "Сповіщення", remoteMessage.notification?.body ?: "")
+        }
+        // Якщо сервер передав статус через data payload (для фонових замовлень)
+        else if (remoteMessage.data.isNotEmpty()) {
+            val title = remoteMessage.data["title"] ?: "Оновлення статусу"
+            val body = remoteMessage.data["body"]
+
+            if (type != "CHAT_MESSAGE" && body != null) {
+                showNotification(title, body)
+            }
         }
     }
 
