@@ -151,6 +151,30 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             })
     }
 
+    // --- УПРАВЛЕНИЕ ВИДЖЕТОМ (СЕРВИСОМ) ---
+    private fun updateOrderStatusService(order: TaxiOrderDto) {
+        val context = getApplication<Application>()
+        val intent = android.content.Intent(context, com.taxiapp.client.service.OrderStatusService::class.java).apply {
+            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_ORDER_ID, order.id)
+            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_STATUS, order.status)
+            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_ADDRESS, order.toAddress)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    private fun stopOrderStatusService(orderId: Long) {
+        val context = getApplication<Application>()
+        val intent = android.content.Intent(context, com.taxiapp.client.service.OrderStatusService::class.java).apply {
+            action = com.taxiapp.client.service.OrderStatusService.ACTION_STOP
+            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_ORDER_ID, orderId)
+        }
+        context.startService(intent)
+    }
+
     // --- API: Создание заказа ---
     fun createOrder(request: CreateOrderRequestDto) {
         val token = sessionManager.fetchAuthToken() ?: return
@@ -165,10 +189,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         activeOrderId = order.id
                         sessionManager.saveActiveOrderId(order.id)
                         _activeOrder.value = order
+
+                        // ДОБАВЛЕНО: Запускаем виджет!
+                        updateOrderStatusService(order)
+
                         startStatusPolling()
                     } else {
-                        // Логика для запланированного (UI обработает отдельно)
                         _errorMessage.value = "Замовлення заплановано на ${order.scheduledAt}"
+                        // Для запланированного тоже можно показать виджет:
+                        updateOrderStatusService(order)
                     }
                 } else {
                     _errorMessage.value = "Помилка створення: ${response.message()}"
@@ -217,9 +246,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 if (response.isSuccessful) {
                     val order = response.body()
-                    _activeOrder.value = order
-                    if (order?.status == "COMPLETED" || order?.status == "CANCELLED") {
-                        stopStatusPolling()
+                    if (order != null) {
+                        _activeOrder.value = order
+
+                        // ДОБАВЛЕНО: Синхронизируем статус с виджетом
+                        updateOrderStatusService(order)
+
+                        if (order.status == "COMPLETED" || order.status == "CANCELLED") {
+                            // ДОБАВЛЕНО: Убиваем виджет, если заказ всё
+                            stopOrderStatusService(order.id)
+                            stopStatusPolling()
+                        }
                     }
                 }
             }

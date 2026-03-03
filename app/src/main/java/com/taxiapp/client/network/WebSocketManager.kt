@@ -12,6 +12,12 @@ import com.taxiapp.client.network.dto.ChatMessageDto
 import com.google.gson.Gson
 import com.taxiapp.client.network.dto.TrackingLocationDto
 
+
+data class OrderSocketMessageDto(
+    val action: String,
+    val orderId: Long,
+    val order: com.taxiapp.client.network.dto.TaxiOrderDto?
+)
 class WebSocketManager(private val baseUrl: String) {
 
     private var stompClient: StompClient? = null
@@ -99,6 +105,30 @@ class WebSocketManager(private val baseUrl: String) {
                 }
             }, { error ->
                 Log.e("WebSocketManager", "Chat subscription error", error)
+            })
+
+        compositeDisposable.add(disp)
+    }
+
+    @SuppressLint("CheckResult")
+    fun subscribeToClientOrders(clientId: Long, onOrderUpdated: (OrderSocketMessageDto) -> Unit) {
+        val topic = "/topic/clients/$clientId/orders"
+        Log.d("WebSocketManager", "Subscribing to client orders: $topic")
+
+        val client = stompClient ?: return
+
+        val disp = client.topic(topic)
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe({ topicMessage ->
+                try {
+                    val message = gson.fromJson(topicMessage.payload, OrderSocketMessageDto::class.java)
+                    onOrderUpdated(message)
+                } catch (e: Exception) {
+                    Log.e("WebSocketManager", "Error parsing order message: ${e.message}")
+                }
+            }, { error ->
+                Log.e("WebSocketManager", "Client orders subscription error", error)
             })
 
         compositeDisposable.add(disp)
