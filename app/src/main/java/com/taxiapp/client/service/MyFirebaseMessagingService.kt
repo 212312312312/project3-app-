@@ -24,6 +24,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
 
         val type = remoteMessage.data["type"]
+
+        // 1. Обробка повідомлень чату
         if (type == "CHAT_MESSAGE") {
             if (com.taxiapp.client.ChatEventBus.isChatScreenOpen) {
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
@@ -33,16 +35,53 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
 
-        // Якщо є стандартна нотифікація
+        // =======================================================================
+        // 2. ДОДАНО: Обробка тихого пуша зі зміною статусу замовлення
+        // =======================================================================
+        if (type == "ORDER_STATUS_UPDATE") {
+            val orderIdStr = remoteMessage.data["orderId"]
+            val status = remoteMessage.data["status"]
+            val title = remoteMessage.data["title"] ?: "Оновлення статусу"
+            val body = remoteMessage.data["body"] ?: ""
+
+            if (orderIdStr != null && status != null) {
+                val orderId = orderIdStr.toLongOrNull() ?: return
+
+                // Якщо замовлення закрито або скасовано — кажемо сервісу зупинитися
+                if (status == "COMPLETED" || status == "CANCELLED") {
+                    val stopIntent = Intent(this, OrderStatusService::class.java).apply {
+                        action = OrderStatusService.ACTION_STOP
+                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderId)
+                    }
+                    startService(stopIntent)
+                } else {
+                    // Якщо замовлення активне — оновлюємо Foreground Service (старе сповіщення оновиться)
+                    val updateIntent = Intent(this, OrderStatusService::class.java).apply {
+                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderId)
+                        putExtra(OrderStatusService.EXTRA_STATUS, status)
+                        putExtra("custom_title", title) // Передаємо красивий текст із сервера
+                        putExtra("custom_body", body)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(updateIntent)
+                    } else {
+                        startService(updateIntent)
+                    }
+                }
+            }
+            return // Виходимо, щоб не створювати ще одне стандартне сповіщення
+        }
+        // =======================================================================
+
+        // 3. Якщо є стандартна нотифікація (наприклад, Новини)
         if (remoteMessage.notification != null) {
             showNotification(remoteMessage.notification?.title ?: "Сповіщення", remoteMessage.notification?.body ?: "")
         }
-        // Якщо сервер передав статус через data payload (для фонових замовлень)
-        else if (remoteMessage.data.isNotEmpty()) {
-            val title = remoteMessage.data["title"] ?: "Оновлення статусу"
+        // Якщо це якийсь інший data payload (не статус і не чат)
+        else if (remoteMessage.data.isNotEmpty() && type != "CHAT_MESSAGE") {
+            val title = remoteMessage.data["title"] ?: "Сповіщення"
             val body = remoteMessage.data["body"]
-
-            if (type != "CHAT_MESSAGE" && body != null) {
+            if (body != null) {
                 showNotification(title, body)
             }
         }

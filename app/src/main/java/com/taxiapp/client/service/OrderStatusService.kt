@@ -37,6 +37,7 @@ class OrderStatusService : Service() {
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.cancel(orderId.toInt()) // Убираем конкретное уведомление
             }
+            stopForeground(true) // ДОДАНО: Правильна зупинка Foreground Service
             stopSelf()
             return START_NOT_STICKY
         }
@@ -46,17 +47,22 @@ class OrderStatusService : Service() {
         val status = intent.getStringExtra(EXTRA_STATUS) ?: ""
         val address = intent.getStringExtra(EXTRA_ADDRESS) ?: "Кінцева точка"
 
-        val notification = buildNotification(orderId, status, address)
+        // --- ДОДАНО: Читаємо текст із сервера ---
+        val customTitle = intent.getStringExtra("custom_title")
+        val customBody = intent.getStringExtra("custom_body")
+        // ----------------------------------------
+
+        val notification = buildNotification(orderId, status, address, customTitle, customBody)
 
         // Запускаем или обновляем уведомление.
-        // Используем orderId.toInt() как ID уведомления, чтобы для каждого заказа была своя плашка!
         startForeground(orderId.toInt(), notification)
 
         return START_STICKY
     }
 
-    private fun buildNotification(orderId: Long, status: String, address: String): Notification {
-        // Маппинг статусов сервера на красивый украинский текст
+    // Змінено сигнатуру методу
+    private fun buildNotification(orderId: Long, status: String, address: String, customTitle: String?, customBody: String?): Notification {
+        // Маппинг статусов сервера на красивый украинский текст (fallback)
         val statusText = when (status) {
             "SCHEDULED" -> "Заплановано"
             "REQUESTED", "OFFERING" -> "Пошук водія..."
@@ -68,7 +74,11 @@ class OrderStatusService : Service() {
             else -> status
         }
 
-        // При клике на уведомление открываем HomeActivity
+        // --- ДОДАНО: Використовуємо текст із сервера, якщо він є ---
+        val finalTitle = customTitle ?: "Замовлення: $address"
+        val finalBody = customBody ?: "Статус: $statusText"
+        // -----------------------------------------------------------
+
         val intent = Intent(this, HomeActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -78,14 +88,17 @@ class OrderStatusService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Замовлення: $address")
-            .setContentText("Статус: $statusText")
-            .setSmallIcon(R.mipmap.ic_launcher) // Замени на иконку машинки, если есть, например R.drawable.ic_car_marker_info
+            .setContentTitle(finalTitle) // Використовуємо фінальний тайтл
+            .setContentText(finalBody)   // Використовуємо фінальний текст
+            .setStyle(NotificationCompat.BigTextStyle().bigText(finalBody)) // ДОДАНО: Щоб довгий текст влазив
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
-            .setOngoing(true) // Нельзя смахнуть
-            .setOnlyAlertOnce(true) // Звук и вибрация только при первом появлении, дальше обновляется тихо
+            .setOngoing(true)
+            .setOnlyAlertOnce(true) // Звук тільки перший раз, далі - тихе оновлення (ЦЕ ТЕ ЩО НАМ ТРЕБА!)
             .build()
     }
+
+
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
