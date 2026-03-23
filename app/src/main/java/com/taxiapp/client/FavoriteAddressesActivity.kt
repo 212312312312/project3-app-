@@ -93,22 +93,26 @@ class FavoriteAddressesActivity : AppCompatActivity() {
         if (home != null) {
             tvHomeTitle.text = "Дім"
             tvHomeAddress.text = cleanAddress(home.name ?: "")
-            tvHomeAddress.setTextColor(getColor(R.color.text_secondary)) // Сірий
+            // Если адрес уже добавлен, пусть будет text_secondary (он хорошо читается)
+            tvHomeAddress.setTextColor(getColor(R.color.text_secondary))
         } else {
             tvHomeTitle.text = "Додати дім"
             tvHomeAddress.text = "Вкажіть адресу"
-            tvHomeAddress.setTextColor(getColor(R.color.taxi_gray_accent)) // Світліший сірий
+            // МЕНЯЕМ ЦВЕТ ПОДСКАЗКИ НА text_hint
+            tvHomeAddress.setTextColor(getColor(R.color.text_hint))
         }
 
         // --- РОБОТА ---
         if (work != null) {
             tvWorkTitle.text = "Робота"
             tvWorkAddress.text = cleanAddress(work.name ?: "")
+            // Если адрес уже добавлен
             tvWorkAddress.setTextColor(getColor(R.color.text_secondary))
         } else {
             tvWorkTitle.text = "Додати роботу"
             tvWorkAddress.text = "Вкажіть адресу"
-            tvWorkAddress.setTextColor(getColor(R.color.taxi_gray_accent))
+            // МЕНЯЕМ ЦВЕТ ПОДСКАЗКИ НА text_hint
+            tvWorkAddress.setTextColor(getColor(R.color.text_hint))
         }
     }
 

@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="?android:attr/colorBackground"
+    android:background="@color/card_background"
     android:paddingHorizontal="24dp"
     android:paddingTop="48dp"
     android:paddingBottom="24dp">
@@ -55,14 +55,14 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 app:cardCornerRadius="24dp"
-                app:cardBackgroundColor="#F3F4F6"
+                app:cardBackgroundColor="@color/input_background"
                 app:cardElevation="0dp">
                 <ImageView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:padding="12dp"
                     android:src="@drawable/ic_home_custom"
-                    app:tint="#4B5563"/>
+                    app:tint="@color/text_secondary"/>
             </androidx.cardview.widget.CardView>
 
             <LinearLayout
@@ -87,7 +87,7 @@
                     android:layout_height="wrap_content"
                     android:text="Вкажіть адресу"
                     android:textSize="14sp"
-                    android:textColor="@color/taxi_gray_accent"
+                    android:textColor="@color/text_hint" 
                     android:layout_marginTop="2dp"
                     android:maxLines="1"
                     android:ellipsize="end"/>
@@ -97,7 +97,7 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_chevron_right"
-                app:tint="@color/taxi_gray_accent"/>
+                app:tint="@color/text_secondary"/>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -122,14 +122,14 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 app:cardCornerRadius="24dp"
-                app:cardBackgroundColor="#F3F4F6"
+                app:cardBackgroundColor="@color/input_background"
                 app:cardElevation="0dp">
                 <ImageView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:padding="12dp"
                     android:src="@drawable/ic_work_custom"
-                    app:tint="#4B5563"/>
+                    app:tint="@color/text_secondary"/>
             </androidx.cardview.widget.CardView>
 
             <LinearLayout
@@ -154,7 +154,7 @@
                     android:layout_height="wrap_content"
                     android:text="Вкажіть адресу"
                     android:textSize="14sp"
-                    android:textColor="@color/taxi_gray_accent"
+                    android:textColor="@color/text_hint" 
                     android:layout_marginTop="2dp"
                     android:maxLines="1"
                     android:ellipsize="end"/>
@@ -164,7 +164,7 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_chevron_right"
-                app:tint="@color/taxi_gray_accent"/>
+                app:tint="@color/text_secondary"/>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 

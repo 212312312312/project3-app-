@@ -101,20 +101,36 @@
             </LinearLayout>
         </FrameLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_add_promo"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginBottom="24dp"
+            android:layout_height="60dp"
             android:layout_marginTop="16dp"
-            android:text="Додати промокод"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary"
-            app:backgroundTint="@color/unified_block_bg"
-            app:cornerRadius="16dp"
-            app:elevation="2dp"
-            app:strokeWidth="0dp"/>
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="@color/unified_block_bg"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="2dp"
+            app:strokeWidth="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <Button
+                    android:id="@+id/btn_add_promo"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="Додати промокод"
+                    android:textAllCaps="false"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:background="?attr/selectableItemBackground" />
+                
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 </LinearLayout>

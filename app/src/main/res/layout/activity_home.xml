@@ -1021,7 +1021,8 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:scrollbars="none"
-            android:fillViewport="true">
+            android:fillViewport="true"
+            android:overScrollMode="never">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -1104,13 +1105,13 @@
                                         android:layout_marginEnd="4dp" />
 
                                     <TextView
-                                        android:id="@+id/tv_user_rating"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="5.0"
-                                        android:textSize="12sp"
-                                        android:textStyle="bold"
-                                        android:textColor="#333333" />
+    android:id="@+id/tv_user_rating"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="5.0"
+    android:textSize="12sp"
+    android:textStyle="bold"
+    android:textColor="@color/text_primary" />
                                 </LinearLayout>
                             </LinearLayout>
 
@@ -1130,32 +1131,6 @@
                                     android:textStyle="bold"
                                     android:textColor="@color/text_primary" />
 
-                                <LinearLayout
-                                    android:id="@+id/profile_btn_change_city"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="horizontal"
-                                    android:gravity="center_vertical"
-                                    android:layout_marginTop="4dp"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackgroundBorderless">
-
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:src="@drawable/ic_place_small"
-                                        app:tint="@color/text_secondary"
-                                        android:layout_marginEnd="4dp" />
-
-                                    <TextView
-                                        android:id="@+id/profile_current_city"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Київ"
-                                        android:textSize="15sp"
-                                        android:textColor="@color/text_secondary" />
-                                </LinearLayout>
                             </LinearLayout>
 
                             <ImageView
@@ -1199,8 +1174,34 @@
                         </LinearLayout>
 
                     </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                </com.google.android.material.card.MaterialCardView> 
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:layout_marginHorizontal="0dp"
+                    app:shapeAppearanceOverlay="@style/Shape.Card.Middle"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/card_background"
+                    app:strokeWidth="0dp">
 
+                    <LinearLayout
+                        android:id="@+id/profile_btn_change_city"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        style="@style/MenuStyle">
+                        
+                        <ImageView 
+                            android:src="@drawable/ic_place_small"
+                            style="@style/MenuIconStyle" />
+                            
+                        <TextView 
+                            android:id="@+id/profile_current_city"
+                            android:text="Місто: Київ" 
+                            style="@style/MenuTextStyle" />
+                            
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1305,8 +1306,7 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:paddingTop="24dp"
-                        android:paddingBottom="40dp"
-                        android:paddingStart="20dp"
+                        android:paddingBottom="16dp" android:paddingStart="20dp"
                         android:paddingEnd="20dp">
 
                         <TextView

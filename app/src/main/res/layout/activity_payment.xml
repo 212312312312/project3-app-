@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/unified_block_bg"
+    android:background="@color/card_background" 
     android:paddingTop="48dp"
     android:paddingBottom="24dp">
 
@@ -42,8 +42,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Оплата замовлень за замовчуванням"
-        android:textColor="@color/text_secondary"
-        android:textSize="14sp"
+        android:textColor="@color/text_hint"
+        android:textSize="15sp"
         android:textStyle="normal"
         android:layout_marginBottom="8dp"
         android:layout_marginHorizontal="24dp"/>
@@ -100,7 +100,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/unified_block_bg"  
+                android:background="@color/card_background"  
                 android:layout_marginStart="64dp"
                 android:layout_marginEnd="24dp"/>
 
