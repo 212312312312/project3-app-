@@ -41,7 +41,7 @@ class TariffAdapter(
     private var maxDiscountAmount: Double = 0.0
 
     // НАЛАШТУВАННЯ СЕРВЕРА
-    private val SERVER_IP = "192.168.0.104" // Твій IP
+    private val SERVER_IP = "192.168.0.106" // Твій IP
     private val SERVER_PORT = "8080"
 
     inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -67,8 +67,26 @@ class TariffAdapter(
 
             // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
             if (!tariff.imageUrl.isNullOrEmpty()) {
-                val fullUrl = "http://$SERVER_IP:$SERVER_PORT/uploads/${tariff.imageUrl}"
-                Log.d("TariffAdapter", "Loading: $fullUrl")
+                val rawUrl = tariff.imageUrl
+
+                // УНИВЕРСАЛЬНАЯ ПРОВЕРКА И ОЧИСТКА ССЫЛКИ
+                val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+                    // 1. Если в БД уже лежит готовая полная ссылка — просто берем её
+                    rawUrl
+                } else {
+                    // 2. Если это просто путь: вычищаем ВСЕ двойные слеши и слеши в начале
+                    var cleanPath = rawUrl.replace("\\", "/") // меняем виндовые слеши на обычные
+                        .replace(Regex("/{2,}"), "/")         // заменяем любые // или /// на один /
+                        .trimStart('/')                       // убираем слеш в самом начале строки
+
+                    // 3. Защита от задвоения папки uploads (если путь уже начинается на uploads/)
+                    if (!cleanPath.startsWith("uploads/")) {
+                        cleanPath = "uploads/$cleanPath"
+                    }
+                    "http://$SERVER_IP:$SERVER_PORT/$cleanPath"
+                }
+
+                Log.d("TariffAdapter", "Glide is trying to load: $fullUrl")
 
                 Glide.with(itemView.context)
                     .load(fullUrl)
@@ -135,8 +153,6 @@ class TariffAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TariffViewHolder {
-        // ВИПРАВЛЕННЯ: Повертаємо правильний layout 'tariff_item' (велика картка),
-        // а не 'item_tariff_card' (маленька картка для HelpActivity)
         val view = LayoutInflater.from(parent.context).inflate(R.layout.tariff_item, parent, false)
         return TariffViewHolder(view)
     }
