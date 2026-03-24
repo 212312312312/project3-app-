@@ -1424,47 +1424,68 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         mMap?.setOnCameraMoveStartedListener { reason ->
-            if (viewModel.currentRoutePolyline == null) {
-                tvOrigin.text = "Визначення..."
-                
-                // ДОБАВЛЕНО: Анимируем подпрыгивание только если интерфейс уже загружен
-                if (isInterfaceRevealed) {
-                    centerPin.animate()
-                        .translationY(convertDpToPixel(-48f))
-                        .setInterpolator(AccelerateDecelerateInterpolator())
-                        .setDuration(250)
-                        .start()
-                    try {
-                        pinShadow.animate().scaleX(0.6f).scaleY(0.6f).alpha(0.3f).setDuration(250).start()
-                    } catch (e: Exception) {}
-                }
-            } else {
-                if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
-                    btnRecenterRoute.visibility = View.VISIBLE
-                }
-            }
+    if (viewModel.currentRoutePolyline == null) {
+        
+        // 1. Оборачиваем смену текста в post, чтобы не блокировать старт анимации!
+        tvOrigin.post {
+            tvOrigin.text = "Визначення..."
         }
+        
+        if (isInterfaceRevealed) {
+            // 2. ЖЕСТКО отменяем предыдущую анимацию падения
+            centerPin.animate().cancel() 
+            
+            centerPin.animate()
+                .translationY(convertDpToPixel(-48f))
+                .setInterpolator(DecelerateInterpolator())
+                .setDuration(120)
+                .start()
+                
+            try {
+                pinShadow.animate().cancel() // Отменяем тень
+                pinShadow.animate()
+                    .scaleX(0.6f)
+                    .scaleY(0.6f)
+                    .alpha(0.3f)
+                    .setDuration(120)
+                    .start()
+            } catch (e: Exception) {}
+        }
+    } else {
+        if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+            btnRecenterRoute.visibility = View.VISIBLE
+        }
+    }
+}
 
         mMap?.setOnCameraIdleListener {
             updateSmartLabels()
 
             // ЖЕЛЕЗНАЯ БЛОКИРОВКА:
-            // Если мы в режиме маршрута ИЛИ маршрут уже есть — ничего не делаем с пином и адресом
             if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
 
             // Логика выбора адреса (работает только когда нет маршрута)
             val center = mMap!!.cameraPosition.target
             getAddressForOrigin(center)
 
-            // ДОБАВЛЕНО: Анимируем падение только если интерфейс уже загружен
             if (isInterfaceRevealed) {
+                // ДОБАВЛЕНО: Отменяем анимацию взлета, чтобы плавно начать падение
+                centerPin.animate().cancel() 
+                
                 centerPin.animate()
                     .translationY(convertDpToPixel(-32f))
                     .setInterpolator(BounceInterpolator())
                     .setDuration(500)
                     .start()
+                    
                 try {
-                    pinShadow.animate().scaleX(1.0f).scaleY(1.0f).alpha(0.5f).setDuration(250).start()
+                    pinShadow.animate().cancel() // И для тени тоже
+                    pinShadow.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .alpha(0.5f)
+                        .setDuration(250)
+                        .start()
                 } catch (e: Exception) {}
             }
         }
@@ -2521,26 +2542,33 @@ private fun stopWaitingTimer() {
     }
 
     private fun showActiveOrderPanel(order: TaxiOrderDto) {
-        activeOrderCard.visibility = View.VISIBLE
-        tariffsPanel.visibility = View.GONE
-        
-        // Вирішення 5: Приховуємо панель вводу А і Б, щоб не було накладання
-        creationPanelCard.visibility = View.GONE
-        addressPanel.visibility = View.GONE
+    // 1. Проверяем, была ли панель скрыта до этого
+    val isFirstShow = activeOrderCard.visibility != View.VISIBLE
 
-        // Вирішення 3: Приховуємо кнопку "Моє місцезнаходження"
-        btnRecenter.visibility = View.GONE
+    activeOrderCard.visibility = View.VISIBLE
+    tariffsPanel.visibility = View.GONE
+    
+    // Вирішення 5: Приховуємо панель вводу А і Б, щоб не було накладання
+    creationPanelCard.visibility = View.GONE
+    addressPanel.visibility = View.GONE
 
-        // Вирішення 4: Робимо кнопку меню видимою і перетворюємо її на кнопку "Назад"
-        btnMenu.visibility = View.VISIBLE
-        ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
-        val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
-        ivMenuIcon.setColorFilter(adaptiveColor)
+    // Вирішення 3: Приховуємо кнопку "Моє місцезнаходження"
+    btnRecenter.visibility = View.GONE
 
+    // Вирішення 4: Робимо кнопку меню видимою і перетворюємо її на кнопку "Назад"
+    btnMenu.visibility = View.VISIBLE
+    ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
+    val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
+    ivMenuIcon.setColorFilter(adaptiveColor)
+
+    // 2. Делаем отступы и центрируем камеру ТОЛЬКО при первом показе!
+    if (isFirstShow) {
         setLocationButtonAnchor(R.id.active_order_card)
         updateMapPadding(activeOrderCard, 0f, 20f)
+    }
 
-        try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
+    try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
+    
 
         // Далі йде твій код без змін...
         tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
