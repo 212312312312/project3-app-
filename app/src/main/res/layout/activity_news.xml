@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/unified_block_bg"
+    android:background="@color/card_background"
     android:fitsSystemWindows="true">
 
     <RelativeLayout
@@ -29,7 +29,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Сповіщення" 
+            android:text="Сповіщення"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -37,6 +37,7 @@
             android:layout_toEndOf="@id/btn_back"
             android:layout_marginStart="16dp"/>
     </RelativeLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -79,8 +80,8 @@
                 android:textStyle="bold"
                 android:textColor="#B0B0B0"
                 android:gravity="center"/>
-                
-             <TextView
+
+            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"

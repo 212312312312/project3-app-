@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/unified_block_bg"
+    android:background="@color/card_background"
     android:fitsSystemWindows="true"> 
 
     <RelativeLayout
@@ -106,7 +106,7 @@
             android:layout_height="60dp"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="24dp"
-            app:cardBackgroundColor="@color/unified_block_bg"
+            app:cardBackgroundColor="@color/card_background"
             app:cardCornerRadius="16dp"
             app:cardElevation="2dp"
             app:strokeWidth="0dp">

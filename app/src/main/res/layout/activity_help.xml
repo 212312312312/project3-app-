@@ -4,10 +4,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/unified_block_bg"
+    android:background="@color/card_background"
     android:fitsSystemWindows="true" 
     android:paddingTop="24dp"
     android:paddingBottom="24dp">
+    
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -52,7 +53,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Підтримка"
-                android:textColor="@color/taxi_gray_accent"
+                android:textColor="@color/text_hint"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp"
@@ -64,7 +65,7 @@
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="0dp"
                 app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/menu_neutral_color"
+                app:cardBackgroundColor="@color/menu_background_color"
                 android:layout_marginBottom="32dp"
                 android:clickable="true"
                 android:focusable="true">
@@ -98,7 +99,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Інші запитання"
-                android:textColor="@color/taxi_gray_accent"
+                android:textColor="@color/text_hint"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp"
@@ -109,7 +110,7 @@
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="0dp"
                 app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/menu_neutral_color">
+                app:cardBackgroundColor="@color/menu_background_color">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -146,7 +147,7 @@
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
-                        android:background="@color/unified_block_bg"
+                        android:background="@color/card_background"
                         android:layout_marginHorizontal="24dp"/>
 
                     <LinearLayout
@@ -179,7 +180,7 @@
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
-                        android:background="@color/unified_block_bg"
+                        android:background="@color/card_background"
                         android:layout_marginHorizontal="24dp"/>
 
                     <LinearLayout
