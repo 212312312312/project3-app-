@@ -1,6 +1,10 @@
 package com.taxiapp.client
 
 import android.Manifest
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.content.res.ColorStateList
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
@@ -1917,34 +1921,56 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         val timePicker = view.findViewById<TimePicker>(R.id.time_picker_widget)
         val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_schedule)
 
+        // --- ФИКС БАГА 2: Исправляем глюк DatePicker со скроллом прошлых месяцев ---
         val today = Calendar.getInstance()
-        datePicker.minDate = today.timeInMillis
+        // Строго обнуляем время до начала дня
+        today.set(Calendar.HOUR_OF_DAY, 0)
+        today.set(Calendar.MINUTE, 0)
+        today.set(Calendar.SECOND, 0)
+        today.set(Calendar.MILLISECOND, 0)
+
+        // Отнимаем 1 секунду (надежный хак, чтобы барабан не сходил с ума при расчетах)
+        datePicker.minDate = today.timeInMillis - 1000
+
         val maxDate = Calendar.getInstance()
         maxDate.add(Calendar.DAY_OF_MONTH, 7)
         datePicker.maxDate = maxDate.timeInMillis
 
         timePicker.setIs24HourView(true)
 
+        // --- ФИКС БАГА 1: Правильные цвета для вкладок ---
         fun updateTabs(isDateSelected: Boolean) {
+            // Берем цвета из темы
+            val colorPrimary = ContextCompat.getColor(this@HomeActivity, R.color.text_primary)
+            val colorBg = ContextCompat.getColor(this@HomeActivity, R.color.card_background)
+            val colorSecondary = ContextCompat.getColor(this@HomeActivity, R.color.text_secondary)
+
             if (isDateSelected) {
                 tabDate.setBackgroundResource(R.drawable.bg_button_primary)
-                tabDate.setTextColor(Color.WHITE)
+                tabDate.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
+                tabDate.setTextColor(colorBg)
+
                 tabTime.background = null
-                tabTime.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-                
+                tabTime.backgroundTintList = null
+                tabTime.setTextColor(colorSecondary)
+
                 datePicker.visibility = View.VISIBLE
                 timePicker.visibility = View.GONE
             } else {
                 tabTime.setBackgroundResource(R.drawable.bg_button_primary)
-                tabTime.setTextColor(Color.WHITE)
+                tabTime.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
+                tabTime.setTextColor(colorBg)
+
                 tabDate.background = null
-                tabDate.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-                
+                tabDate.backgroundTintList = null
+                tabDate.setTextColor(colorSecondary)
+
                 datePicker.visibility = View.GONE
                 timePicker.visibility = View.VISIBLE
             }
         }
 
+        // Инициализация стартового состояния
         tabDate.setOnClickListener { updateTabs(true) }
         tabTime.setOnClickListener { updateTabs(false) }
 
@@ -1953,18 +1979,20 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             selectedCalendar.set(Calendar.YEAR, datePicker.year)
             selectedCalendar.set(Calendar.MONTH, datePicker.month)
             selectedCalendar.set(Calendar.DAY_OF_MONTH, datePicker.dayOfMonth)
-            
+
             val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
             val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
-            
+
             selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
             selectedCalendar.set(Calendar.MINUTE, minute)
             selectedCalendar.set(Calendar.SECOND, 0)
 
             val now = Calendar.getInstance()
+            // Если выбрано прошлое время
             if (selectedCalendar.before(now)) {
                 showToast("Не можна обрати час у минулому")
-                updateTabs(false) 
+                // Вызываем updateTabs и теперь текст "Час" не пропадет!
+                updateTabs(false)
             } else {
                 scheduledDate = selectedCalendar
                 updateOrderButtonWithTime()
@@ -1974,31 +2002,73 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
         dialog.show()
     }
-
     private fun updateOrderButtonWithTime() {
-        if (scheduledDate != null) {
-            val sdf = java.text.SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
-            val dateStr = sdf.format(scheduledDate!!.time)
-            
-            if (selectedTariffItem != null) {
-                val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
-                btnOrderTaxi.text = "Запланувати на $dateStr (${price.toInt()} ₴)"
-            } else {
-                btnOrderTaxi.text = "Запланувати на $dateStr"
+    if (scheduledDate != null) {
+        val now = Calendar.getInstance()
+        
+        // Форматуємо час (наприклад, "15:30")
+        val timeSdf = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
+        val timeStr = timeSdf.format(scheduledDate!!.time)
+
+        // Визначаємо день (Сьогодні, Завтра або конкретна дата)
+        val dateStr = when {
+            isSameDay(scheduledDate!!, now) -> "Сьогодні, $timeStr"
+            isTomorrow(scheduledDate!!, now) -> "Завтра, $timeStr"
+            else -> {
+                // Для української локалі (наприклад, "24 лют")
+                val dayMonthSdf = java.text.SimpleDateFormat("d MMM", Locale("uk", "UA"))
+                "${dayMonthSdf.format(scheduledDate!!.time)}, $timeStr"
             }
-            btnSchedule.setColorFilter(ContextCompat.getColor(this, R.color.taxi_yellow)) 
+        }
+
+        // Формуємо верхній рядок з ціною
+        val topText = if (selectedTariffItem != null) {
+            val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
+            "Замовити ${price.toInt()} ₴"
         } else {
-            if (selectedTariffItem != null) {
-                val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
-                btnOrderTaxi.text = "Замовити ${price.toInt()} ₴"
-            } else {
-                btnOrderTaxi.text = "Оберіть тариф"
-            }
-            val isDark = sessionManager.isDarkMode()
-            val color = if (isDark) Color.WHITE else Color.BLACK
-            try { btnSchedule.setColorFilter(color) } catch (e: Exception){}
+            "Замовити"
+        }
+
+        // Об'єднуємо з переносом рядка
+        val fullText = "$topText\n$dateStr"
+        val spannable = SpannableString(fullText)
+        
+        // Робимо нижній рядок (дату і час) трохи меншим (75% від основного розміру)
+        spannable.setSpan(
+            RelativeSizeSpan(0.75f), 
+            topText.length + 1, 
+            fullText.length, 
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+
+        // Застосовуємо текст до кнопки
+        btnOrderTaxi.text = spannable
+        
+    } else {
+        // Якщо час не обрано - стандартний вигляд
+        if (selectedTariffItem != null) {
+            val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
+            btnOrderTaxi.text = "Замовити ${price.toInt()} ₴"
+        } else {
+            btnOrderTaxi.text = "Оберіть тариф"
         }
     }
+    
+    // Завжди фарбуємо іконку календаря в text_primary незалежно від того, обрано час чи ні
+    btnSchedule.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
+}
+
+private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
+    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+           cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+}
+
+private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
+    val tomorrow = Calendar.getInstance()
+    tomorrow.timeInMillis = now.timeInMillis
+    tomorrow.add(Calendar.DAY_OF_YEAR, 1)
+    return isSameDay(target, tomorrow)
+}
 
     private fun loadSectors() {
         ApiClient.instance.getSectors().enqueue(object : retrofit2.Callback<List<SectorDto>> {
