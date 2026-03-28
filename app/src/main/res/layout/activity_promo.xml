@@ -6,14 +6,14 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/unified_block_bg"
-    android:fitsSystemWindows="true"> 
+    android:fitsSystemWindows="true">
 
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingVertical="16dp" 
+        android:paddingVertical="16dp"
         android:paddingHorizontal="24dp">
-        
+
         <ImageView
             android:id="@+id/btn_back"
             android:layout_width="32dp"
@@ -66,12 +66,12 @@
         <LinearLayout
             android:id="@+id/ll_empty_state"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" 
+            android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center"
-            android:paddingBottom="120dp" 
-            android:visibility="gone"> 
-            
+            android:paddingBottom="120dp"
+            android:visibility="gone">
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -80,7 +80,7 @@
                 android:textStyle="bold"
                 android:textColor="#B0B0B0"
                 android:gravity="center"/>
-                
+
              <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

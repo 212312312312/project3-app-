@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/unified_block_bg">
+    android:background="@color/card_background">
+
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -33,7 +34,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Тарифи"
+                android:text="Обрані адреси"
                 android:textSize="22sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnBackground"
@@ -65,7 +66,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Деталі тарифу"
-                    android:textColor="@color/taxi_gray_accent"
+                    android:textColor="@color/text_hint"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="16dp"

@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/unified_block_bg"
+    android:background="@color/card_background"
     android:paddingTop="48dp"
     android:paddingBottom="24dp">
 

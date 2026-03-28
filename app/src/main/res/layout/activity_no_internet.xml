@@ -5,15 +5,15 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@color/unified_block_bg"
+    android:background="@color/card_background"
     android:padding="24dp">
 
     <ImageView
-        android:layout_width="80dp"
-        android:layout_height="80dp"
+        android:layout_width="wrap_content"
+        android:layout_height="381dp"
+        android:layout_marginBottom="24dp"
         android:src="@drawable/ic_wifi_off"
-        app:tint="@color/taxi_yellow"
-        android:layout_marginBottom="24dp"/>
+        app:tint="@color/taxi_yellow" />
 
     <TextView
         android:layout_width="wrap_content"

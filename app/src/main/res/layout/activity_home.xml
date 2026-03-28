@@ -214,7 +214,7 @@
                 android:layout_height="match_parent"
                 android:padding="12dp"
                 android:src="@drawable/ic_percent"
-                app:tint="@color/taxi_yellow" />
+                app:tint="@color/text_primary" />
         </androidx.cardview.widget.CardView>
 
         <androidx.cardview.widget.CardView
@@ -237,7 +237,7 @@
                 android:layout_height="match_parent"
                 android:padding="10dp"
                 android:src="@drawable/ic_route_center"
-                app:tint="@color/text_secondary" />
+                app:tint="@color/text_primary" />
         </androidx.cardview.widget.CardView>
 
         <androidx.cardview.widget.CardView
@@ -258,8 +258,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:padding="12dp"
-                android:src="@android:drawable/ic_menu_mylocation"
-                app:tint="@color/text_secondary" />
+                android:src="@drawable/ic_my_location" 
+                app:tint="@color/text_primary" />
         </androidx.cardview.widget.CardView>
 
         <com.google.android.material.card.MaterialCardView

@@ -9,17 +9,14 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingTop="48dp">
 
-        <LinearLayout
+        <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="16dp"
-            android:paddingTop="50dp">
+            android:layout_marginBottom="32dp"
+            android:layout_marginHorizontal="24dp">
 
             <ImageView
                 android:id="@+id/btn_back"
@@ -29,17 +26,21 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
-                app:tint="@color/text_primary"/>
+                app:tint="@color/text_primary"
+                android:layout_centerVertical="true"
+                android:layout_alignParentStart="true"/>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Мій профіль"
-                android:textSize="20sp"
+                android:textSize="22sp"
                 android:textStyle="bold"
-                android:textColor="@color/text_primary"
+                android:textColor="?attr/colorOnBackground"
+                android:layout_centerVertical="true"
+                android:layout_toEndOf="@id/btn_back"
                 android:layout_marginStart="16dp"/>
-        </LinearLayout>
+        </RelativeLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -68,7 +69,7 @@
                     android:textColor="@color/text_primary"
                     android:gravity="center"
                     android:includeFontPadding="false"/>
-                    
+
             </androidx.cardview.widget.CardView>
 
             <EditText
@@ -143,15 +144,15 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal|top"
         android:layout_marginTop="60dp"
-        
+
         app:cardBackgroundColor="@color/toast_background"
         app:cardCornerRadius="30dp"
         app:cardElevation="20dp"
-        
+
         android:outlineSpotShadowColor="@color/toast_shadow"
         android:outlineAmbientShadowColor="@color/toast_shadow"
         tools:targetApi="p"
-        
+
         android:visibility="invisible"
         android:translationY="-200dp">
 
