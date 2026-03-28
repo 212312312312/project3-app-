@@ -46,7 +46,7 @@
                 <androidx.cardview.widget.CardView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    app:cardBackgroundColor="@color/unified_block_bg"
+                    app:cardBackgroundColor="@color/card_background"
                     app:cardCornerRadius="12dp"
                     app:cardElevation="0dp"
                     android:layout_margin="2dp">
@@ -68,7 +68,7 @@
                             android:paddingBottom="6dp"
                             android:text="вул. Хрещатик, 1"
                             android:textSize="13sp"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="@color/text_primary"
                             android:fontFamily="sans-serif-medium"
                             android:layout_gravity="start" />
 
@@ -106,7 +106,7 @@
                 <androidx.cardview.widget.CardView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    app:cardBackgroundColor="@color/unified_block_bg"
+                    app:cardBackgroundColor="@color/card_background"
                     app:cardCornerRadius="12dp"
                     app:cardElevation="0dp"
                     android:layout_margin="2dp">
@@ -128,7 +128,7 @@
                             android:paddingBottom="6dp"
                             android:text="ТРЦ Ocean Plaza"
                             android:textSize="13sp"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="@color/text_primary"
                             android:fontFamily="sans-serif-medium"
                             android:layout_gravity="start" />
 
@@ -270,7 +270,7 @@
             android:layout_marginBottom="-10dp"
             android:layout_marginHorizontal="0dp"
             app:cardElevation="16dp"
-            app:cardCornerRadius="24dp"
+            app:shapeAppearanceOverlay="@style/Shape.BottomSheet.TopRounded24" 
             app:cardBackgroundColor="@color/card_background">
 
             <LinearLayout
@@ -278,10 +278,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:paddingTop="24dp"
-                android:paddingBottom="24dp">
+                android:paddingStart="5dp"   android:paddingEnd="5dp"     android:paddingTop="16dp"     android:paddingBottom="20dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -466,8 +463,9 @@
             android:layout_alignParentBottom="true"
             android:layout_margin="0dp"
             app:cardElevation="16dp"
-            app:cardBackgroundColor="@color/unified_block_bg"
-            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="@color/card_background"
+            app:shapeAppearanceOverlay="@style/Shape.BottomSheet.TopRounded16"
+            app:strokeWidth="0dp"
             android:visibility="gone">
 
             <LinearLayout

@@ -887,6 +887,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         val openOrigin = View.OnClickListener {
+            // БЛОКИРУЕМ КЛИК, если адрес еще определяется
+            if (tvOrigin.text.toString() == "Визначення...") return@OnClickListener
+
             pickerMode = MODE_ORIGIN
             isSelectingOrigin = true
             openAddressPicker(true)
@@ -895,6 +898,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         tvOrigin.setOnClickListener(openOrigin)
 
         val openDest = View.OnClickListener {
+            // БЛОКИРУЕМ КЛИК, если адрес еще определяется
+            if (tvOrigin.text.toString() == "Визначення...") return@OnClickListener
+
             pickerMode = MODE_DESTINATION
             isSelectingOrigin = false
             openAddressPicker(false)

@@ -12,7 +12,7 @@
     app:cardElevation="0dp"
     app:strokeWidth="0dp"
     app:strokeColor="@color/taxi_yellow"
-    app:cardBackgroundColor="@color/unified_block_bg"
+    app:cardBackgroundColor="@color/card_background"
     android:clickable="true"
     android:focusable="true">
 

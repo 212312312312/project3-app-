@@ -33,6 +33,9 @@ import com.google.android.libraries.places.api.net.PlacesClient
 import com.taxiapp.client.ui.PlaceSuggestion
 import com.taxiapp.client.ui.PlacesAdapter
 import com.taxiapp.client.utils.AddressUtils
+import android.view.MotionEvent
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
 import com.taxiapp.client.utils.ViewUtils
 import java.util.Locale
 
@@ -318,14 +321,45 @@ class AddressPickerActivity : AppCompatActivity() {
     }
 
     private fun setupFocusListener(editText: EditText) {
+
+        // 1. ПЕРЕХВАТЫВАЕМ КАСАНИЕ
+        editText.setOnTouchListener { v, event ->
+            val et = v as EditText
+            // Если поле еще не активно, мы берем обработку клика на себя
+            if (!et.hasFocus()) {
+                if (event.action == MotionEvent.ACTION_UP) {
+                    et.requestFocus()
+                    et.setSelection(et.text.length) // Ставим курсор в конец мгновенно
+
+                    // Так как мы перехватили клик, нужно вручную поднять клавиатуру
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.showSoftInput(et, InputMethodManager.SHOW_IMPLICIT)
+                }
+                // Возвращаем true — мы "съели" касание, система не будет ставить курсор по координатам пальца
+                return@setOnTouchListener true
+            }
+            // Если поле УЖЕ в фокусе, возвращаем false.
+            // Это позволит тебе нормально кликать в середину текста, чтобы что-то исправить.
+            false
+        }
+
+        // 2. СЛУШАТЕЛЬ ФОКУСА (оставляем для программной смены фокуса)
         editText.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 activeEditText = editText
+
+                // Перенос через post больше не нужен, мы делаем это мгновенно в onTouch
+                if (editText.text.isNotEmpty()) {
+                    editText.setSelection(editText.text.length)
+                }
+
                 updateButtonsVisibility(intent.getBooleanExtra(EXTRA_HIDE_MY_LOCATION, false))
                 if (editText.text.isEmpty()) adapter.submitList(emptyList())
                 else { layoutQuickActions.visibility = View.GONE; performSearch(editText.text.toString()) }
             }
         }
+
+        // 3. СЛУШАТЕЛЬ ТЕКСТА
         editText.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {}
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
