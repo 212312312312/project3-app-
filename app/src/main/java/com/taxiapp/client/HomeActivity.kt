@@ -1911,97 +1911,141 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun showCustomScheduleDialog() {
-        val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
-        val view = layoutInflater.inflate(R.layout.dialog_schedule_ride, null)
-        dialog.setContentView(view)
+    val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+    val view = layoutInflater.inflate(R.layout.dialog_schedule_ride, null)
+    dialog.setContentView(view)
 
-        val tabDate = view.findViewById<TextView>(R.id.tab_date)
-        val tabTime = view.findViewById<TextView>(R.id.tab_time)
-        val datePicker = view.findViewById<DatePicker>(R.id.date_picker_widget)
-        val timePicker = view.findViewById<TimePicker>(R.id.time_picker_widget)
-        val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_schedule)
-
-        // --- ФИКС БАГА 2: Исправляем глюк DatePicker со скроллом прошлых месяцев ---
-        val today = Calendar.getInstance()
-        // Строго обнуляем время до начала дня
-        today.set(Calendar.HOUR_OF_DAY, 0)
-        today.set(Calendar.MINUTE, 0)
-        today.set(Calendar.SECOND, 0)
-        today.set(Calendar.MILLISECOND, 0)
-
-        // Отнимаем 1 секунду (надежный хак, чтобы барабан не сходил с ума при расчетах)
-        datePicker.minDate = today.timeInMillis - 1000
-
-        val maxDate = Calendar.getInstance()
-        maxDate.add(Calendar.DAY_OF_MONTH, 7)
-        datePicker.maxDate = maxDate.timeInMillis
-
-        timePicker.setIs24HourView(true)
-
-        // --- ФИКС БАГА 1: Правильные цвета для вкладок ---
-        fun updateTabs(isDateSelected: Boolean) {
-            // Берем цвета из темы
-            val colorPrimary = ContextCompat.getColor(this@HomeActivity, R.color.text_primary)
-            val colorBg = ContextCompat.getColor(this@HomeActivity, R.color.card_background)
-            val colorSecondary = ContextCompat.getColor(this@HomeActivity, R.color.text_secondary)
-
-            if (isDateSelected) {
-                tabDate.setBackgroundResource(R.drawable.bg_button_primary)
-                tabDate.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
-                tabDate.setTextColor(colorBg)
-
-                tabTime.background = null
-                tabTime.backgroundTintList = null
-                tabTime.setTextColor(colorSecondary)
-
-                datePicker.visibility = View.VISIBLE
-                timePicker.visibility = View.GONE
-            } else {
-                tabTime.setBackgroundResource(R.drawable.bg_button_primary)
-                tabTime.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
-                tabTime.setTextColor(colorBg)
-
-                tabDate.background = null
-                tabDate.backgroundTintList = null
-                tabDate.setTextColor(colorSecondary)
-
-                datePicker.visibility = View.GONE
-                timePicker.visibility = View.VISIBLE
-            }
+    dialog.window?.let { window ->
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        val controller = WindowInsetsControllerCompat(window, view)
+        
+        if (sessionManager.isDarkMode()) {
+            window.navigationBarColor = Color.BLACK
+            controller.isAppearanceLightNavigationBars = false // Светлые иконки
+        } else {
+            window.navigationBarColor = Color.WHITE
+            controller.isAppearanceLightNavigationBars = true  // Темные иконки
         }
-
-        // Инициализация стартового состояния
-        tabDate.setOnClickListener { updateTabs(true) }
-        tabTime.setOnClickListener { updateTabs(false) }
-
-        btnConfirm.setOnClickListener {
-            val selectedCalendar = Calendar.getInstance()
-            selectedCalendar.set(Calendar.YEAR, datePicker.year)
-            selectedCalendar.set(Calendar.MONTH, datePicker.month)
-            selectedCalendar.set(Calendar.DAY_OF_MONTH, datePicker.dayOfMonth)
-
-            val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
-            val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
-
-            selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
-            selectedCalendar.set(Calendar.MINUTE, minute)
-            selectedCalendar.set(Calendar.SECOND, 0)
-
-            val now = Calendar.getInstance()
-            // Если выбрано прошлое время
-            if (selectedCalendar.before(now)) {
-                showToast("Не можна обрати час у минулому")
-                // Вызываем updateTabs и теперь текст "Час" не пропадет!
-                updateTabs(false)
-            } else {
-                scheduledDate = selectedCalendar
-                updateOrderButtonWithTime()
-                dialog.dismiss()
-            }
-        }
-
-        dialog.show()
     }
+
+    // ==========================================
+    // 1. НАХОДИМ ВСЕ ЭЛЕМЕНТЫ ИНТЕРФЕЙСА ЗДЕСЬ
+    // ==========================================
+    val tabDate = view.findViewById<TextView>(R.id.tab_date)
+    val tabTime = view.findViewById<TextView>(R.id.tab_time)
+    val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_schedule)
+
+    // Сами барабаны (нужны для получения выбранных значений)
+    val datePicker = view.findViewById<NumberPicker>(R.id.date_picker_widget)
+    val timePicker = view.findViewById<TimePicker>(R.id.time_picker_widget)
+    
+    // Наши новые обертки (нужны только для переключения видимости экранов)
+    val dateContainer = view.findViewById<FrameLayout>(R.id.date_picker_container)
+    val timeContainer = view.findViewById<FrameLayout>(R.id.time_picker_container)
+
+
+    // ==========================================
+    // 2. НАСТРОЙКА БАРАБАНОВ И ГЕНЕРАЦИЯ ДАТ
+    // ==========================================
+    val availableDates = mutableListOf<Calendar>()
+    val displayStrings = mutableListOf<String>()
+    val dateFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale("uk", "UA"))
+
+    for (i in 0..6) {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_MONTH, i)
+        availableDates.add(cal)
+        
+        when (i) {
+            0 -> displayStrings.add("Сьогодні, ${dateFormat.format(cal.time)}")
+            1 -> displayStrings.add("Завтра, ${dateFormat.format(cal.time)}")
+            else -> displayStrings.add(dateFormat.format(cal.time))
+        }
+    }
+
+    // Настраиваем барабан дат
+    datePicker.minValue = 0
+    datePicker.maxValue = displayStrings.size - 1
+    datePicker.displayedValues = displayStrings.toTypedArray()
+    datePicker.wrapSelectorWheel = false 
+    datePicker.descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS 
+
+    // Настраиваем барабан времени
+    timePicker.setIs24HourView(true)
+
+
+    // ==========================================
+    // 3. ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК
+    // ==========================================
+    fun updateTabs(isDateSelected: Boolean) {
+        val colorPrimary = ContextCompat.getColor(this@HomeActivity, R.color.text_primary)
+        val colorBg = ContextCompat.getColor(this@HomeActivity, R.color.card_background)
+        val colorSecondary = ContextCompat.getColor(this@HomeActivity, R.color.text_secondary)
+
+        if (isDateSelected) {
+            tabDate.setBackgroundResource(R.drawable.bg_button_primary)
+            tabDate.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
+            tabDate.setTextColor(colorBg)
+
+            tabTime.background = null
+            tabTime.backgroundTintList = null
+            tabTime.setTextColor(colorSecondary)
+
+            // Прячем/показываем КОНТЕЙНЕРЫ, а не сами пикеры
+            dateContainer.visibility = View.VISIBLE
+            timeContainer.visibility = View.GONE
+        } else {
+            tabTime.setBackgroundResource(R.drawable.bg_button_primary)
+            tabTime.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
+            tabTime.setTextColor(colorBg)
+
+            tabDate.background = null
+            tabDate.backgroundTintList = null
+            tabDate.setTextColor(colorSecondary)
+
+            // Прячем/показываем КОНТЕЙНЕРЫ, а не сами пикеры
+            dateContainer.visibility = View.GONE
+            timeContainer.visibility = View.VISIBLE
+        }
+    }
+
+    // Слушатели нажатий на вкладки (по умолчанию открываем вкладку даты)
+    tabDate.setOnClickListener { updateTabs(true) }
+    tabTime.setOnClickListener { updateTabs(false) }
+
+
+    // ==========================================
+    // 4. ЛОГИКА КНОПКИ ПОДТВЕРЖДЕНИЯ
+    // ==========================================
+    btnConfirm.setOnClickListener {
+        // Берем готовый день из нашего массива
+        val selectedIndex = datePicker.value
+        val selectedCalendar = availableDates[selectedIndex].clone() as Calendar
+
+        // Добавляем к нему время
+        val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
+        val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
+
+        selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
+        selectedCalendar.set(Calendar.MINUTE, minute)
+        selectedCalendar.set(Calendar.SECOND, 0)
+        selectedCalendar.set(Calendar.MILLISECOND, 0)
+
+        // Проверка на прошлое время
+        val now = Calendar.getInstance()
+        if (selectedCalendar.before(now)) {
+            showToast("Не можна обрати час у минулому")
+            updateTabs(false) // Автоматически перекидываем на вкладку времени для исправления
+        } else {
+            scheduledDate = selectedCalendar // Сохраняем выбранную дату в глобальную переменную
+            updateOrderButtonWithTime()      // Обновляем UI главной кнопки
+            dialog.dismiss()
+        }
+    }
+
+    // Запускаем диалог
+    dialog.show()
+}
     private fun updateOrderButtonWithTime() {
     if (scheduledDate != null) {
         val now = Calendar.getInstance()
@@ -2021,13 +2065,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
 
-        // Формуємо верхній рядок з ціною
-        val topText = if (selectedTariffItem != null) {
-            val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
-            "Замовити ${price.toInt()} ₴"
-        } else {
-            "Замовити"
-        }
+        // Завжди тільки "Замовити"
+        val topText = "Замовити"
 
         // Об'єднуємо з переносом рядка
         val fullText = "$topText\n$dateStr"
@@ -2045,17 +2084,17 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         btnOrderTaxi.text = spannable
         
     } else {
-        // Якщо час не обрано - стандартний вигляд
+        // --- ТЕПЕРЬ ЦЕНЫ НЕТ И ЗДЕСЬ ---
+        // Якщо час не обрано - просто "Замовити"
         if (selectedTariffItem != null) {
-            val price = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
-            btnOrderTaxi.text = "Замовити ${price.toInt()} ₴"
+            btnOrderTaxi.text = "Замовити"
         } else {
             btnOrderTaxi.text = "Оберіть тариф"
         }
     }
     
     // Завжди фарбуємо іконку календаря в text_primary незалежно від того, обрано час чи ні
-    btnSchedule.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
+    btnSchedule.setColorFilter(android.graphics.Color.BLACK)
 }
 
 private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
@@ -3160,9 +3199,8 @@ private fun stopWaitingTimer() {
         
         scheduledDate = null
         try {
-            val isDark = sessionManager.isDarkMode()
-            val color = if (isDark) Color.WHITE else Color.BLACK
-            btnSchedule.setColorFilter(color)
+            btnSchedule.setColorFilter(android.graphics.Color.BLACK)
+            // ИЛИ btnSchedule.clearColorFilter()
         } catch (e: Exception){}
 
         tvOrigin.text = "Звідки?"
