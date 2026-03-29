@@ -31,6 +31,7 @@
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
 
+
     <style name="OtpBox">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">56dp</item>
@@ -119,12 +120,12 @@
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
 
-    <style name="BottomSheetDialogTheme" parent="Theme.Design.Light.BottomSheetDialog">
+    <style name="BottomSheetDialogTheme" parent="Theme.MaterialComponents.Light.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o">true</item>
     </style>

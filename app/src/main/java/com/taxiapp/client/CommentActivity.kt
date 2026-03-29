@@ -38,6 +38,7 @@ class CommentActivity : AppCompatActivity() {
 
         val currentText = intent.getStringExtra("EXTRA_COMMENT") ?: ""
         etComment.setText(currentText)
+        suggestionsContainer.visibility = if (currentText.isNotEmpty()) View.GONE else View.VISIBLE
         etComment.setSelection(etComment.text.length)
         updateCounter(currentText.length)
 
@@ -65,8 +66,10 @@ class CommentActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val length = s?.length ?: 0
                 updateCounter(length)
-                // Оновлюємо кнопку при кожному введенні символу
                 updateButtonState(length > 0)
+
+                // ЛОГИКА ПОДСКАЗОК: если есть хоть 1 символ — скрываем, если пусто — показываем
+                suggestionsContainer.visibility = if (length > 0) View.GONE else View.VISIBLE
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -121,13 +124,8 @@ class CommentActivity : AppCompatActivity() {
                 else -> ""
             }
 
-            etComment.setText(textToAdd)
+            etComment.setText(textToAdd) // Это само скроет контейнер через TextWatcher
             etComment.setSelection(etComment.text.length)
-
-            suggestionsContainer.visibility = View.GONE
-
-            // Оновлюємо кнопку (бо текст змінився програмно)
-            updateButtonState(true)
 
             etComment.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager

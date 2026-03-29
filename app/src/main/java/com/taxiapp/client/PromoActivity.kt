@@ -40,7 +40,8 @@ class PromoActivity : AppCompatActivity() {
 
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
 
-        emptyState.setOnClickListener { showPromoCodeDialog() }
+        // Здесь больше нет обработчика нажатия на emptyState,
+        // поэтому диалог при клике на экран больше не появится.
 
         adapter = PromoAdapter { promoItem ->
             val bottomSheet = PromoDetailsBottomSheet(promoItem)

@@ -499,8 +499,8 @@
                         android:focusable="true">
                         <ImageView
                             android:id="@+id/iv_comment_icon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
                             android:src="@drawable/ic_comment"
                             android:layout_gravity="center"
                             app:tint="?attr/colorOnSurface" />
@@ -519,8 +519,8 @@
                         android:focusable="true">
                         <ImageView
                             android:id="@+id/iv_payment_icon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
                             android:src="@drawable/ic_cash"
                             android:layout_gravity="center"
                             app:tint="?attr/colorOnSurface" />
@@ -539,8 +539,8 @@
                         android:focusable="true">
                         <ImageView
                             android:id="@+id/iv_services_icon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
                             android:src="@drawable/ic_services_new"
                             android:layout_gravity="center"
                             app:tint="?attr/colorOnSurface" />
@@ -559,8 +559,8 @@
                         android:focusable="true">
                         <ImageView
                             android:id="@+id/iv_price_icon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
                             android:src="@drawable/ic_wallet"
                             android:layout_gravity="center"
                             app:tint="?attr/colorOnSurface" />
@@ -620,13 +620,13 @@
                         android:background="#33000000" />
 
                     <ImageButton
-                        android:id="@+id/btn_schedule"
-                        android:layout_width="60dp"
-                        android:layout_height="match_parent"
-                        android:src="@drawable/ic_calendar_today"
-                        android:background="?attr/selectableItemBackground"
-                        android:padding="18dp"
-                        app:tint="#232426" />
+    android:id="@+id/btn_schedule"
+    android:layout_width="60dp"
+    android:layout_height="match_parent"
+    android:src="@drawable/ic_calendar_today"
+    android:background="?attr/selectableItemBackground"
+    android:padding="29dp" 
+    app:tint="@color/taxi_black_bg" />
 
                 </LinearLayout>
 

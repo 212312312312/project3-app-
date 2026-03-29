@@ -24,13 +24,14 @@
         <item name="android:background">@android:color/transparent</item>
         <item name="android:colorControlHighlight">@android:color/transparent</item> </style>
 
-    <style name="BottomSheetDialogTheme" parent="Theme.Design.BottomSheetDialog">
+
+    <style name="BottomSheetDialogTheme" parent="Theme.MaterialComponents.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:navigationBarColor">#000000</item>
+
+        <item name="android:navigationBarColor">#222426</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o">false</item>
     </style>
     <style name="CustomBottomSheetStyle" parent="Widget.Design.BottomSheet.Modal">
