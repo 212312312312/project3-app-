@@ -19,7 +19,7 @@
     <color name="taxi_gray_accent">#3E3E3E</color>
     <color name="unified_block_bg">#2D2E30</color>      <color name="unified_column_bg">#2D2E30</color>     <color name="unified_input_press">#151515</color>           <color name="dotted_line_color">#666666</color>
     <color name="text_hint">#B0B0B0</color>
-
+    <color name="almost_black">#010101</color>
     <color name="info_window_divider">#374151</color>
     <color name="page_background">#111827</color>
     <color name="card_background">#2e3139</color>

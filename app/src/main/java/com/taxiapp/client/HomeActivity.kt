@@ -3,6 +3,7 @@ package com.taxiapp.client
 import android.Manifest
 import android.text.SpannableString
 import android.text.Spanned
+import android.content.res.Configuration
 import android.text.style.RelativeSizeSpan
 import android.content.res.ColorStateList
 import android.animation.Animator
@@ -1429,71 +1430,77 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             if (currentCity != null) recenterMapOnUser()
         }
 
+        // 1. ОПТИМИЗИРУЕМ ДВИЖЕНИЕ КАМЕРЫ (убираем микрофризы процессора)
         mMap?.setOnCameraMoveListener {
-            updateSmartLabels()
+            // Считаем тяжелую проекцию ТОЛЬКО если уже построен маршрут
+            if (viewModel.currentRoutePolyline != null) {
+                updateSmartLabels()
+            }
         }
 
+        // 2. ИСПРАВЛЯЕМ ПОДЛЕТ ПИНА (Мгновенный старт)
         mMap?.setOnCameraMoveStartedListener { reason ->
-    if (viewModel.currentRoutePolyline == null) {
-        
-        // 1. Оборачиваем смену текста в post, чтобы не блокировать старт анимации!
-        tvOrigin.post {
-            tvOrigin.text = "Визначення..."
-        }
-        
-        if (isInterfaceRevealed) {
-            // 2. ЖЕСТКО отменяем предыдущую анимацию падения
-            centerPin.animate().cancel() 
-            
-            centerPin.animate()
-                .translationY(convertDpToPixel(-48f))
-                .setInterpolator(DecelerateInterpolator())
-                .setDuration(120)
-                .start()
+            if (viewModel.currentRoutePolyline == null) {
                 
-            try {
-                pinShadow.animate().cancel() // Отменяем тень
-                pinShadow.animate()
-                    .scaleX(0.6f)
-                    .scaleY(0.6f)
-                    .alpha(0.3f)
-                    .setDuration(120)
-                    .start()
-            } catch (e: Exception) {}
-        }
-    } else {
-        if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
-            btnRecenterRoute.visibility = View.VISIBLE
-        }
-    }
-}
+                // РЕАГИРУЕМ ТОЛЬКО НА ПАЛЕЦ (REASON_GESTURE), чтобы избежать прыжков от авто-центровки
+                if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+                    tvOrigin.text = "Визначення..."
+                    
+                    if (isInterfaceRevealed) {
+                        centerPin.animate().cancel()
+                        centerPin.animate()
+                            .translationY(convertDpToPixel(-48f))
+                            .setStartDelay(0) // <--- СБРАСЫВАЕМ ЗАДЕРЖКУ! ТЕПЕРЬ МГНОВЕННО!
+                            .setInterpolator(AccelerateDecelerateInterpolator())
+                            .setDuration(250)
+                            .start()
 
+                        try {
+                            pinShadow.animate().cancel()
+                            pinShadow.animate()
+                                .scaleX(0.6f)
+                                .scaleY(0.6f)
+                                .alpha(0.3f)
+                                .setStartDelay(0) // <--- Сбрасываем и у тени
+                                .setDuration(250)
+                                .start()
+                        } catch (e: Exception) {}
+                    }
+                }
+            } else {
+                if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+                    btnRecenterRoute.visibility = View.VISIBLE
+                }
+            }
+        }
+
+        // 3. ИСПРАВЛЯЕМ ПАДЕНИЕ ПИНА (Очистка задержки при приземлении)
         mMap?.setOnCameraIdleListener {
-            updateSmartLabels()
+            if (viewModel.currentRoutePolyline != null) {
+                updateSmartLabels()
+            }
 
-            // ЖЕЛЕЗНАЯ БЛОКИРОВКА:
             if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
 
-            // Логика выбора адреса (работает только когда нет маршрута)
             val center = mMap!!.cameraPosition.target
             getAddressForOrigin(center)
 
             if (isInterfaceRevealed) {
-                // ДОБАВЛЕНО: Отменяем анимацию взлета, чтобы плавно начать падение
-                centerPin.animate().cancel() 
-                
+                centerPin.animate().cancel()
                 centerPin.animate()
                     .translationY(convertDpToPixel(-32f))
+                    .setStartDelay(0) // <--- ОБЯЗАТЕЛЬНО сбрасываем задержку и тут!
                     .setInterpolator(BounceInterpolator())
                     .setDuration(500)
                     .start()
-                    
+
                 try {
-                    pinShadow.animate().cancel() // И для тени тоже
+                    pinShadow.animate().cancel()
                     pinShadow.animate()
                         .scaleX(1.0f)
                         .scaleY(1.0f)
                         .alpha(0.5f)
+                        .setStartDelay(0) // <--- И тут
                         .setDuration(250)
                         .start()
                 } catch (e: Exception) {}
@@ -2554,101 +2561,121 @@ private fun stopWaitingTimer() {
     }
 
     private fun showChangePriceDialog() {
-        val selectedItem = tariffAdapter.getSelectedTariff()
-        if (selectedItem == null) {
-            showToast("Спочатку оберіть тариф")
-            return
-        }
-
-        val currentTotalInAdapter = selectedItem.priceValue
-        val oldAddedValue = selectedItem.addedValue
-        val basePriceWithServices = currentTotalInAdapter - oldAddedValue
-
-        val minPrice = basePriceWithServices.toInt()
-        val maxPrice = (basePriceWithServices * 3).toInt()
-        
-        var currentPrice = (basePriceWithServices + oldAddedValue).toInt()
-
-        val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
-        val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
-        dialog.setContentView(view)
-        
-        dialog.window?.let { window ->
-            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-            window.navigationBarColor = ContextCompat.getColor(this, android.R.color.black)
-            window.statusBarColor = Color.TRANSPARENT 
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val decorView = window.decorView
-                var flags = decorView.systemUiVisibility
-                flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-                decorView.systemUiVisibility = flags
-            }
-        }
-
-        val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
-        val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
-        val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
-        val seekBar = view.findViewById<SeekBar>(R.id.seekbar_price)
-        val btnSave = view.findViewById<Button>(R.id.btn_save_price)
-        val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
-
-        val range = maxPrice - minPrice
-        seekBar.max = range
-        
-        fun updateUI() {
-            tvPrice.text = "$currentPrice ₴"
-            val progress = currentPrice - minPrice
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                seekBar.setProgress(progress, true)
-            } else {
-                seekBar.progress = progress
-            }
-        }
-
-        updateUI()
-
-        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(p0: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    currentPrice = minPrice + progress
-                    tvPrice.text = "$currentPrice ₴"
-                }
-            }
-            override fun onStartTrackingTouch(p0: SeekBar?) {}
-            override fun onStopTrackingTouch(p0: SeekBar?) {}
-        })
-
-        btnPlus.setOnClickListener {
-            if (currentPrice + 10 <= maxPrice) {
-                currentPrice += 10
-                updateUI()
-            } else {
-                currentPrice = maxPrice
-                updateUI()
-            }
-        }
-
-        btnMinus.setOnClickListener {
-            if (currentPrice - 10 >= minPrice) {
-                currentPrice -= 10
-                updateUI()
-            } else {
-                currentPrice = minPrice
-                updateUI()
-            }
-        }
-
-        btnSave.setOnClickListener {
-            val newAddedValue = (currentPrice - minPrice).toDouble()
-            servicesExtraCost = newAddedValue 
-            tariffAdapter.setCustomPrice(selectedItem.tariff.id, newAddedValue)
-            dialog.dismiss()
-        }
-
-        btnClose.setOnClickListener { dialog.dismiss() }
-        dialog.show()
+    val selectedItem = tariffAdapter.getSelectedTariff()
+    if (selectedItem == null) {
+        showToast("Спочатку оберіть тариф")
+        return
     }
+
+    val currentTotalInAdapter = selectedItem.priceValue
+    val oldAddedValue = selectedItem.addedValue
+    val basePriceWithServices = currentTotalInAdapter - oldAddedValue
+
+    val minPrice = basePriceWithServices.toInt()
+    val maxPrice = (basePriceWithServices * 3).toInt()
+    
+    var currentPrice = (basePriceWithServices + oldAddedValue).toInt()
+
+    val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+    val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
+    dialog.setContentView(view)
+    
+    // Умная настройка системных баров в зависимости от темы
+    dialog.window?.let { window ->
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        window.statusBarColor = Color.TRANSPARENT 
+
+        // Проверяем, включена ли сейчас темная тема на устройстве
+        val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+        if (isNightMode) {
+            // ДЛЯ ТЕМНОЙ ТЕМЫ: Тотально черный бар и светлые иконки
+            window.navigationBarColor = ContextCompat.getColor(this, android.R.color.black)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                var flags = window.decorView.systemUiVisibility
+                // Убираем флаги "светлого" фона, чтобы иконки стали белыми
+                flags = flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
+                flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                window.decorView.systemUiVisibility = flags
+            }
+        } else {
+            // ДЛЯ СВЕТЛОЙ ТЕМЫ: Белый бар и темные иконки
+            window.navigationBarColor = ContextCompat.getColor(this, android.R.color.white)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                var flags = window.decorView.systemUiVisibility
+                // Добавляем флаги "светлого" фона, чтобы иконки стали черными/серыми
+                flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+                flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                window.decorView.systemUiVisibility = flags
+            }
+        }
+    }
+
+    val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
+    val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
+    val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
+    val seekBar = view.findViewById<SeekBar>(R.id.seekbar_price)
+    val btnSave = view.findViewById<Button>(R.id.btn_save_price)
+    val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
+
+    val range = maxPrice - minPrice
+    seekBar.max = range
+    
+    fun updateUI() {
+        tvPrice.text = "$currentPrice ₴"
+        val progress = currentPrice - minPrice
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            seekBar.setProgress(progress, true)
+        } else {
+            seekBar.progress = progress
+        }
+    }
+
+    updateUI()
+
+    seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(p0: SeekBar?, progress: Int, fromUser: Boolean) {
+            if (fromUser) {
+                currentPrice = minPrice + progress
+                tvPrice.text = "$currentPrice ₴"
+            }
+        }
+        override fun onStartTrackingTouch(p0: SeekBar?) {}
+        override fun onStopTrackingTouch(p0: SeekBar?) {}
+    })
+
+    btnPlus.setOnClickListener {
+        if (currentPrice + 10 <= maxPrice) {
+            currentPrice += 10
+            updateUI()
+        } else {
+            currentPrice = maxPrice
+            updateUI()
+        }
+    }
+
+    btnMinus.setOnClickListener {
+        if (currentPrice - 10 >= minPrice) {
+            currentPrice -= 10
+            updateUI()
+        } else {
+            currentPrice = minPrice
+            updateUI()
+        }
+    }
+
+    btnSave.setOnClickListener {
+        val newAddedValue = (currentPrice - minPrice).toDouble()
+        servicesExtraCost = newAddedValue 
+        tariffAdapter.setCustomPrice(selectedItem.tariff.id, newAddedValue)
+        dialog.dismiss()
+    }
+
+    btnClose.setOnClickListener { dialog.dismiss() }
+    dialog.show()
+}
     
     private fun cancelCurrentOrder() {
         btnCancelOrder.isEnabled = false

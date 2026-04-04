@@ -591,44 +591,52 @@
                     android:background="@drawable/shadow_gradient_up"
                     android:layout_marginBottom="0dp" />
 
-                <LinearLayout
+                <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
                     android:layout_height="60dp"
-                    android:orientation="horizontal"
                     android:layout_marginHorizontal="4dp"
                     android:layout_marginBottom="16dp"
-                    android:background="@drawable/bg_button_yellow"
-                    android:gravity="center_vertical">
+                    android:background="@drawable/bg_button_yellow">
 
                     <Button
-                        android:id="@+id/btn_order_taxi"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1"
-                        android:text="Замовити"
-                        android:textAllCaps="false"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="#232426"
-                        android:background="?attr/selectableItemBackground"
-                        android:enabled="false" />
+        android:id="@+id/btn_order_taxi"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:text="Замовити"
+        android:textAllCaps="false"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#232426"
+        android:background="@android:color/transparent" android:stateListAnimator="@null" 
+        android:elevation="0dp" 
+        android:enabled="false"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
-                    <View
-                        android:layout_width="1dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginVertical="10dp"
-                        android:background="#33000000" />
+    <View
+        android:layout_width="1dp"
+        android:layout_height="0dp"
+        android:layout_marginVertical="16dp"
+        android:background="#33000000"
+        android:elevation="2dp"
+        app:layout_constraintEnd_toStartOf="@id/btn_schedule"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
-                    <ImageButton
-    android:id="@+id/btn_schedule"
-    android:layout_width="60dp"
-    android:layout_height="match_parent"
-    android:src="@drawable/ic_calendar_today"
-    android:background="?attr/selectableItemBackground"
-    android:padding="29dp" 
-    app:tint="@color/taxi_black_bg" />
-
-                </LinearLayout>
+    <ImageButton
+        android:id="@+id/btn_schedule"
+        android:layout_width="60dp"
+        android:layout_height="match_parent"
+        android:src="@drawable/ic_calendar_today"
+        android:background="@android:color/transparent" android:padding="18dp"
+        android:elevation="2dp"
+        app:tint="@color/taxi_black_bg"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+                        </androidx.constraintlayout.widget.ConstraintLayout>
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

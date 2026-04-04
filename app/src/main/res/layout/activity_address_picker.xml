@@ -199,11 +199,10 @@
             android:background="@android:color/transparent">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@android:drawable/ic_menu_mylocation"
-                app:tint="@color/text_secondary"/>
-
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_my_location"
+                app:tint="@color/text_primary"/>
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -213,7 +212,6 @@
                 android:textColor="@color/text_primary"
                 android:layout_marginStart="16dp"/>
         </LinearLayout>
-
         <LinearLayout
             android:id="@+id/btn_pick_on_map"
             android:layout_width="match_parent"
@@ -226,19 +224,15 @@
             android:background="@android:color/transparent">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/my_icon_origin"
-                app:tint="@color/text_secondary"/>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Вказати на карті"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary"
-                android:layout_marginStart="16dp"/>
+                android:layout_width="28dp"  android:layout_height="28dp" android:src="@drawable/my_icon_origin"
+                app:tint="@color/text_primary"/> <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Вказати на карті"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginStart="16dp"/>
         </LinearLayout>
 
     </LinearLayout>

@@ -54,7 +54,7 @@ class MapPickerActivity : AppCompatActivity(), OnMapReadyCallback, OnMapsSdkInit
         centerPin = findViewById(R.id.center_pin)
         pinShadow = findViewById(R.id.pin_shadow)
 
-        // Кнопка назад (спробуємо знайти за обома ID, щоб уникнути помилок XML)
+        // Кнопка назад
         val btnBackCard = findViewById<View>(R.id.btn_back_card)
         if (btnBackCard != null) {
             btnBackCard.setOnClickListener { finish() }
@@ -71,7 +71,6 @@ class MapPickerActivity : AppCompatActivity(), OnMapReadyCallback, OnMapsSdkInit
                 val intent = Intent()
                 intent.putExtra("picked_lat", selectedLatLng!!.latitude)
                 intent.putExtra("picked_lng", selectedLatLng!!.longitude)
-                // Повертаємо вже очищену назву
                 intent.putExtra("picked_name", selectedAddressName)
                 setResult(Activity.RESULT_OK, intent)
                 finish()
@@ -96,21 +95,36 @@ class MapPickerActivity : AppCompatActivity(), OnMapReadyCallback, OnMapsSdkInit
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(startPos, 16f))
         mMap.uiSettings.isZoomControlsEnabled = false
 
-        // Анімація та логіка
-        mMap.setOnCameraMoveStartedListener {
-            tvAddress.text = "Визначення..."
-            btnConfirm.isEnabled = false
-            selectedLatLng = null
+        // --- ЛОГИКА АНИМАЦИИ (Синхронизировано с HomeActivity) ---
 
-            // Стрибок вгору
-            centerPin.animate()
-                .translationY(-110f)
-                .setInterpolator(AccelerateDecelerateInterpolator())
-                .setDuration(250)
-                .start()
+        mMap.setOnCameraMoveStartedListener { reason ->
+            // Проверяем, что движение вызвано именно пальцем пользователя
+            if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+                tvAddress.text = "Визначення..."
+                btnConfirm.isEnabled = false
+                selectedLatLng = null
 
-            // Тінь
-            pinShadow.animate().scaleX(0.6f).scaleY(0.6f).alpha(0.3f).setDuration(250).start()
+                // Стрибок вгору
+                centerPin.animate().cancel() // Отменяем текущие анимации
+                centerPin.animate()
+                    .translationY(convertDpToPixel(-48f)) // Идеальная высота прыжка в DP
+                    .setStartDelay(0) // Сбрасываем задержку (мгновенный старт)
+                    .setInterpolator(AccelerateDecelerateInterpolator())
+                    .setDuration(250)
+                    .start()
+
+                // Тінь
+                try {
+                    pinShadow.animate().cancel()
+                    pinShadow.animate()
+                        .scaleX(0.6f)
+                        .scaleY(0.6f)
+                        .alpha(0.3f)
+                        .setStartDelay(0)
+                        .setDuration(250)
+                        .start()
+                } catch (e: Exception) {}
+            }
         }
 
         mMap.setOnCameraIdleListener {
@@ -119,14 +133,25 @@ class MapPickerActivity : AppCompatActivity(), OnMapReadyCallback, OnMapsSdkInit
             getAddressFromLocation(center)
 
             // Падіння вниз
+            centerPin.animate().cancel()
             centerPin.animate()
-                .translationY(convertDpToPixel(-32f))
+                .translationY(convertDpToPixel(-32f)) // Базовая позиция на земле
+                .setStartDelay(0)
                 .setInterpolator(BounceInterpolator())
                 .setDuration(500)
                 .start()
 
             // Тінь
-            pinShadow.animate().scaleX(1.0f).scaleY(1.0f).alpha(0.5f).setDuration(250).start()
+            try {
+                pinShadow.animate().cancel()
+                pinShadow.animate()
+                    .scaleX(1.0f)
+                    .scaleY(1.0f)
+                    .alpha(0.5f)
+                    .setStartDelay(0)
+                    .setDuration(250)
+                    .start()
+            } catch (e: Exception) {}
         }
     }
 
@@ -170,7 +195,7 @@ class MapPickerActivity : AppCompatActivity(), OnMapReadyCallback, OnMapsSdkInit
         }.start()
     }
 
-    // --- ФУНКЦІЯ ОЧИЩЕННЯ (Така сама, як в HomeActivity) ---
+    // --- ФУНКЦІЯ ОЧИЩЕННЯ ---
     private fun cleanAddress(fullAddress: String): String {
         var result = fullAddress
         val removeList = listOf(
