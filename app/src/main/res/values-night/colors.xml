@@ -12,7 +12,7 @@
 
     <color name="switch_track_light">#3A3A3A</color>
     <color name="tariff_divider_color">#232426</color>
-    <color name="taxi_yellow">#FACC15</color>
+    <color name="taxi_yellow">#ffe03b</color>
     <color name="taxi_black_bg">#222426</color>
     <color name="taxi_white">#FFFFFF</color>
     <color name="taxi_red">#EF4444</color>

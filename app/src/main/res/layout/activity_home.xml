@@ -498,12 +498,12 @@
                         android:clickable="true"
                         android:focusable="true">
                         <ImageView
-                            android:id="@+id/iv_comment_icon"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:src="@drawable/ic_comment"
-                            android:layout_gravity="center"
-                            app:tint="?attr/colorOnSurface" />
+    android:id="@+id/iv_comment_icon"
+    android:layout_width="32dp"
+    android:layout_height="32dp"
+    android:src="@drawable/ic_comment"
+    android:layout_gravity="center"
+    app:tint="@color/text_primary" />
                     </FrameLayout>
 
                     <View android:layout_width="1dp" android:layout_height="20dp"
@@ -518,12 +518,12 @@
                         android:clickable="true"
                         android:focusable="true">
                         <ImageView
-                            android:id="@+id/iv_payment_icon"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:src="@drawable/ic_cash"
-                            android:layout_gravity="center"
-                            app:tint="?attr/colorOnSurface" />
+    android:id="@+id/iv_payment_icon"
+    android:layout_width="32dp"
+    android:layout_height="32dp"
+    android:src="@drawable/ic_cash"
+    android:layout_gravity="center"
+    app:tint="@color/text_primary" />
                     </FrameLayout>
 
                     <View android:layout_width="1dp" android:layout_height="20dp"
@@ -537,13 +537,13 @@
                         android:background="@null"
                         android:clickable="true"
                         android:focusable="true">
-                        <ImageView
-                            android:id="@+id/iv_services_icon"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:src="@drawable/ic_services_new"
-                            android:layout_gravity="center"
-                            app:tint="?attr/colorOnSurface" />
+<ImageView
+    android:id="@+id/iv_services_icon"
+    android:layout_width="32dp"
+    android:layout_height="32dp"
+    android:src="@drawable/ic_services_new"
+    android:layout_gravity="center"
+    app:tint="@color/text_primary" />
                     </FrameLayout>
 
                     <View android:layout_width="1dp" android:layout_height="20dp"
@@ -558,12 +558,12 @@
                         android:clickable="true"
                         android:focusable="true">
                         <ImageView
-                            android:id="@+id/iv_price_icon"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:src="@drawable/ic_wallet"
-                            android:layout_gravity="center"
-                            app:tint="?attr/colorOnSurface" />
+    android:id="@+id/iv_price_icon"
+    android:layout_width="32dp"
+    android:layout_height="32dp"
+    android:src="@drawable/ic_wallet"
+    android:layout_gravity="center"
+    app:tint="@color/text_primary" />
                     </FrameLayout>
                 </LinearLayout>
 
@@ -592,13 +592,13 @@
                     android:layout_marginBottom="0dp" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="60dp"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_marginBottom="16dp"
-                    android:background="@drawable/bg_button_yellow">
+    android:layout_width="match_parent"
+    android:layout_height="60dp"
+    android:layout_marginHorizontal="4dp"
+    android:layout_marginBottom="16dp"
+    android:background="@drawable/bg_button_yellow">
 
-                    <Button
+    <Button
         android:id="@+id/btn_order_taxi"
         android:layout_width="0dp"
         android:layout_height="match_parent"
@@ -606,8 +606,9 @@
         android:textAllCaps="false"
         android:textSize="18sp"
         android:textStyle="bold"
-        android:textColor="#232426"
-        android:background="@android:color/transparent" android:stateListAnimator="@null" 
+        android:textColor="#454754" 
+        android:background="@android:color/transparent" 
+        android:stateListAnimator="@null" 
         android:elevation="0dp" 
         android:enabled="false"
         app:layout_constraintStart_toStartOf="parent"
@@ -630,13 +631,14 @@
         android:layout_width="60dp"
         android:layout_height="match_parent"
         android:src="@drawable/ic_calendar_today"
-        android:background="@android:color/transparent" android:padding="18dp"
+        android:background="@android:color/transparent" 
+        android:padding="18dp"
         android:elevation="2dp"
-        app:tint="@color/taxi_black_bg"
+        app:tint="#454754"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent" />
-                        </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -646,8 +648,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
-            android:layout_marginBottom="-10dp"
-            android:layout_marginHorizontal="0dp"
+            android:layout_marginBottom="4dp"
+android:layout_marginHorizontal="4dp"
             app:cardElevation="16dp"
             app:cardCornerRadius="24dp"
             app:cardBackgroundColor="@color/card_background"
@@ -655,12 +657,13 @@
             tools:visibility="visible">
 
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="24dp"
-                android:paddingTop="24dp"
-                android:paddingBottom="40dp">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="20dp"
+        android:clipToPadding="false">
 
                 <RelativeLayout
                     android:layout_width="match_parent"
@@ -958,15 +961,22 @@
                 </LinearLayout>
 
                 <Button
-                    android:id="@+id/btn_cancel_order"
-                    android:layout_width="match_parent"
-                    android:layout_height="50dp"
-                    android:layout_marginTop="24dp"
-                    android:text="Скасувати"
-                    android:textColor="@color/white"
-                    android:backgroundTint="@color/taxi_red"
-                    android:textStyle="bold"
-                    app:cornerRadius="12dp" />
+    android:id="@+id/btn_cancel_order"
+    android:layout_width="match_parent"
+    android:layout_height="60dp"
+    android:layout_marginTop="24dp"
+    android:layout_marginHorizontal="-15dp" 
+    android:text="Скасувати замовлення"
+    android:textColor="@color/taxi_red"
+    android:textSize="18sp"
+    android:textStyle="bold"
+    android:textAllCaps="false"
+    app:backgroundTint="@color/input_background"
+    app:cornerRadius="12dp"
+    android:insetTop="0dp"
+    android:insetBottom="0dp"
+    android:stateListAnimator="@null"
+    android:elevation="0dp" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

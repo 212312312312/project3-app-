@@ -571,7 +571,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
             btnOrderTaxi.isEnabled = true
             btnOrderTaxi.text = "Замовити" // Сброс текста кнопки
             btnCancelOrder.isEnabled = true
-            btnCancelOrder.text = "Скасувати"
+            btnCancelOrder.text = "Скасувати замовлення"
             tariffsProgressBar.visibility = View.GONE
         }
     }
@@ -2100,8 +2100,8 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
     
-    // Завжди фарбуємо іконку календаря в text_primary незалежно від того, обрано час чи ні
-    btnSchedule.setColorFilter(android.graphics.Color.BLACK)
+    // Завжди фарбуємо іконку календаря у фірмовий темний колір
+btnSchedule.setColorFilter(android.graphics.Color.parseColor("#454754"))
 }
 
 private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
@@ -2934,7 +2934,7 @@ private fun stopWaitingTimer() {
         
         btnCancelOrder.visibility = View.VISIBLE
         btnCancelOrder.isEnabled = true
-        btnCancelOrder.text = "Скасувати"
+        btnCancelOrder.text = "Скасувати замовлення"
 
         layoutActiveOrderPrice.visibility = View.VISIBLE 
 
@@ -3226,9 +3226,9 @@ private fun stopWaitingTimer() {
         
         scheduledDate = null
         try {
-            btnSchedule.setColorFilter(android.graphics.Color.BLACK)
-            // ИЛИ btnSchedule.clearColorFilter()
-        } catch (e: Exception){}
+    // Відновлюємо правильний колір або просто скидаємо фільтр (XML tint зробить свою справу)
+    btnSchedule.clearColorFilter() 
+} catch (e: Exception){}
 
         tvOrigin.text = "Звідки?"
         tvDestination.text = "Куди?"
