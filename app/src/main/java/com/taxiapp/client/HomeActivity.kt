@@ -2277,6 +2277,10 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
             creationPanelCard.visibility = View.GONE
             addressPanel.visibility = View.GONE
             activeOrderCard.visibility = View.VISIBLE
+            try {
+                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(activeOrderCard)
+                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_COLLAPSED
+            } catch (e: Exception) {}
             
             drawStylishRoute(points)
         }
@@ -2686,6 +2690,9 @@ private fun stopWaitingTimer() {
     private fun showActiveOrderPanel(order: TaxiOrderDto) {
     // 1. Проверяем, была ли панель скрыта до этого
     val isFirstShow = activeOrderCard.visibility != View.VISIBLE
+
+    findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
+    findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
 
     activeOrderCard.visibility = View.VISIBLE
     tariffsPanel.visibility = View.GONE
@@ -3152,36 +3159,40 @@ private fun stopWaitingTimer() {
     private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f) {
     bottomPanel.post {
         if (mMap != null) {
-            // ДОБАВЛЕНО: Если панель была скрыта до окончания расчетов, сбрасываем отступы
             if (bottomPanel.visibility != View.VISIBLE) {
                 mMap?.setPadding(0, 0, 0, 0)
                 return@post
             }
 
-            val panelHeight = bottomPanel.height
+            // Жестко вычисляем высоту нашей панели статуса
+            val panelHeight = if (bottomPanel.id == R.id.active_order_card) {
+                // Высота свернутого состояния (320dp) + нижний отступ карточки (16dp)
+                convertDpToPixel(320f + 16f).toInt() 
+            } else {
+                bottomPanel.height
+            }
+
             if (panelHeight == 0) return@post
 
             val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
             val totalBottomPadding = panelHeight + extraBuffer
             val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
+            // Применяем отступы. Теперь логотип Google поднимется ВЫШЕ панели!
             mMap?.setPadding(0, topPadding, 0, totalBottomPadding)
 
+            // Центрируем маршрут, если он есть
             if (viewModel.currentRoutePolyline != null) {
                 try {
                     val boundsBuilder = LatLngBounds.Builder()
                     if (originPlace != null && destinationPlace != null) {
                         boundsBuilder.include(originPlace!!.latLng!!)
                         boundsBuilder.include(destinationPlace!!.latLng!!)
-                        
                         currentWaypoints.forEach { boundsBuilder.include(it.first) }
                         decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
                         val labelSafePadding = convertDpToPixel(80f).toInt()
-
                         mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
-                        
-                        btnRecenterRoute.visibility = View.GONE
                     }
                 } catch (e: Exception) {}
             }
