@@ -643,55 +643,47 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <androidx.coordinatorlayout.widget.CoordinatorLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:elevation="24dp">
 
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/active_order_card"
+    android:id="@+id/active_order_card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_alignParentBottom="true"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginBottom="16dp"
+    app:cardCornerRadius="24dp"
+    app:cardBackgroundColor="@color/card_background"
+    app:cardElevation="16dp"
+    app:cardPreventCornerOverlap="false"
+    app:cardUseCompatPadding="false"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp" 
+            android:paddingTop="16dp"
+            android:paddingBottom="24dp">
+
+            <ImageButton
+                android:id="@+id/btn_add_new_order"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/layout_search_state"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior"
-                app:behavior_peekHeight="260dp" 
-                app:behavior_hideable="false"
-                app:shapeAppearanceOverlay="@style/Shape.BottomSheet.TopRounded24"
-                app:cardBackgroundColor="@color/card_background"
-                android:visibility="gone"
-                tools:visibility="visible">
-
-                <androidx.core.widget.NestedScrollView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:overScrollMode="never">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingHorizontal="24dp"
-                        android:paddingTop="12dp"
-                        android:paddingBottom="24dp">
-
-                        <View
-                            android:layout_width="36dp"
-                            android:layout_height="4dp"
-                            android:layout_gravity="center_horizontal"
-                            android:background="#E0E0E0"
-                            android:layout_marginBottom="24dp" />
-
-                        <ImageButton
-                            android:id="@+id/btn_add_new_order"
-                            android:layout_width="0dp"
-                            android:layout_height="0dp"
-                            android:visibility="gone" />
-
-                        <LinearLayout
-                            android:id="@+id/layout_search_state"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:visibility="visible">
+                android:orientation="vertical"
+                android:visibility="visible">
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -1102,7 +1094,6 @@
                     </LinearLayout>
                 </androidx.core.widget.NestedScrollView>
             </com.google.android.material.card.MaterialCardView>
-        </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
         <androidx.cardview.widget.CardView
             android:id="@+id/custom_toast_container"

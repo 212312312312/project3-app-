@@ -1652,110 +1652,118 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     }
     
     private fun drawStylishRoute(path: List<LatLng>) {
-        if (mMap == null) return
+    if (mMap == null) return
 
-        try {
-            polylineMain?.remove()
-            polylineBorder?.remove()
-            originMarker?.remove()
-            destinationMarker?.remove()
-        } catch (e: Exception) {}
+    try {
+        polylineMain?.remove()
+        polylineBorder?.remove()
+        originMarker?.remove()
+        destinationMarker?.remove()
+    } catch (e: Exception) {}
 
-        centerPin.visibility = View.GONE
-        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
-        try { mMap?.isMyLocationEnabled = false } catch (e: SecurityException) { }
-        mMap?.clear()
+    centerPin.visibility = View.GONE
+    try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
+    try { mMap?.isMyLocationEnabled = false } catch (e: SecurityException) { }
+    mMap?.clear()
 
-        val colorMain = ContextCompat.getColor(this, R.color.route_main)
-        val colorBorder = ContextCompat.getColor(this, R.color.route_border)
+    val colorMain = ContextCompat.getColor(this, R.color.route_main)
+    val colorBorder = ContextCompat.getColor(this, R.color.route_border)
 
-        val transparentMain = Color.argb(0, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
-        val transparentBorder = Color.argb(0, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
+    val transparentMain = Color.argb(0, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+    val transparentBorder = Color.argb(0, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
 
-        val borderOpts = PolylineOptions().addAll(path).width(20f).color(transparentBorder).startCap(RoundCap()).endCap(RoundCap()).zIndex(1f)
-        polylineBorder = mMap?.addPolyline(borderOpts)
+    val borderOpts = PolylineOptions().addAll(path).width(20f).color(transparentBorder).startCap(RoundCap()).endCap(RoundCap()).zIndex(1f)
+    polylineBorder = mMap?.addPolyline(borderOpts)
 
-        val mainOpts = PolylineOptions().addAll(path).width(14f).color(transparentMain).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
-        polylineMain = mMap?.addPolyline(mainOpts)
+    val mainOpts = PolylineOptions().addAll(path).width(14f).color(transparentMain).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
+    polylineMain = mMap?.addPolyline(mainOpts)
 
-        if (originPlace != null && originPlace!!.latLng != null) {
-            originMarker = mMap?.addMarker(MarkerOptions()
-                .position(originPlace!!.latLng!!)
-                .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
-                .anchor(0.5f, 0.5f)
-                .alpha(0f) 
-                .zIndex(1000f))
+    if (originPlace != null && originPlace!!.latLng != null) {
+        originMarker = mMap?.addMarker(MarkerOptions()
+            .position(originPlace!!.latLng!!)
+            .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
+            .anchor(0.5f, 0.5f)
+            .alpha(0f) 
+            .zIndex(1000f))
 
-            val uiText = tvOrigin.text.toString()
-            val finalOriginText = if (uiText.contains("...") || uiText.isBlank()) (originPlace?.name ?: "А") else uiText
-            tvOverlayOrigin.text = finalOriginText
-            overlayOrigin.alpha = 0f
-            overlayOrigin.visibility = View.VISIBLE
-        }
-
-        if (destinationPlace != null && destinationPlace!!.latLng != null) {
-            destinationMarker = mMap?.addMarker(MarkerOptions()
-                .position(destinationPlace!!.latLng!!)
-                .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
-                .anchor(0.5f, 0.5f)
-                .alpha(0f)
-                .zIndex(1000f))
-
-            val uiText = tvDestination.text.toString()
-            val finalDestText = if (uiText.contains("...") || uiText.isBlank()) (destinationPlace?.name ?: "Б") else uiText
-            tvOverlayDest.text = finalDestText
-
-            val calendar = java.util.Calendar.getInstance()
-            calendar.add(java.util.Calendar.SECOND, routeDurationSeconds)
-            val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-            val arrivalTime = sdf.format(calendar.time)
-            tvOverlayDestDetails.text = "Приїдемо о $arrivalTime"
-
-            overlayDest.alpha = 0f
-            overlayDest.visibility = View.VISIBLE
-        }
-
-        val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
-        for (wpPair in currentWaypoints) {
-            mMap?.addMarker(MarkerOptions().position(wpPair.first).icon(waypointIcon).anchor(0.5f, 0.5f).alpha(0f).zIndex(500f))
-        }
-
-        val boundsBuilder = LatLngBounds.Builder()
-        if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
-        if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
-        path.forEach { boundsBuilder.include(it) }
-
-        val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
-
-        visibleBottomPanel.post {
-            try {
-                val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
-                
-                val paddingBottom = panelHeight 
-                val paddingTop = convertDpToPixel(10f).toInt() 
-                val paddingSide = convertDpToPixel(80f).toInt() 
-
-                mMap?.setPadding(0, paddingTop, 0, paddingBottom) 
-
-                val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
-
-                mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
-                    override fun onFinish() {
-                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                    }
-
-                    override fun onCancel() {
-                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                    }
-                })
-            } catch (e: Exception) {
-                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-            }
-        }
-        
-        btnRecenterRoute.visibility = View.GONE
-        contentBottomSheet.post { updateSmartLabels() }
+        val uiText = tvOrigin.text.toString()
+        val finalOriginText = if (uiText.contains("...") || uiText.isBlank()) (originPlace?.name ?: "А") else uiText
+        tvOverlayOrigin.text = finalOriginText
+        overlayOrigin.alpha = 0f
+        overlayOrigin.visibility = View.VISIBLE
     }
+
+    if (destinationPlace != null && destinationPlace!!.latLng != null) {
+        destinationMarker = mMap?.addMarker(MarkerOptions()
+            .position(destinationPlace!!.latLng!!)
+            .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
+            .anchor(0.5f, 0.5f)
+            .alpha(0f)
+            .zIndex(1000f))
+
+        val uiText = tvDestination.text.toString()
+        val finalDestText = if (uiText.contains("...") || uiText.isBlank()) (destinationPlace?.name ?: "Б") else uiText
+        tvOverlayDest.text = finalDestText
+
+        val calendar = java.util.Calendar.getInstance()
+        calendar.add(java.util.Calendar.SECOND, routeDurationSeconds)
+        val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        val arrivalTime = sdf.format(calendar.time)
+        tvOverlayDestDetails.text = "Приїдемо о $arrivalTime"
+
+        overlayDest.alpha = 0f
+        overlayDest.visibility = View.VISIBLE
+    }
+
+    val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
+    for (wpPair in currentWaypoints) {
+        mMap?.addMarker(MarkerOptions().position(wpPair.first).icon(waypointIcon).anchor(0.5f, 0.5f).alpha(0f).zIndex(500f))
+    }
+
+    val boundsBuilder = LatLngBounds.Builder()
+    if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
+    if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
+    path.forEach { boundsBuilder.include(it) }
+
+    val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
+
+    visibleBottomPanel.post {
+        try {
+            val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
+            
+            // --- ДОБАВЛЕНО: Читаем margin, чтобы добавить его к отступу карты ---
+            var marginBottom = 0
+            val params = visibleBottomPanel.layoutParams
+            if (params is ViewGroup.MarginLayoutParams) {
+                marginBottom = params.bottomMargin
+            }
+            
+            // Учитываем margin "островка" в итоговом нижнем отступе
+            val paddingBottom = panelHeight + marginBottom
+            val paddingTop = convertDpToPixel(10f).toInt() 
+            val paddingSide = convertDpToPixel(80f).toInt() 
+
+            mMap?.setPadding(0, paddingTop, 0, paddingBottom) 
+
+            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
+
+            mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
+                override fun onFinish() {
+                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                }
+
+                override fun onCancel() {
+                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                }
+            })
+        } catch (e: Exception) {
+            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+        }
+    }
+    
+    btnRecenterRoute.visibility = View.GONE
+    contentBottomSheet.post { updateSmartLabels() }
+}
 
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
         if (polylineMain == null || polylineBorder == null) return
@@ -2276,11 +2284,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
             // Гарантуємо правильні відступи перед відмальовуванням
             creationPanelCard.visibility = View.GONE
             addressPanel.visibility = View.GONE
-            activeOrderCard.visibility = View.VISIBLE
-            try {
-                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(activeOrderCard)
-                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_COLLAPSED
-            } catch (e: Exception) {}
+            
             
             drawStylishRoute(points)
         }
@@ -2689,7 +2693,7 @@ private fun stopWaitingTimer() {
 
     private fun showActiveOrderPanel(order: TaxiOrderDto) {
     // 1. Проверяем, была ли панель скрыта до этого
-    val isFirstShow = activeOrderCard.visibility != View.VISIBLE
+    val isFirstShow = activeOrderCard.visibility != View.VISIBLE || ivMenuIcon.tag != "order_mode"
 
     findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
     findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
@@ -2702,7 +2706,13 @@ private fun stopWaitingTimer() {
     addressPanel.visibility = View.GONE
 
     // Вирішення 3: Приховуємо кнопку "Моє місцезнаходження"
-    btnRecenter.visibility = View.GONE
+    btnRecenter.visibility = View.GONE  
+
+    ivMenuIcon.tag = "order_mode"
+    if (isFirstShow) {
+        setLocationButtonAnchor(R.id.active_order_card)
+        updateMapPadding(activeOrderCard, 0f, 20f)
+    }
 
     // Вирішення 4: Робимо кнопку меню видимою і перетворюємо її на кнопку "Назад"
     btnMenu.visibility = View.VISIBLE
@@ -3164,21 +3174,23 @@ private fun stopWaitingTimer() {
                 return@post
             }
 
-            // Жестко вычисляем высоту нашей панели статуса
-            val panelHeight = if (bottomPanel.id == R.id.active_order_card) {
-                // Высота свернутого состояния (320dp) + нижний отступ карточки (16dp)
-                convertDpToPixel(320f + 16f).toInt() 
-            } else {
-                bottomPanel.height
-            }
-
+            val panelHeight = bottomPanel.height
             if (panelHeight == 0) return@post
 
+            // НОВОЕ: Динамически получаем нижний отступ (margin) самой панели
+            var marginBottom = 0
+            val params = bottomPanel.layoutParams
+            if (params is ViewGroup.MarginLayoutParams) {
+                marginBottom = params.bottomMargin
+            }
+
             val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
-            val totalBottomPadding = panelHeight + extraBuffer
+            
+            // ВАЖНО: Добавляем marginBottom к общей высоте отступа карты
+            val totalBottomPadding = panelHeight + marginBottom + extraBuffer
             val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
-            // Применяем отступы. Теперь логотип Google поднимется ВЫШЕ панели!
+            // Применяем отступы. Теперь карта знает о "висящей" карточке!
             mMap?.setPadding(0, topPadding, 0, totalBottomPadding)
 
             // Центрируем маршрут, если он есть
