@@ -238,6 +238,27 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private var destinationPlace: Place? = null
     private var currentCity: CityData? = null
 
+
+
+private lateinit var layoutSearchControls: LinearLayout
+private lateinit var layoutDriverFoundState: LinearLayout
+private lateinit var btnCancelRideDriver: Button // Нижня кнопка скасування з блоку водія
+    // Переменные для статус-пила
+private lateinit var statusCircle1: com.google.android.material.card.MaterialCardView
+private lateinit var statusIcon1: ImageView
+private lateinit var statusLine1: com.google.android.material.card.MaterialCardView
+
+private lateinit var statusCircle2: com.google.android.material.card.MaterialCardView
+private lateinit var statusIcon2: ImageView
+private lateinit var statusLine2: com.google.android.material.card.MaterialCardView
+
+private lateinit var statusCircle3: com.google.android.material.card.MaterialCardView
+private lateinit var statusIcon3: ImageView
+private lateinit var statusLine3: com.google.android.material.card.MaterialCardView
+
+private lateinit var statusCircle4: com.google.android.material.card.MaterialCardView
+private lateinit var statusIcon4: ImageView
+
     private lateinit var btnSchedule: ImageButton 
     private var scheduledDate: Calendar? = null
 
@@ -714,6 +735,22 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         centerPin.alpha = 0f
         try { pinShadow.alpha = 0f } catch (e: Exception) {}
 
+
+        statusCircle1 = findViewById(R.id.status_circle_1)
+statusIcon1 = findViewById(R.id.status_icon_1)
+statusLine1 = findViewById(R.id.status_line_1)
+
+statusCircle2 = findViewById(R.id.status_circle_2)
+statusIcon2 = findViewById(R.id.status_icon_2)
+statusLine2 = findViewById(R.id.status_line_2)
+
+statusCircle3 = findViewById(R.id.status_circle_3)
+statusIcon3 = findViewById(R.id.status_icon_3)
+statusLine3 = findViewById(R.id.status_line_3)
+
+statusCircle4 = findViewById(R.id.status_circle_4)
+statusIcon4 = findViewById(R.id.status_icon_4)
+
         mapLoadingCurtain = findViewById(R.id.map_loading_curtain)
         contentBottomSheet = findViewById(R.id.content_bottom_sheet)
         
@@ -834,6 +871,11 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         tvOrderTariffName = findViewById(R.id.tv_order_tariff_name)
         tvOrderServices = findViewById(R.id.tv_order_services)
         tvOrderComment = findViewById(R.id.tv_order_comment)
+
+
+        layoutSearchControls = findViewById(R.id.layout_search_controls)
+layoutDriverFoundState = findViewById(R.id.layout_driver_found_state)
+btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         
         layoutDriverDetails = findViewById(R.id.layout_driver_assigned_details)
         tvCarPlateLarge = findViewById(R.id.tv_car_plate_large)
@@ -1579,6 +1621,54 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         return AddressUtils.formatAddress(fullAddress)
     }
 
+    private fun updateOrderProgress(step: Int) {
+    val activeColor = android.graphics.Color.parseColor("#33cca1")
+    val inactiveColor = androidx.core.content.ContextCompat.getColor(this, R.color.divider_color)
+    val bgCardColor = androidx.core.content.ContextCompat.getColor(this, R.color.card_background)
+
+    // Вспомогательная функция для настройки кружка
+    fun setCircle(
+        card: com.google.android.material.card.MaterialCardView, 
+        icon: ImageView, 
+        isFilled: Boolean, 
+        isActiveOutline: Boolean
+    ) {
+        if (isFilled) {
+            card.setCardBackgroundColor(activeColor)
+            card.strokeWidth = 0
+            icon.visibility = View.VISIBLE
+        } else if (isActiveOutline) {
+            card.setCardBackgroundColor(bgCardColor)
+            card.strokeColor = activeColor
+            card.strokeWidth = convertDpToPixel(4f).toInt()
+            icon.visibility = View.GONE
+        } else {
+            card.setCardBackgroundColor(bgCardColor)
+            card.strokeColor = inactiveColor
+            card.strokeWidth = convertDpToPixel(4f).toInt()
+            icon.visibility = View.GONE
+        }
+    }
+
+    // Круг 1 (Створення)
+    setCircle(statusCircle1, statusIcon1, isFilled = step >= 1, isActiveOutline = false)
+    // Лінія 1 стає бірюзовою відразу на 1-му кроці (будує міст до Круга 2)
+    statusLine1.setCardBackgroundColor(if (step >= 1) activeColor else inactiveColor)
+
+    // Круг 2 (Прийнято)
+    setCircle(statusCircle2, statusIcon2, isFilled = step >= 2, isActiveOutline = step == 1)
+    // Лінія 2 стає бірюзовою на 2-му кроці (будує міст до Круга 3)
+    statusLine2.setCardBackgroundColor(if (step >= 2) activeColor else inactiveColor)
+
+    // Круг 3 (В дорозі)
+    setCircle(statusCircle3, statusIcon3, isFilled = step >= 3, isActiveOutline = step == 2)
+    // Лінія 3 стає бірюзовою на 3-му кроці (будує міст до Круга 4)
+    statusLine3.setCardBackgroundColor(if (step >= 3) activeColor else inactiveColor)
+
+    // Круг 4 (Завершено)
+    setCircle(statusCircle4, statusIcon4, isFilled = step >= 4, isActiveOutline = step == 3)
+}
+
     private fun getAddressForOrigin(latLng: LatLng) {
         Thread {
             try {
@@ -1731,23 +1821,26 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
         try {
             val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
             
-            // --- ДОБАВЛЕНО: Читаем margin, чтобы добавить его к отступу карты ---
             var marginBottom = 0
+            var sideMargin = 0 // <--- ДОБАВЛЯЕМ СЮДА
             val params = visibleBottomPanel.layoutParams
             if (params is ViewGroup.MarginLayoutParams) {
                 marginBottom = params.bottomMargin
+                sideMargin = params.leftMargin // <--- И СЮДА
             }
             
-            // Учитываем margin "островка" в итоговом нижнем отступе
             val paddingBottom = panelHeight + marginBottom
             val paddingTop = convertDpToPixel(10f).toInt() 
             val paddingSide = convertDpToPixel(80f).toInt() 
 
-            mMap?.setPadding(0, paddingTop, 0, paddingBottom) 
+            // ВМЕСТО: mMap?.setPadding(0, paddingTop, 0, paddingBottom)
+            // ПИШЕМ:
+            mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom) 
 
             val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
 
             mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
+                // ... остальной код (onFinish / onCancel) ...
                 override fun onFinish() {
                     runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
                 }
@@ -2947,166 +3040,182 @@ private fun stopWaitingTimer() {
     }
 
     private fun updateStatusUI(order: TaxiOrderDto) {
-        orderStatusText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+    orderStatusText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+    
+    btnCancelOrder.isEnabled = true
+    btnCancelOrder.text = "Скасувати замовлення"
+
+    // Звідси прибрано layoutActiveOrderPrice.visibility = View.VISIBLE
+
+    when(order.status) {
+        "REQUESTED", "OFFERING" -> {
+            updateOrderProgress(1)
+            orderStatusText.text = "Пошук водія..."
+            startStatusBlinking()
+            
+            layoutSearchControls.visibility = View.VISIBLE
+            layoutDriverFoundState.visibility = View.GONE
+            
+            layoutSearchDetails.visibility = View.VISIBLE
+            layoutDriverDetails.visibility = View.GONE
+            stopDriverTracking()
+            
+            stopWaitingTimer()
+            layoutWaitingInfo.visibility = View.GONE
+        }
         
-        btnCancelOrder.visibility = View.VISIBLE
-        btnCancelOrder.isEnabled = true
-        btnCancelOrder.text = "Скасувати замовлення"
-
-        layoutActiveOrderPrice.visibility = View.VISIBLE 
-
-        when(order.status) {
-            "REQUESTED", "OFFERING" -> {
-                orderStatusText.text = "Пошук водія..."
-                startStatusBlinking()
-                layoutSearchDetails.visibility = View.VISIBLE
-                layoutDriverDetails.visibility = View.GONE
-                stopDriverTracking()
-                
-                // Захист: ховаємо таймер, якщо статус змінився
-                stopWaitingTimer()
-                layoutWaitingInfo.visibility = View.GONE
-            }
+        "ACCEPTED" -> {
+            updateOrderProgress(2)
+            stopStatusBlinking()
+            orderStatusText.text = "Водій їде до вас"
             
-            "ACCEPTED" -> {
-                stopStatusBlinking()
-                orderStatusText.text = "Водій їде до вас"
-                layoutSearchDetails.visibility = View.GONE
-                layoutDriverDetails.visibility = View.VISIBLE
-                updateDriverInfo(order)
-                
-                // Захист: ховаємо таймер
-                stopWaitingTimer()
-                layoutWaitingInfo.visibility = View.GONE
-
-                order.driver?.let { drv ->
-                    val lat = drv.latitude
-                    val lng = drv.longitude
-                    
-                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-                        val initialLoc = TrackingLocationDto(
-                            lat = lat,
-                            lng = lng,
-                            bearing = drv.bearing ?: 0f 
-                        )
-                        updateDriverMarker(initialLoc)
-                    }
-                }
-                startDriverTracking(order.id)
-            }
-
-            "DRIVER_ARRIVED" -> {
-                stopStatusBlinking()
-                orderStatusText.text = "Водій на місці" 
-                layoutSearchDetails.visibility = View.GONE
-                layoutDriverDetails.visibility = View.VISIBLE
-                btnCancelOrder.visibility = View.GONE 
-                updateDriverInfo(order)
-                
-                // ---> НОВЕ: Запускаємо відлік очікування <---
-                startWaitingTimer(order)
-                
-                order.driver?.let { drv ->
-                    val lat = drv.latitude
-                    val lng = drv.longitude
-                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-                        val initialLoc = TrackingLocationDto(
-                            lat = lat, 
-                            lng = lng, 
-                            bearing = drv.bearing ?: 0f
-                        )
-                        updateDriverMarker(initialLoc)
-                    }
-                }
-
-                startDriverTracking(order.id)
-            }
-
-            "IN_PROGRESS" -> {
-                stopStatusBlinking()
-                orderStatusText.text = "В дорозі"
-                layoutActiveOrderPrice.visibility = View.GONE 
-                layoutSearchDetails.visibility = View.GONE
-                layoutDriverDetails.visibility = View.VISIBLE
-                btnCancelOrder.visibility = View.GONE 
-                updateDriverInfo(order)
-                
-                // ---> НОВЕ: Зупиняємо таймер та показуємо фінальну надбавку <---
-                stopWaitingTimer()
-                if (order.waitingPrice > 0) {
-                    layoutWaitingInfo.visibility = View.VISIBLE
-                    layoutWaitingInfo.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#FFF4E6"))
-                    tvWaitingTimer.setTextColor(android.graphics.Color.parseColor("#D9480F"))
-                    // Форматуємо до 2 знаків після коми
-                    tvWaitingTimer.text = String.format("💰 Додано за очікування: %.2f грн", order.waitingPrice)
-                } else {
-                    layoutWaitingInfo.visibility = View.GONE
-                }
-
-                order.driver?.let { drv ->
-                    val lat = drv.latitude
-                    val lng = drv.longitude
-                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-                        val initialLoc = TrackingLocationDto(
-                            lat = lat, 
-                            lng = lng, 
-                            bearing = drv.bearing ?: 0f
-                        )
-                        updateDriverMarker(initialLoc)
-                    }
-                }
-
-                startDriverTracking(order.id)
-            }
+            layoutSearchControls.visibility = View.GONE
+            layoutDriverFoundState.visibility = View.VISIBLE
+            btnCancelRideDriver.visibility = View.VISIBLE
             
-            "COMPLETED" -> {
-                stopStatusBlinking()
-                orderStatusText.text = "Поїздку завершено"
-                layoutActiveOrderPrice.visibility = View.GONE
-                layoutSearchDetails.visibility = View.GONE
-                layoutDriverDetails.visibility = View.GONE
-                btnCancelOrder.visibility = View.GONE
-                stopDriverTracking()
-                
-                // ---> НОВЕ: Ховаємо таймер <---
-                stopWaitingTimer()
-                layoutWaitingInfo.visibility = View.GONE
-                
-                // Таймер опроса уже остановлен ViewModel
+            layoutSearchDetails.visibility = View.GONE
+            layoutDriverDetails.visibility = View.VISIBLE
+            updateDriverInfo(order)
+            
+            stopWaitingTimer()
+            layoutWaitingInfo.visibility = View.GONE
 
-                if (!order.isRatedByClient) {
-                    showRatingDialog(order.id, order.driver?.fullName ?: "водієм")
-                } else {
-                    viewModel.clearOrderState()
-                    activeOrderId = null
-                    showAddressPanel()
+            order.driver?.let { drv ->
+                val lat = drv.latitude
+                val lng = drv.longitude
+                if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                    val initialLoc = TrackingLocationDto(
+                        lat = lat,
+                        lng = lng,
+                        bearing = drv.bearing ?: 0f 
+                    )
+                    updateDriverMarker(initialLoc)
                 }
             }
-            
-            "CANCELLED" -> {
-                stopStatusBlinking()
-                orderStatusText.text = "Скасовано"
-                orderStatusText.setTextColor(Color.RED)
-                layoutActiveOrderPrice.visibility = View.GONE
-                layoutSearchDetails.visibility = View.GONE
-                layoutDriverDetails.visibility = View.GONE
-                btnCancelOrder.visibility = View.GONE
-                stopDriverTracking()
-                
-                // ---> НОВЕ: Ховаємо таймер <---
-                stopWaitingTimer()
-                layoutWaitingInfo.visibility = View.GONE
+            startDriverTracking(order.id)
+        }
 
-                // ДОБАВЛЕНО: Заставляем карту пересчитать отступы для похудевшей карточки!
-                // Теперь логотип Google моментально опустится вниз.
-                updateMapPadding(activeOrderCard, 0f, 20f)
-                
+        "DRIVER_ARRIVED" -> {
+            updateOrderProgress(2)
+            stopStatusBlinking()
+            orderStatusText.text = "Водій на місці" 
+            
+            layoutSearchControls.visibility = View.GONE
+            layoutDriverFoundState.visibility = View.VISIBLE
+            btnCancelRideDriver.visibility = View.VISIBLE
+            
+            layoutSearchDetails.visibility = View.GONE
+            layoutDriverDetails.visibility = View.VISIBLE
+            
+            updateDriverInfo(order)
+            startWaitingTimer(order)
+            
+            order.driver?.let { drv ->
+                val lat = drv.latitude
+                val lng = drv.longitude
+                if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                    val initialLoc = TrackingLocationDto(
+                        lat = lat, 
+                        lng = lng, 
+                        bearing = drv.bearing ?: 0f
+                    )
+                    updateDriverMarker(initialLoc)
+                }
+            }
+
+            startDriverTracking(order.id)
+        }
+
+        "IN_PROGRESS" -> {
+            updateOrderProgress(3)
+            stopStatusBlinking()
+            orderStatusText.text = "В дорозі"
+            
+            layoutSearchControls.visibility = View.GONE
+            layoutDriverFoundState.visibility = View.VISIBLE
+            btnCancelRideDriver.visibility = View.GONE
+            
+            // Звідси прибрано layoutActiveOrderPrice.visibility = View.GONE
+            layoutSearchDetails.visibility = View.GONE
+            layoutDriverDetails.visibility = View.VISIBLE
+            
+            updateDriverInfo(order)
+            
+            stopWaitingTimer()
+            if (order.waitingPrice > 0) {
+                layoutWaitingInfo.visibility = View.VISIBLE
+                layoutWaitingInfo.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#FFF4E6"))
+                tvWaitingTimer.setTextColor(android.graphics.Color.parseColor("#D9480F"))
+                tvWaitingTimer.text = String.format("💰 Додано за очікування: %.2f грн", order.waitingPrice)
+            } else {
+                layoutWaitingInfo.visibility = View.GONE
+            }
+
+            order.driver?.let { drv ->
+                val lat = drv.latitude
+                val lng = drv.longitude
+                if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                    val initialLoc = TrackingLocationDto(
+                        lat = lat, 
+                        lng = lng, 
+                        bearing = drv.bearing ?: 0f
+                    )
+                    updateDriverMarker(initialLoc)
+                }
+            }
+
+            startDriverTracking(order.id)
+        }
+        
+        "COMPLETED" -> {
+            updateOrderProgress(4)
+            stopStatusBlinking()
+            orderStatusText.text = "Поїздку завершено"
+            
+            layoutSearchControls.visibility = View.GONE
+            layoutDriverFoundState.visibility = View.GONE
+            
+            // Звідси прибрано layoutActiveOrderPrice.visibility = View.GONE
+            layoutSearchDetails.visibility = View.GONE
+            layoutDriverDetails.visibility = View.GONE
+            
+            stopDriverTracking()
+            stopWaitingTimer()
+            layoutWaitingInfo.visibility = View.GONE
+
+            if (!order.isRatedByClient) {
+                showRatingDialog(order.id, order.driver?.fullName ?: "водієм")
+            } else {
                 viewModel.clearOrderState()
-                
-                Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
+                activeOrderId = null
+                showAddressPanel()
             }
         }
+        
+        "CANCELLED" -> {
+            stopStatusBlinking()
+            orderStatusText.text = "Скасовано"
+            orderStatusText.setTextColor(Color.RED)
+            
+            layoutSearchControls.visibility = View.GONE
+            layoutDriverFoundState.visibility = View.GONE
+            
+            // Звідси прибрано layoutActiveOrderPrice.visibility = View.GONE
+            layoutSearchDetails.visibility = View.GONE
+            layoutDriverDetails.visibility = View.GONE
+            
+            stopDriverTracking()
+            stopWaitingTimer()
+            layoutWaitingInfo.visibility = View.GONE
+
+            updateMapPadding(activeOrderCard, 0f, 20f)
+            
+            viewModel.clearOrderState()
+            
+            Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
+        }
     }
+}
     
     private fun updateDriverInfo(order: TaxiOrderDto) {
         order.driver?.let { drv ->
@@ -3177,11 +3286,13 @@ private fun stopWaitingTimer() {
             val panelHeight = bottomPanel.height
             if (panelHeight == 0) return@post
 
-            // НОВОЕ: Динамически получаем нижний отступ (margin) самой панели
             var marginBottom = 0
+            var sideMargin = 0 // <--- НОВАЯ ПЕРЕМЕННАЯ ДЛЯ БОКОВОГО ОТСТУПА
+
             val params = bottomPanel.layoutParams
             if (params is ViewGroup.MarginLayoutParams) {
                 marginBottom = params.bottomMargin
+                sideMargin = params.leftMargin // <--- ЧИТАЕМ ТВОИ 8dp НАПРЯМУЮ ИЗ XML
             }
 
             val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
@@ -3190,8 +3301,9 @@ private fun stopWaitingTimer() {
             val totalBottomPadding = panelHeight + marginBottom + extraBuffer
             val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
-            // Применяем отступы. Теперь карта знает о "висящей" карточке!
-            mMap?.setPadding(0, topPadding, 0, totalBottomPadding)
+            // ПРИМЕНЯЕМ ОТСТУПЫ: Передаем sideMargin в качестве Left и Right padding!
+            // Логотип Google послушно сдвинется на одну линию с карточкой.
+            mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
 
             // Центрируем маршрут, если он есть
             if (viewModel.currentRoutePolyline != null) {
