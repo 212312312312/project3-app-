@@ -989,17 +989,17 @@
             android:layout_marginTop="16dp" android:layout_marginBottom="16dp">
             
             <TextView
-                android:id="@+id/tv_car_plate_large"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AA 0000 AA"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary"
-                android:background="@drawable/bg_status_pill"
-                android:backgroundTint="@color/input_background"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="6dp" />
+    android:id="@+id/tv_car_plate_large"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="AA 0000 AA"
+    android:textSize="18sp"
+    android:textStyle="bold"
+    android:textColor="@color/text_primary"
+    android:background="@drawable/bg_car_number"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="6dp"
+    android:letterSpacing="0.05" />
                 
             <TextView
                 android:id="@+id/tv_car_details_subtitle"
