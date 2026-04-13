@@ -1,16 +1,15 @@
 package com.taxiapp.client
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -18,6 +17,8 @@ import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.ChatMessageDto
 import com.taxiapp.client.network.dto.SendMessageRequest
 import com.taxiapp.client.utils.SessionManager
+import com.taxiapp.client.utils.ViewUtils
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
@@ -29,7 +30,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var rvChat: RecyclerView
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
-    private lateinit var btnBack: ImageButton
+    private lateinit var btnBack: ImageView
 
     private val chatAdapter = ChatAdapter(mutableListOf())
     private var token: String = ""
@@ -38,36 +39,49 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
+        // 1. ПОВНОЕКРАННИЙ РЕЖИМ (Immersive)
+        try {
+            ViewUtils.makeImmersive(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 2. ВИРІШЕННЯ БАГУ З КЛАВІАТУРОЮ
+        // Знаходимо кореневий шар та динамічно змінюємо його відступ залежно від клавіатури
+        val rootLayout = findViewById<View>(R.id.root_chat_layout)
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
+            val imeHeight = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            // Піднімаємо весь контент на висоту клавіатури
+            // Зберігаємо верхній відступ 48dp (переводимо в пікселі приблизно або беремо з XML)
+            val paddingTop = (48 * resources.displayMetrics.density).toInt()
+
+            view.setPadding(view.paddingLeft, paddingTop, view.paddingRight, imeHeight)
+
+            // Якщо клавіатура відкрилася — скролимо чат до останнього повідомлення
+            if (imeHeight > 0) {
+                scrollToBottom()
+            }
+            insets
+        }
+
         orderId = intent.getLongExtra("ORDER_ID", -1L)
         if (orderId == -1L) {
             finish()
             return
         }
 
-        // --- УМНОЕ ПОЛУЧЕНИЕ ТОКЕНА ---
+        // Авторизація
         val sessionManager = SessionManager(this)
         val rawToken = sessionManager.fetchAuthToken() ?: ""
-
-        // Предотвращаем дублирование "Bearer Bearer"
-        token = if (rawToken.startsWith("Bearer ")) {
-            rawToken
-        } else {
-            "Bearer $rawToken"
-        }
-
-        Log.d("CHAT_DEBUG", "Форматований токен: $token")
-        // ------------------------------
+        token = if (rawToken.startsWith("Bearer ")) rawToken else "Bearer $rawToken"
 
         initUI()
         loadMessageHistory()
 
-        // --- СИСТЕМА REAL-TIME ЧЕРЕЗ EVENT BUS ---
+        // Real-time оновлення
         lifecycleScope.launch {
             ChatEventBus.newMessages.collect {
-                // 🛑 РІШЕННЯ RACE CONDITION:
-                // Даємо серверу 800 мілісекунд, щоб він встиг завершити транзакцію (commit)
-                // в базі даних ПЕРЕД тим, як ми зробимо GET запит.
-                kotlinx.coroutines.delay(800)
+                delay(800)
                 loadMessageHistory(silent = true)
             }
         }
@@ -129,9 +143,7 @@ class ChatActivity : AppCompatActivity() {
                         scrollToBottom()
                     }
                 } else {
-                    // Теперь мы увидим точный код ошибки, если она произойдет
-                    Toast.makeText(this@ChatActivity, "Помилка відправки: ${response.code()}", Toast.LENGTH_SHORT).show()
-                    Log.e("CHAT_ERROR", "Помилка відправки: ${response.code()} - ${response.errorBody()?.string()}")
+                    Toast.makeText(this@ChatActivity, "Помилка відправки", Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -143,27 +155,24 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Кажемо системі, що екран відкрито (глушимо пуші)
         ChatEventBus.isChatScreenOpen = true
     }
 
     override fun onResume() {
         super.onResume()
-        // НАЙГОЛОВНІШЕ РІШЕННЯ ДЛЯ ТВОГО ТЕСТУ:
-        // Щоразу, коли ми повертаємося в додаток (розгортаємо його),
-        // автоматично і тихо підтягуємо свіжі повідомлення.
         loadMessageHistory(silent = true)
     }
 
     override fun onStop() {
         super.onStop()
-        // Коли згортаємо додаток - дозволяємо Firebase показувати пуші
         ChatEventBus.isChatScreenOpen = false
     }
 
     private fun scrollToBottom() {
         if (chatAdapter.itemCount > 0) {
-            rvChat.smoothScrollToPosition(chatAdapter.itemCount - 1)
+            rvChat.post {
+                rvChat.smoothScrollToPosition(chatAdapter.itemCount - 1)
+            }
         }
     }
 }
