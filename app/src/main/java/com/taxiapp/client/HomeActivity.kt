@@ -218,8 +218,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var btnCallDriver: ImageButton
     private lateinit var tvDriverHealthInfo: TextView
 
-    private lateinit var layoutWaitingInfo: LinearLayout
-    private lateinit var tvWaitingTimer: TextView
+
     private var waitingTimerHandler = Handler(Looper.getMainLooper())
     private var waitingTimerRunnable: Runnable? = null
 
@@ -258,6 +257,9 @@ private lateinit var statusLine3: com.google.android.material.card.MaterialCardV
 
 private lateinit var statusCircle4: com.google.android.material.card.MaterialCardView
 private lateinit var statusIcon4: ImageView
+
+private lateinit var cardWaitingTimer: View
+private lateinit var tvNewWaitingTimer: TextView
 
     private lateinit var btnSchedule: ImageButton 
     private var scheduledDate: Calendar? = null
@@ -763,6 +765,11 @@ statusIcon4 = findViewById(R.id.status_icon_4)
 
         profileUserName = findViewById(R.id.profile_user_name)
         profileBtnDetails = findViewById(R.id.btn_open_profile_details)
+
+        cardWaitingTimer = findViewById(R.id.card_waiting_timer)
+tvNewWaitingTimer = findViewById(R.id.tv_new_waiting_timer)
+
+
         profileCityText = findViewById(R.id.profile_current_city)
         profileBtnCity = findViewById(R.id.profile_btn_change_city)
 
@@ -774,8 +781,7 @@ statusIcon4 = findViewById(R.id.status_icon_4)
         ivThemeMoon = findViewById(R.id.iv_theme_moon)
         tvThemeLabel = findViewById(R.id.tv_theme_label)
 
-        layoutWaitingInfo = findViewById(R.id.layout_waiting_info)
-        tvWaitingTimer = findViewById(R.id.tv_waiting_timer)
+
 
         btnChangePrice = findViewById(R.id.btn_change_price)
         btnChangePrice.setOnClickListener {
@@ -2476,21 +2482,21 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun startWaitingTimer(order: TaxiOrderDto) {
-    stopWaitingTimer() // Останавливаем старый, если был
+    stopWaitingTimer()
 
-    if (order.arrivedAt == null) return
-    layoutWaitingInfo.visibility = View.VISIBLE
+    if (order.arrivedAt == null) {
+        cardWaitingTimer.visibility = View.GONE
+        return
+    }
 
-    // 1. Очищаем время от миллисекунд и "Z" (иначе Android не сможет спарсить строку)
+    cardWaitingTimer.visibility = View.VISIBLE
+
     val cleanArrivedAt = order.arrivedAt.substringBefore(".").substringBefore("Z")
-
     val format = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
-    // format.timeZone = TimeZone.getTimeZone("UTC") <-- Убрали, чтобы использовать локальное время телефона
     
     val arrivedTime = try {
         format.parse(cleanArrivedAt)?.time ?: return
     } catch (e: Exception) {
-        e.printStackTrace()
         return
     }
 
@@ -2508,22 +2514,22 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
             val freeMins = order.freeWaitingMinutes
 
             if (diffMinutesFull <= freeMins) {
-                // Бесплатное ожидание (Зеленый цвет)
+                // 1. БЕЗКОШТОВНЕ ОЧІКУВАННЯ (Зворотний відлік)
                 val remainingMs = (freeMins * 60 * 1000) - diffMs
                 val remMin = (remainingMs / (1000 * 60)).toInt()
                 val remSec = ((remainingMs / 1000) % 60).toInt()
                 
-                layoutWaitingInfo.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#EBFBEE"))
-                tvWaitingTimer.setTextColor(android.graphics.Color.parseColor("#2B8A3E"))
-                tvWaitingTimer.text = String.format("⏱ Безкоштовне очікування: %02d:%02d", remMin, remSec)
+                tvNewWaitingTimer.text = String.format("%02d:%02d", remMin, remSec)
+                tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.text_secondary))
             } else {
-                // Платное ожидание (Красный цвет)
-                val paidMins = Math.floor(diffMinutesFull - freeMins).toInt()
-                val extraCost = paidMins * order.pricePerWaitingMinute
+                // 2. ПЛАТНЕ ОЧІКУВАННЯ (Відлік вперед: +00:01, +00:02...)
+                val paidMs = diffMs - (freeMins * 60 * 1000) // Час, що пройшов понад безкоштовний
+                val paidMin = (paidMs / (1000 * 60)).toInt()
+                val paidSec = ((paidMs / 1000) % 60).toInt()
                 
-                layoutWaitingInfo.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#FFF5F5"))
-                tvWaitingTimer.setTextColor(android.graphics.Color.parseColor("#C92A2A"))
-                tvWaitingTimer.text = String.format("⏳ Платне очікування: %d хв (+%.2f грн)", paidMins, extraCost)
+                tvNewWaitingTimer.text = String.format("+%02d:%02d", paidMin, paidSec)
+                // ИЗМЕНЕНО: Берем цвет taxi_red_cancel из ресурсов
+                tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.taxi_red_cancel))
             }
             waitingTimerHandler.postDelayed(this, 1000)
         }
@@ -2534,6 +2540,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 private fun stopWaitingTimer() {
     waitingTimerRunnable?.let { waitingTimerHandler.removeCallbacks(it) }
     waitingTimerRunnable = null
+    cardWaitingTimer.visibility = View.GONE // Скрываем табло
 }    
 
     private fun displayTariffs() {
@@ -3045,8 +3052,6 @@ private fun stopWaitingTimer() {
     btnCancelOrder.isEnabled = true
     btnCancelOrder.text = "Скасувати замовлення"
 
-    // Звідси прибрано layoutActiveOrderPrice.visibility = View.VISIBLE
-
     when(order.status) {
         "REQUESTED", "OFFERING" -> {
             updateOrderProgress(1)
@@ -3060,8 +3065,10 @@ private fun stopWaitingTimer() {
             layoutDriverDetails.visibility = View.GONE
             stopDriverTracking()
             
+            // Зупиняємо таймер (нове табло сховається автоматично)
             stopWaitingTimer()
-            layoutWaitingInfo.visibility = View.GONE
+            
+            updateMapPadding(activeOrderCard, 0f, 20f)
         }
         
         "ACCEPTED" -> {
@@ -3077,8 +3084,8 @@ private fun stopWaitingTimer() {
             layoutDriverDetails.visibility = View.VISIBLE
             updateDriverInfo(order)
             
+            // Зупиняємо таймер
             stopWaitingTimer()
-            layoutWaitingInfo.visibility = View.GONE
 
             order.driver?.let { drv ->
                 val lat = drv.latitude
@@ -3093,6 +3100,8 @@ private fun stopWaitingTimer() {
                 }
             }
             startDriverTracking(order.id)
+            
+            updateMapPadding(activeOrderCard, 0f, 20f)
         }
 
         "DRIVER_ARRIVED" -> {
@@ -3108,6 +3117,8 @@ private fun stopWaitingTimer() {
             layoutDriverDetails.visibility = View.VISIBLE
             
             updateDriverInfo(order)
+            
+            // ЗАПУСКАЄМО ТАЙМЕР (нове табло з'явиться автоматично)
             startWaitingTimer(order)
             
             order.driver?.let { drv ->
@@ -3124,6 +3135,8 @@ private fun stopWaitingTimer() {
             }
 
             startDriverTracking(order.id)
+            
+            updateMapPadding(activeOrderCard, 0f, 20f)
         }
 
         "IN_PROGRESS" -> {
@@ -3135,21 +3148,13 @@ private fun stopWaitingTimer() {
             layoutDriverFoundState.visibility = View.VISIBLE
             btnCancelRideDriver.visibility = View.GONE
             
-            // Звідси прибрано layoutActiveOrderPrice.visibility = View.GONE
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
             
             updateDriverInfo(order)
             
+            // Поїздка почалась - просто ховаємо табло
             stopWaitingTimer()
-            if (order.waitingPrice > 0) {
-                layoutWaitingInfo.visibility = View.VISIBLE
-                layoutWaitingInfo.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#FFF4E6"))
-                tvWaitingTimer.setTextColor(android.graphics.Color.parseColor("#D9480F"))
-                tvWaitingTimer.text = String.format("💰 Додано за очікування: %.2f грн", order.waitingPrice)
-            } else {
-                layoutWaitingInfo.visibility = View.GONE
-            }
 
             order.driver?.let { drv ->
                 val lat = drv.latitude
@@ -3165,6 +3170,8 @@ private fun stopWaitingTimer() {
             }
 
             startDriverTracking(order.id)
+            
+            updateMapPadding(activeOrderCard, 0f, 20f)
         }
         
         "COMPLETED" -> {
@@ -3175,13 +3182,13 @@ private fun stopWaitingTimer() {
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.GONE
             
-            // Звідси прибрано layoutActiveOrderPrice.visibility = View.GONE
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.GONE
             
             stopDriverTracking()
+            
+            // Ховаємо табло
             stopWaitingTimer()
-            layoutWaitingInfo.visibility = View.GONE
 
             if (!order.isRatedByClient) {
                 showRatingDialog(order.id, order.driver?.fullName ?: "водієм")
@@ -3200,13 +3207,13 @@ private fun stopWaitingTimer() {
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.GONE
             
-            // Звідси прибрано layoutActiveOrderPrice.visibility = View.GONE
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.GONE
             
             stopDriverTracking()
+            
+            // Ховаємо табло
             stopWaitingTimer()
-            layoutWaitingInfo.visibility = View.GONE
 
             updateMapPadding(activeOrderCard, 0f, 20f)
             
@@ -3276,6 +3283,9 @@ private fun stopWaitingTimer() {
     }
     
     private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f) {
+    // ДОДАНО: Сповіщаємо систему, що вміст панелі змінився і потрібно перерахувати висоту
+    bottomPanel.requestLayout()
+
     bottomPanel.post {
         if (mMap != null) {
             if (bottomPanel.visibility != View.VISIBLE) {
