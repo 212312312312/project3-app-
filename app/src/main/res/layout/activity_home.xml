@@ -1212,7 +1212,58 @@
         android:elevation="0dp" />
 
 </LinearLayout>
+<LinearLayout
+        android:id="@+id/layout_payment_completed"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="16dp"
+        android:gravity="center_horizontal">
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="До сплати"
+            android:textSize="16sp"
+            android:textColor="@color/text_secondary" />
+
+        <TextView
+            android:id="@+id/tv_final_payment_price"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 ₴"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="24dp" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginBottom="0dp"
+            android:background="@drawable/bg_button_yellow">
+
+            <Button
+                android:id="@+id/btn_understand_payment"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:text="Зрозуміло"
+                android:textAllCaps="false"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#454754"
+                android:background="@android:color/transparent"
+                android:stateListAnimator="@null"
+                android:elevation="0dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </com.google.android.material.card.MaterialCardView>

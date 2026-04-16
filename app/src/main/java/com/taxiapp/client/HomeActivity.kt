@@ -1,6 +1,7 @@
 package com.taxiapp.client
 
 import android.Manifest
+import android.view.Window
 import android.text.SpannableString
 import android.text.Spanned
 import android.content.res.Configuration
@@ -232,6 +233,10 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     
     private var loadedSectors: List<SectorDto> = emptyList()
     private var isRatingDialogVisible = false
+
+    private lateinit var layoutPaymentCompleted: LinearLayout
+    private lateinit var tvFinalPaymentPrice: TextView
+    private lateinit var btnUnderstandPayment: Button
     
     private var originPlace: Place? = null
     private var destinationPlace: Place? = null
@@ -624,29 +629,38 @@ private lateinit var tvNewWaitingTimer: TextView
     }
 
     private fun showNotificationPermissionDialog() {
-        val dialog = Dialog(this)
-        dialog.setContentView(R.layout.dialog_notification_permission)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        dialog.setCancelable(false)
+    val dialog = Dialog(this)
+    
+    // 1. Обязательно отключаем дефолтный системный заголовок перед setContentView
+    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE) 
+    
+    dialog.setContentView(R.layout.dialog_notification_permission)
+    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+    
+    // При MATCH_PARENT убедись, что в самом XML (в корневой CardView) 
+    // стоят android:layout_marginHorizontal="16dp", иначе диалог прилипнет к краям экрана!
+    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    dialog.setCancelable(false)
 
-        val btnAllow = dialog.findViewById<Button>(R.id.btn_allow)
-        val btnDeny = dialog.findViewById<Button>(R.id.btn_deny)
+    val btnAllow = dialog.findViewById<Button>(R.id.btn_allow)
+    val btnDeny = dialog.findViewById<Button>(R.id.btn_deny)
 
-        btnAllow.setOnClickListener {
-            dialog.dismiss()
-            sessionManager.setNotificationAsked(true)
-            if (Build.VERSION.SDK_INT >= 33) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+    btnAllow.setOnClickListener {
+        dialog.dismiss()
+        sessionManager.setNotificationAsked(true)
+        // Логика для Android 13 (Tiramisu) и выше
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // 33
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-
-        btnDeny.setOnClickListener {
-            dialog.dismiss()
-            sessionManager.setNotificationAsked(true)
-        }
-        dialog.show()
     }
+
+    btnDeny.setOnClickListener {
+        dialog.dismiss()
+        sessionManager.setNotificationAsked(true)
+    }
+    
+    dialog.show()
+}
 
     private fun setupSystemBars(isDark: Boolean) {
         val window = window
@@ -846,6 +860,11 @@ tvNewWaitingTimer = findViewById(R.id.tv_new_waiting_timer)
         tvOrigin = findViewById(R.id.text_view_origin)
         containerDestination = findViewById(R.id.container_destination)
         tvDestination = findViewById(R.id.text_view_destination)
+
+
+        layoutPaymentCompleted = findViewById(R.id.layout_payment_completed)
+        tvFinalPaymentPrice = findViewById(R.id.tv_final_payment_price)
+        btnUnderstandPayment = findViewById(R.id.btn_understand_payment)
 
         tariffsRecyclerView = findViewById(R.id.tariffs_recycler_view)
 
@@ -2951,43 +2970,70 @@ private fun stopWaitingTimer() {
             LatLng(Math.toDegrees(latRes), Math.toDegrees(lngRes))
         }
     }
-    
+
     private fun showRatingDialog(orderId: Long, driverName: String?) {
-        if (isRatingDialogVisible) return
-        isRatingDialogVisible = true 
+    if (isRatingDialogVisible) return
+    isRatingDialogVisible = true 
 
-        val dialog = Dialog(this)
-        dialog.setContentView(R.layout.dialog_rate_driver)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.setCancelable(false)
+    val dialog = Dialog(this)
+    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE) 
+    dialog.setContentView(R.layout.dialog_rate_driver)
+    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    dialog.setCancelable(false)
 
-        val ratingBar = dialog.findViewById<RatingBar>(R.id.rating_bar)
-        val etComment = dialog.findViewById<EditText>(R.id.et_comment)
-        val btnSubmit = dialog.findViewById<Button>(R.id.btn_submit_rating)
-        val tvTitle = dialog.findViewById<TextView>(R.id.tv_rating_title)
+    val etComment = dialog.findViewById<EditText>(R.id.et_comment)
+    val btnSubmit = dialog.findViewById<Button>(R.id.btn_submit_rating)
+    
+    // TextView для заголовка більше не чіпаємо, він автоматично покаже "Оцініть поїздку" з XML
 
-        tvTitle.text = "Оцініть поїздку з $driverName"
+    val stars = listOf(
+        dialog.findViewById<ImageView>(R.id.star_1),
+        dialog.findViewById<ImageView>(R.id.star_2),
+        dialog.findViewById<ImageView>(R.id.star_3),
+        dialog.findViewById<ImageView>(R.id.star_4),
+        dialog.findViewById<ImageView>(R.id.star_5)
+    )
 
-        btnSubmit.setOnClickListener {
-            val score = ratingBar.rating.toInt()
-            if (score == 0) {
-                showToast("Будь ласка, поставте оцінку")
-                return@setOnClickListener
+    var currentRating = 0 
+
+    // Дістаємо твій колір taxi_yellow з ресурсів
+    val activeStarColor = ContextCompat.getColor(this, R.color.taxi_yellow)
+    val inactiveStarColor = Color.parseColor("#808080") // Залишаємо сірий для неактивних
+
+    stars.forEachIndexed { index, imageView ->
+        imageView.setOnClickListener {
+            currentRating = index + 1 
+            
+            stars.forEachIndexed { i, star ->
+                if (i < currentRating) {
+                    star.setColorFilter(activeStarColor) 
+                } else {
+                    star.setColorFilter(inactiveStarColor) 
+                }
             }
-
-            btnSubmit.isEnabled = false
-            btnSubmit.text = "Відправка..."
-
-            val comment = etComment.text.toString()
-            sendRating(orderId, score, comment, dialog)
         }
-
-        dialog.setOnDismissListener {
-            isRatingDialogVisible = false
-        }
-
-        dialog.show()
     }
+
+    btnSubmit.setOnClickListener {
+        if (currentRating == 0) {
+            showToast("Будь ласка, поставте оцінку")
+            return@setOnClickListener
+        }
+
+        btnSubmit.isEnabled = false
+        btnSubmit.text = "Відправка..."
+
+        val comment = etComment.text.toString()
+        sendRating(orderId, currentRating, comment, dialog)
+    }
+
+    dialog.setOnDismissListener {
+        isRatingDialogVisible = false
+    }
+
+    dialog.show()
+}
 
     private fun sendRating(orderId: Long, score: Int, comment: String, dialog: Dialog) {
         val token = sessionManager.fetchAuthToken()
@@ -3063,6 +3109,8 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.VISIBLE
             layoutDriverDetails.visibility = View.GONE
+            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
+            
             stopDriverTracking()
             
             // Зупиняємо таймер (нове табло сховається автоматично)
@@ -3082,6 +3130,8 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
+            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
+            
             updateDriverInfo(order)
             
             // Зупиняємо таймер
@@ -3115,6 +3165,7 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
+            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
             
             updateDriverInfo(order)
             
@@ -3150,6 +3201,7 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
+            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
             
             updateDriverInfo(order)
             
@@ -3190,12 +3242,26 @@ private fun stopWaitingTimer() {
             // Ховаємо табло
             stopWaitingTimer()
 
-            if (!order.isRatedByClient) {
-                showRatingDialog(order.id, order.driver?.fullName ?: "водієм")
-            } else {
-                viewModel.clearOrderState()
-                activeOrderId = null
-                showAddressPanel()
+            // 1. ПОКАЗУЄМО БЛОК ОПЛАТИ
+            layoutPaymentCompleted.visibility = View.VISIBLE
+            tvFinalPaymentPrice.text = String.format("%.0f ₴", order.price)
+            
+            // 2. ОНОВЛЮЄМО ПАДДІНГИ КАРТИ ПІД НОВИЙ РОЗМІР ПАНЕЛІ
+            updateMapPadding(activeOrderCard, 0f, 20f)
+
+            // 3. ЛОГІКА КНОПКИ "ЗРОЗУМІЛО"
+            btnUnderstandPayment.setOnClickListener {
+                // Ховаємо блок оплати після натискання
+                layoutPaymentCompleted.visibility = View.GONE
+                
+                // Викликаємо вікно оцінки або закриваємо замовлення
+                if (!order.isRatedByClient) {
+                    showRatingDialog(order.id, order.driver?.fullName ?: "водієм")
+                } else {
+                    viewModel.clearOrderState()
+                    activeOrderId = null
+                    showAddressPanel()
+                }
             }
         }
         
@@ -3209,6 +3275,7 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.GONE
+            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
             
             stopDriverTracking()
             

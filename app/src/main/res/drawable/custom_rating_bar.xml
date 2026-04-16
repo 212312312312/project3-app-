@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <bitmap
+            android:src="@drawable/ic_stat_star"
+            android:tint="#E0E0E0"
+            android:tileMode="repeat" />
+    </item>
+
+    <item android:id="@android:id/secondaryProgress">
+        <bitmap
+            android:src="@drawable/ic_stat_star"
+            android:tint="#E0E0E0"
+            android:tileMode="repeat" />
+    </item>
+
+    <item android:id="@android:id/progress">
+        <clip>
+            <bitmap
+                android:src="@drawable/ic_stat_star"
+                android:tint="#FACC15"
+                android:tileMode="repeat" />
+        </clip>
+    </item>
+</layer-list>

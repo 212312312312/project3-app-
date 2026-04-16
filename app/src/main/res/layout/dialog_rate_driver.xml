@@ -3,9 +3,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    app:cardCornerRadius="16dp"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginBottom="16dp"
+    app:cardCornerRadius="24dp"
     app:cardElevation="8dp"
-    app:cardBackgroundColor="@color/unified_block_bg">
+    app:cardBackgroundColor="@color/card_background">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -24,24 +26,51 @@
             android:textColor="@color/text_primary"
             android:layout_marginBottom="16dp" />
 
-        <RatingBar
-            android:id="@+id/rating_bar"
+        <LinearLayout
+            android:id="@+id/ll_stars_container"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:numStars="5"
-            android:stepSize="1.0"
-            android:rating="0"
-            android:isIndicator="false"
-            android:clickable="true"
-            android:focusable="true"
-            style="?android:attr/ratingBarStyle"
-            android:theme="@style/RatingBarNoRipple"
-            android:progressTint="@color/taxi_yellow"
-            android:progressBackgroundTint="#808080"
-            android:secondaryProgressTint="@android:color/transparent"
-            android:background="@android:color/transparent"
-            android:layout_marginBottom="16dp" />
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
 
+            <ImageView
+                android:id="@+id/star_1"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="4dp"
+                android:src="@drawable/ic_stat_star"
+                app:tint="#808080" /> <ImageView
+            android:id="@+id/star_2"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="4dp"
+            android:src="@drawable/ic_stat_star"
+            app:tint="#808080" />
+
+            <ImageView
+                android:id="@+id/star_3"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="4dp"
+                android:src="@drawable/ic_stat_star"
+                app:tint="#808080" />
+
+            <ImageView
+                android:id="@+id/star_4"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="4dp"
+                android:src="@drawable/ic_stat_star"
+                app:tint="#808080" />
+
+            <ImageView
+                android:id="@+id/star_5"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="4dp"
+                android:src="@drawable/ic_stat_star"
+                app:tint="#808080" />
+        </LinearLayout>
         <EditText
             android:id="@+id/et_comment"
             android:layout_width="match_parent"
@@ -54,16 +83,30 @@
             android:padding="12dp"
             android:minHeight="80dp"
             android:gravity="top|start"
-            android:layout_marginBottom="20dp" />
+            android:layout_marginBottom="24dp" />
 
-        <Button
-            android:id="@+id/btn_submit_rating"
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Відправити"
-            android:background="@drawable/bg_button_yellow"
-            android:textColor="@android:color/black"
-            android:textStyle="bold" />
+            android:layout_height="60dp"
+            android:background="@drawable/bg_button_yellow">
+
+            <Button
+                android:id="@+id/btn_submit_rating"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:text="Відправити"
+                android:textAllCaps="false"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#454754"
+                android:background="@android:color/transparent"
+                android:stateListAnimator="@null"
+                android:elevation="0dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </LinearLayout>
 </androidx.cardview.widget.CardView>
