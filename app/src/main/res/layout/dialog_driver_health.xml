@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    app:cardCornerRadius="24dp"
+    app:cardBackgroundColor="@color/card_background"
+    app:cardElevation="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_alert_circle"
+            app:tint="@color/taxi_red_cancel"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Увага! Особливості водія"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="16dp"
+            android:textAlignment="center"/>
+
+        <TextView
+            android:id="@+id/tv_health_issues_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Будь ласка, враховуйте це під час поїздки та при спілкуванні з водієм."
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:textAlignment="center"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/btn_understand_health"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Зрозуміло"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#454754"
+            android:background="@drawable/bg_button_yellow"
+            app:backgroundTint="@null"
+            android:elevation="0dp"
+            android:stateListAnimator="@null" />
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

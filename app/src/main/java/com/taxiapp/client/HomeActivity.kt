@@ -158,6 +158,10 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var btnOpenPromo: CardView
     private lateinit var centerPin: ImageView
     private lateinit var pinShadow: ImageView
+
+    private lateinit var btnDriverHealthAlert: View
+    
+
     private lateinit var btnRecenter: CardView
     private lateinit var btnRecenterRoute: CardView
 
@@ -910,7 +914,7 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         tvDriverRidesCount = findViewById(R.id.tv_driver_rides_count)
         ivDriverPhoto = findViewById(R.id.iv_driver_photo)
         btnCallDriver = findViewById(R.id.btn_call_driver)
-        tvDriverHealthInfo = findViewById(R.id.tv_driver_health_info)
+        btnDriverHealthAlert = findViewById(R.id.btn_driver_health_alert)
 
         tvActiveOrderPrice = findViewById(R.id.tv_active_order_price)
         ivActiveOrderPayment = findViewById(R.id.iv_active_order_payment)
@@ -2179,6 +2183,28 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
     // Запускаем диалог
     dialog.show()
 }
+
+
+private fun showDriverHealthDialog(issues: List<String>) {
+    val dialog = Dialog(this)
+    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+    dialog.setContentView(R.layout.dialog_driver_health)
+    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+    val tvIssues = dialog.findViewById<TextView>(R.id.tv_health_issues_list)
+    val btnOk = dialog.findViewById<Button>(R.id.btn_understand_health)
+
+    // Красиво форматируем список с буллитами (точками)
+    val formattedIssues = issues.joinToString(separator = "\n") { "• $it" }
+    tvIssues.text = formattedIssues
+
+    btnOk.setOnClickListener {
+        dialog.dismiss()
+    }
+
+    dialog.show()
+}
     private fun updateOrderButtonWithTime() {
     if (scheduledDate != null) {
         val now = Calendar.getInstance()
@@ -3321,17 +3347,19 @@ private fun stopWaitingTimer() {
 
             // Блок мед. предупреждений
             val healthIssues = mutableListOf<String>()
-            if (drv.hasMovementIssue) healthIssues.add("порушення опорно-рухового апарату")
-            if (drv.hasHearingIssue) healthIssues.add("порушення слуху")
-            if (drv.isDeaf) healthIssues.add("водій не чує (глухий)")
-            if (drv.hasSpeechIssue) healthIssues.add("порушення мовлення")
+if (drv.hasMovementIssue) healthIssues.add("Порушення опорно-рухового апарату")
+if (drv.hasHearingIssue) healthIssues.add("Порушення слуху")
+if (drv.isDeaf) healthIssues.add("Водій не чує (глухий)")
+if (drv.hasSpeechIssue) healthIssues.add("Порушення мовлення")
 
-            if (healthIssues.isNotEmpty()) {
-                tvDriverHealthInfo.visibility = View.VISIBLE
-                tvDriverHealthInfo.text = "ℹ️ Увага! Особливості водія: ${healthIssues.joinToString(", ")}"
-            } else {
-                tvDriverHealthInfo.visibility = View.GONE
-            }
+if (healthIssues.isNotEmpty()) {
+    btnDriverHealthAlert.visibility = View.VISIBLE
+    btnDriverHealthAlert.setOnClickListener {
+        showDriverHealthDialog(healthIssues)
+    }
+} else {
+    btnDriverHealthAlert.visibility = View.GONE
+}
 
             if (!drv.photoUrl.isNullOrEmpty()) {
                 var finalUrl = drv.photoUrl!!
