@@ -127,9 +127,7 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private var polylineBorder: Polyline? = null
     private var polylineMain: Polyline? = null
-    private var polylineAnim: Polyline? = null
-    private var routeAnimator: ValueAnimator? = null
-
+    
     private var webSocketManager: WebSocketManager? = null
     private var driverMarker: Marker? = null
     private var customCarIcon: BitmapDescriptor? = null
@@ -719,6 +717,7 @@ private lateinit var tvNewWaitingTimer: TextView
     override fun onResume() {
         super.onResume()
         updateFavoriteButtonsUI()
+        updateDrawerHeader()
         
         if (tariffsPanel.visibility == View.VISIBLE) {
             fetchTariffsAndShowPanel()
@@ -1919,56 +1918,10 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         polylineAnimator.start()
         markerAnimator.start()
 
-        polylineAnimator.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                super.onAnimationEnd(animation)
-                animateRoute(path)
-            }
-        })
+        
     }
     
-    private fun animateRoute(path: List<LatLng>) {
-        if (path.isEmpty()) return
-        val animOpts = PolylineOptions().width(14f).color(Color.WHITE).zIndex(3f).startCap(RoundCap()).endCap(RoundCap())
-        polylineAnim = mMap?.addPolyline(animOpts)
-
-        routeAnimator = ValueAnimator.ofInt(0, 200)
-        routeAnimator?.duration = 4000
-        routeAnimator?.interpolator = LinearInterpolator()
-
-        routeAnimator?.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                animHandler.postDelayed({
-                    if (polylineAnim != null && routeAnimator != null) {
-                        routeAnimator?.start()
-                    }
-                }, 2000)
-            }
-        })
-
-        routeAnimator?.addUpdateListener { animator ->
-            try {
-                val progress = animator.animatedValue as Int
-                if (path.isNotEmpty()) {
-                    val totalPoints = path.size
-                    val endRaw = (totalPoints * progress) / 100
-                    val startRaw = Math.max(0, endRaw - (totalPoints / 3))
-                    val end = Math.min(endRaw, totalPoints)
-                    val start = Math.min(startRaw, end)
-
-                    if (end > start) {
-                        val subList = path.subList(start, end)
-                        polylineAnim?.points = subList
-                        val gradientSpan = StyleSpan(StrokeStyle.gradientBuilder(Color.TRANSPARENT, Color.WHITE).build())
-                        polylineAnim?.spans = listOf(gradientSpan)
-                    } else {
-                        polylineAnim?.points = emptyList()
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-        routeAnimator?.start()
-    }
+    
 
     fun incrementUnreadMessages() {
         unreadChatMessages++
@@ -1999,15 +1952,11 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         originMarker = null 
         destinationMarker = null
         mMap?.setPadding(0, 0, 0, 0)
-        routeAnimator?.removeAllListeners()
-        routeAnimator?.cancel()
-        routeAnimator = null
         animHandler.removeCallbacksAndMessages(null)
         btnRecenterRoute.visibility = View.GONE
 
         polylineBorder = null
         polylineMain = null
-        polylineAnim = null
         viewModel.currentRoutePolyline = null // Сброс в VM
         centerPin.visibility = View.GONE
         try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
@@ -2023,6 +1972,25 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         // Сброс в VM состояния маршрута, чтобы не пересчитывался
         viewModel.loadTariffsAndCalculatePrice(null, 0)
     }
+
+    private fun updateDrawerHeader() {
+    // 1. Получаем актуальное имя из твоего хранилища (например, SessionManager)
+    // Если используешь базу данных или SharedPreferences, бери данные оттуда
+    val currentName = sessionManager.getUserName() // твой метод получения имени
+
+    // 2. Находим TextView в боковом меню
+    // ВАЖНО: Если у тебя стандартный NavigationView, то поиск выглядит так:
+    // val headerView = binding.navigationView.getHeaderView(0)
+    // val tvUserName = headerView.findViewById<TextView>(R.id.tv_user_name)
+    
+    // Если у тебя просто кастомная шторка (LinearLayout), то просто:
+    val tvUserName = findViewById<TextView>(R.id.profile_user_name) // замени на свой ID TextView имени
+
+    // 3. Обновляем текст
+    if (!currentName.isNullOrEmpty()) {
+        tvUserName?.text = currentName
+    }
+}
 
     private fun fetchTariffsAndShowPanel() {
         addressPanel.visibility = View.GONE

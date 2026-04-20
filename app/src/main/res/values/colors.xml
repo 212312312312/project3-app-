@@ -34,6 +34,6 @@
     <color name="input_background">#F3F4F6</color>
     <color name="input_border">#F3F4F6</color>
     <color name="divider_color">#E0E0E0</color>
-    <color name="route_border">#404040</color>   <color name="route_main">#808080</color>     <color name="route_pulse">#FFFFFF</color>
+    <color name="route_main">#E0E0E0</color> <color name="route_border">#9E9E9E</color> <color name="route_pulse">#FFFFFF</color>
     <color name="shadow_start">#60000000</color> <color name="shadow_center">#20000000</color> <color name="shadow_end">#00000000</color>
     <color name="taxi_text_dark">#1F2937</color>  <color name="taxi_text_light">#F3F4F6</color> <color name="info_window_bg">#FFFFFF</color>   <color name="info_window_text">#1F2937</color> </resources>

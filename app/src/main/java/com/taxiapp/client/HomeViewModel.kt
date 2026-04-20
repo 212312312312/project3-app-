@@ -277,6 +277,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         activeOrderId = null
         sessionManager.clearActiveOrderId()
         stopStatusPolling()
+
+        // ДОБАВЛЕНА ЭТА СТРОКА:
+        // Очищаем LiveData, чтобы при пересоздании Activity (например, при смене темы)
+        // обзервер не получил старый "призрачный" заказ и не показал карточку.
+        _activeOrder.value = null
     }
 
     override fun onCleared() {
