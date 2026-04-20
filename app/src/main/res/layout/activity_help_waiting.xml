@@ -29,14 +29,15 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Очікування" 
+            android:text="@string/help_waiting_title"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
             android:layout_centerVertical="true"
             android:layout_toEndOf="@id/btn_back"
             android:layout_marginStart="16dp"/>
-            </RelativeLayout>
+    </RelativeLayout>
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -46,11 +47,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="24dp"
-            android:text="Після того, як водій прибув за адресою, починається безкоштовне очікування. Воно триває 3 хвилини, та вартість поїздки не змінюється.\n\nПочинаючи з 4-ої хвилини, очікування сплачується за кожну хвилину очікування."
+            android:text="@string/help_waiting_desc"
             android:textColor="?attr/colorOnSurface"
             android:textSize="16sp"
             android:lineSpacingExtra="4dp"
-            android:layout_marginTop="8dp"/> 
-            </ScrollView>
+            android:layout_marginTop="8dp"/>
+
+    </ScrollView>
 
 </LinearLayout>

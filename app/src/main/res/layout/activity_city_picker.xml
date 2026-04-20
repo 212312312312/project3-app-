@@ -4,7 +4,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/card_background"> <LinearLayout
+    android:background="@color/card_background">
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -12,7 +14,7 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:paddingBottom="16dp"
-        android:paddingTop="50dp"> 
+        android:paddingTop="50dp">
 
         <ImageView
             android:id="@+id/btn_back"
@@ -22,10 +24,12 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            app:tint="@color/text_primary"/> <TextView
+            app:tint="@color/text_primary"/>
+
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Оберіть місто"
+            android:text="@string/title_choose_city"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
@@ -44,7 +48,7 @@
             android:layout_height="60dp"
             android:background="@drawable/bg_search_input"
             android:backgroundTint="@color/input_background"
-            android:hint="Пошук міста"
+            android:hint="@string/hint_search_city"
             android:textColorHint="@color/text_secondary"
             android:textColor="@color/text_primary"
             android:textSize="16sp"

@@ -29,7 +29,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Акційні завдання"
+            android:text="@string/promo_tasks_title"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -42,7 +42,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-            android:background="@color/menu_background_color"
+        android:background="@color/menu_background_color"
         android:paddingHorizontal="24dp"
         android:paddingTop="24dp">
 
@@ -75,17 +75,17 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Тут поки немає завдань"
+                android:text="@string/promo_tasks_empty_title"
                 android:textSize="24sp"
                 android:textStyle="bold"
                 android:textColor="#B0B0B0"
                 android:gravity="center"/>
 
-             <TextView
+            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="але вони скоро з'являться!"
+                android:text="@string/promo_tasks_empty_subtitle"
                 android:textSize="18sp"
                 android:gravity="center"
                 android:textColor="#B0B0B0"/>

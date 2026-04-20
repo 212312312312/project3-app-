@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/card_background" 
+    android:background="@color/card_background"
     android:paddingTop="48dp"
     android:paddingBottom="24dp">
 
@@ -29,7 +29,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Спосіб оплати"
+            android:text="@string/payment_method_title"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -41,7 +41,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Оплата замовлень за замовчуванням"
+        android:text="@string/payment_method_subtitle"
         android:textColor="@color/text_hint"
         android:textSize="15sp"
         android:textStyle="normal"
@@ -84,7 +84,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Готівка"
+                    android:text="@string/payment_cash"
                     android:textSize="17sp"
                     android:textColor="?attr/colorOnBackground"
                     android:layout_marginStart="16dp"/>
@@ -100,7 +100,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/card_background"  
+                android:background="@color/card_background"
                 android:layout_marginStart="64dp"
                 android:layout_marginEnd="24dp"/>
 
@@ -127,7 +127,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Водію на картку"
+                    android:text="@string/payment_card"
                     android:textSize="17sp"
                     android:textColor="?attr/colorOnBackground"
                     android:layout_marginStart="16dp"/>

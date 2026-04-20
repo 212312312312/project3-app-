@@ -34,7 +34,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Обрані адреси"
+                android:text="@string/title_tariffs"
                 android:textSize="22sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnBackground"
@@ -60,12 +60,13 @@
                     android:orientation="horizontal"
                     android:paddingHorizontal="24dp"
                     android:clipToPadding="false"
-                    android:layout_marginBottom="40dp"/> 
-                    <TextView
+                    android:layout_marginBottom="40dp"/>
+
+                <TextView
                     android:id="@+id/tv_details_title"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Деталі тарифу"
+                    android:text="@string/tariff_details_title"
                     android:textColor="@color/text_hint"
                     android:textSize="14sp"
                     android:textStyle="bold"
@@ -87,7 +88,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Подача"
+                            android:text="@string/tariff_base_price"
                             android:textSize="17sp"
                             android:textColor="?attr/colorOnSurface"/>
                         <TextView
@@ -103,9 +104,9 @@
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
-                        android:background="#1A000000" 
-                        />
-                        <LinearLayout
+                        android:background="#1A000000" />
+
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
@@ -114,7 +115,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Вартість за км"
+                            android:text="@string/tariff_price_per_km"
                             android:textSize="17sp"
                             android:textColor="?attr/colorOnSurface"/>
                         <TextView
@@ -141,7 +142,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Хвилина очікування"
+                            android:text="@string/tariff_price_per_min"
                             android:textSize="17sp"
                             android:textColor="?attr/colorOnSurface"/>
                         <TextView

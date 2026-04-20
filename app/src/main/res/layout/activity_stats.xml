@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/card_background" 
+    android:background="@color/card_background"
     android:orientation="vertical"
     android:fitsSystemWindows="true">
 
@@ -17,7 +17,7 @@
         android:paddingEnd="24dp"
         android:paddingBottom="16dp"
         android:paddingTop="16dp"
-        android:background="@color/card_background"> 
+        android:background="@color/card_background">
 
         <ImageView
             android:id="@+id/btn_back"
@@ -32,12 +32,13 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Статистика"
+            android:text="@string/statistics_title"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
             android:layout_marginStart="16dp" />
     </LinearLayout>
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -48,14 +49,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="24dp" 
+            android:paddingHorizontal="24dp"
             android:paddingTop="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Загальні показники"
-                android:textColor="@color/text_hint" 
+                android:text="@string/stat_section_general"
+                android:textColor="@color/text_hint"
                 android:textSize="15sp"
                 android:fontFamily="sans-serif-medium"
                 android:layout_marginTop="8dp"
@@ -96,14 +97,14 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Проїхано"
+                                android:text="@string/stat_driven_distance"
                                 android:textSize="13sp"
                                 android:textColor="@color/text_secondary" />
                             <TextView
                                 android:id="@+id/tv_stat_km"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="0 км"
+                                android:text="@string/stat_default_km"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_primary"
@@ -141,14 +142,14 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="В дорозі"
+                                android:text="@string/stat_time_on_road"
                                 android:textSize="13sp"
                                 android:textColor="@color/text_secondary" />
                             <TextView
                                 android:id="@+id/tv_stat_hours"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="0 хв"
+                                android:text="@string/stat_default_min"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_primary"
@@ -186,7 +187,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Всього поїздок"
+                                android:text="@string/stat_total_rides"
                                 android:textSize="13sp"
                                 android:textColor="@color/text_secondary" />
                             <TextView
@@ -231,7 +232,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Улюблений тариф"
+                                android:text="@string/stat_fav_tariff"
                                 android:textSize="13sp"
                                 android:textColor="@color/text_secondary" />
                             <TextView
@@ -276,7 +277,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Найактивніший день"
+                                android:text="@string/stat_active_day"
                                 android:textSize="13sp"
                                 android:textColor="@color/text_secondary" />
                             <TextView

@@ -29,7 +29,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Оплата"
+            android:text="@string/help_payment_title"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -53,7 +53,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Перерахування вартості"
+                android:text="@string/help_payment_recalc_title"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
@@ -62,7 +62,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Якщо під час поїздки змінюється маршрут, вартість замовлення буде перерахована. Ось як це працює. Якщо під час створення замовлення застосовується динамічний коефіцієнт, то він також враховується до всіх подальших змін замовлення, включаючи збільшений кілометраж."
+                android:text="@string/help_payment_recalc_desc"
                 android:textSize="16sp"
                 android:textColor="?attr/colorOnSurface"
                 android:lineSpacingExtra="4dp"
@@ -71,7 +71,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Оплата карткою"
+                android:text="@string/help_payment_card_title"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
@@ -80,7 +80,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="У разі оплати картою, кошти резервуються після знаходження авто. У разі скасування замовлення, зарезервовані на вашому рахунку кошти будуть знову доступні найближчим часом."
+                android:text="@string/help_payment_card_desc"
                 android:textSize="16sp"
                 android:textColor="?attr/colorOnSurface"
                 android:lineSpacingExtra="4dp"
@@ -89,7 +89,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Скасування замовлення"
+                android:text="@string/help_payment_cancel_title"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
@@ -98,7 +98,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="При скасуванні вами замовлення після подачі авто з вашої провини, в т.ч. у випадку, якщо ви не вийшли за вказаною адресою, з вашої картки списується вартість подачі авто в залежності від його класу відповідно до тарифів."
+                android:text="@string/help_payment_cancel_desc"
                 android:textSize="16sp"
                 android:textColor="?attr/colorOnSurface"
                 android:lineSpacingExtra="4dp"/>

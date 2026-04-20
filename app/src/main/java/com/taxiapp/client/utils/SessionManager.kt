@@ -17,6 +17,8 @@ class SessionManager(context: Context) {
 
     companion object {
         const val PREFS_NAME = "TaxiAppPrefs"
+
+        const val KEY_LANGUAGE = "app_language"
         const val USER_TOKEN = "user_token"
         const val USER_FULL_NAME = "user_full_name"
         const val USER_PHONE = "user_phone"
@@ -114,6 +116,15 @@ class SessionManager(context: Context) {
             }
             apply()
         }
+    }
+
+    fun saveLanguage(languageCode: String) {
+        prefs.edit().putString(KEY_LANGUAGE, languageCode).apply()
+    }
+
+    fun getLanguage(): String {
+        // За замовчуванням повертаємо "ua", якщо мову ще не обрали
+        return prefs.getString(KEY_LANGUAGE, "ua") ?: "ua"
     }
 
     fun getHomeAddress(): Place? {

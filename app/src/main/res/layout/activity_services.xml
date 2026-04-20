@@ -29,7 +29,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Послуги"
+            android:text="@string/services_title"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -42,7 +42,7 @@
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:text="Готово"
+            android:text="@string/btn_done"
             android:textSize="13sp"
             android:textStyle="bold"
             android:enabled="false"

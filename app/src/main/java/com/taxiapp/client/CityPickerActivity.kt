@@ -15,7 +15,7 @@ import com.taxiapp.client.utils.CityDatabase
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 
-class CityPickerActivity : AppCompatActivity() {
+class CityPickerActivity : BaseActivity() {
 
     companion object {
         const val RESULT_CITY_NAME = "city_name"

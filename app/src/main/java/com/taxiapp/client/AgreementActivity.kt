@@ -6,7 +6,7 @@ import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import com.taxiapp.client.utils.ViewUtils
 
-class AgreementActivity : AppCompatActivity() {
+class AgreementActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

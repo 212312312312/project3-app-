@@ -30,7 +30,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Знижки на поїздки"
+            android:text="@string/title_discounts"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -72,31 +72,31 @@
             <LinearLayout
                 android:id="@+id/ll_empty_state"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" 
+                android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:gravity="center"
-                android:visibility="gone"> 
+                android:visibility="gone">
 
                 <ImageView
                     android:layout_width="80dp"
                     android:layout_height="80dp"
-                    android:src="@drawable/ic_percent" 
+                    android:src="@drawable/ic_percent"
                     app:tint="#E5E7EB"
                     android:layout_marginBottom="16dp"/>
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="У вас немає активних знижок"
+                    android:text="@string/empty_state_no_discounts"
                     android:textSize="18sp"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface"/>
-                    
-                 <TextView
+
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Виконуйте завдання в розділі Акції!"
+                    android:text="@string/empty_state_discounts_hint"
                     android:textSize="14sp"
                     android:textColor="#999999"/>
             </LinearLayout>
@@ -123,13 +123,13 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:text="Додати промокод"
+                    android:text="@string/btn_add_promo"
                     android:textAllCaps="false"
                     android:textSize="18sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
                     android:background="?attr/selectableItemBackground" />
-                
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

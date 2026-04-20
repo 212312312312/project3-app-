@@ -12,6 +12,8 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -26,14 +28,20 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class UserDetailsActivity : AppCompatActivity() {
+class UserDetailsActivity : BaseActivity() {
 
     private lateinit var sessionManager: SessionManager
     private lateinit var etName: EditText
     private lateinit var tvPhone: TextView
 
-    // Нова змінна для великої літери аватара
+    // Змінна для великої літери аватара
     private lateinit var tvAvatarLetter: TextView
+
+    // Змінна для відображення рейтингу
+    private lateinit var tvUserRatingValue: TextView
+
+    // НОВЕ: Змінна для кнопки зміни мови
+    private lateinit var btnLanguage: ImageView
 
     // Змінні для повідомлення (Toast)
     private lateinit var customToastContainer: CardView
@@ -52,7 +60,11 @@ class UserDetailsActivity : AppCompatActivity() {
         // --- ІНІЦІАЛІЗАЦІЯ UI ---
         etName = findViewById(R.id.et_user_name)
         tvPhone = findViewById(R.id.tv_user_phone)
-        tvAvatarLetter = findViewById(R.id.tv_avatar_letter_large) // Знаходимо TextView літери
+        tvAvatarLetter = findViewById(R.id.tv_avatar_letter_large)
+        tvUserRatingValue = findViewById(R.id.tv_user_rating_value)
+
+        // НОВЕ: Ініціалізація кнопки мови
+        btnLanguage = findViewById(R.id.btn_language)
 
         // Ініціалізація тоста
         try {
@@ -64,22 +76,28 @@ class UserDetailsActivity : AppCompatActivity() {
         // --- ЗАПОВНЕННЯ ДАНИМИ ---
         val savedName = sessionManager.getUserName()
         etName.setText(savedName)
-
-        // Встановлюємо першу літеру при запуску
         updateAvatarLetter(savedName)
 
         val phone = sessionManager.getUserPhone()
         tvPhone.text = if (phone.isNotEmpty()) "+38$phone" else "+380 XX XXX XX XX"
 
+        // Встановлюємо рейтинг (Поки заглушка, пізніше можна брати з API або SessionManager)
+        updateUserRating("5.0")
+
+        // НОВЕ: Встановлюємо іконку мови при запуску екрану
+        val currentLang = sessionManager.getLanguage()
+        if (currentLang == "en") {
+            btnLanguage.setImageResource(R.drawable.ic_flag_en)
+        } else {
+            btnLanguage.setImageResource(R.drawable.ic_flag_ua)
+        }
+
         // --- ЛОГІКА ДИНАМІЧНОЇ ЗМІНИ ЛІТЕРИ ---
         etName.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                // Оновлюємо літеру, коли користувач вводить текст
                 updateAvatarLetter(s.toString())
             }
-
             override fun afterTextChanged(s: Editable?) {}
         })
 
@@ -96,24 +114,73 @@ class UserDetailsActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_logout).setOnClickListener { logoutAndExit() }
 
         // 3. Видалення
-        val btnDelete = findViewById<View>(R.id.btn_delete_account)
-        btnDelete.setOnClickListener {
+        findViewById<View>(R.id.btn_delete_account).setOnClickListener {
             showCustomDeleteDialog()
+        }
+
+        // НОВЕ: 4. Зміна мови
+        btnLanguage.setOnClickListener {
+            showLanguageDialog()
         }
     }
 
-    // --- ОНОВЛЕННЯ ЛІТЕРИ ---
+    // НОВЕ: Логіка діалогу вибору мови
+    private fun showLanguageDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_language, null)
+
+        val dialog = AlertDialog.Builder(this, R.style.DeleteAccountDialog)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        val btnSave = dialogView.findViewById<Button>(R.id.btn_save_language)
+        val rbLangUa = dialogView.findViewById<RadioButton>(R.id.rb_lang_ua)
+        val rbLangEn = dialogView.findViewById<RadioButton>(R.id.rb_lang_en)
+
+        // 1. Читаємо поточну мову з SessionManager і ставимо потрібну галочку
+        val currentLang = sessionManager.getLanguage()
+        if (currentLang == "en") {
+            rbLangEn?.isChecked = true
+        } else {
+            rbLangUa?.isChecked = true
+        }
+
+        btnSave?.setOnClickListener {
+            val selectedLang = if (rbLangEn?.isChecked == true) "en" else "ua"
+
+            // 2. Зберігаємо нову мову
+            sessionManager.saveLanguage(selectedLang)
+
+            // 3. Оновлюємо іконку в хедері
+            if (selectedLang == "en") {
+                btnLanguage.setImageResource(R.drawable.ic_flag_en)
+            } else {
+                btnLanguage.setImageResource(R.drawable.ic_flag_ua)
+            }
+
+            showTopMessage("Мову змінено / Language changed", false)
+            dialog.dismiss()
+
+            // 4. Перезапускаємо Activity, щоб нові ресурси strings.xml завантажились
+            recreate()
+        }
+
+        dialog.show()
+    }
+
+    private fun updateUserRating(rating: String) {
+        tvUserRatingValue.text = rating
+    }
+
     private fun updateAvatarLetter(name: String) {
         val letter = if (name.isNotBlank()) {
-            // Беремо першу літеру, переводимо у верхній регістр
             name.trim().first().toString().uppercase()
         } else {
-            "U" // За замовчуванням (User), якщо поле пусте
+            "U"
         }
         tvAvatarLetter.text = letter
     }
 
-    // --- ФУНКЦІЯ ВІДОБРАЖЕННЯ ДІАЛОГУ ---
     private fun showCustomDeleteDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_delete_account, null)
 
@@ -125,9 +192,7 @@ class UserDetailsActivity : AppCompatActivity() {
         val btnCancel = dialogView.findViewById<Button>(R.id.btn_dialog_cancel)
         val btnDelete = dialogView.findViewById<Button>(R.id.btn_dialog_delete)
 
-        btnCancel.setOnClickListener {
-            dialog.dismiss()
-        }
+        btnCancel.setOnClickListener { dialog.dismiss() }
 
         btnDelete.setOnClickListener {
             dialog.dismiss()

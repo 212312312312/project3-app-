@@ -30,7 +30,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Сповіщення"
+            android:text="@string/notifications_title"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -76,7 +76,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Немає нових сповіщень"
+                android:text="@string/notifications_empty_title"
                 android:textSize="24sp"
                 android:textStyle="bold"
                 android:textColor="#B0B0B0"
@@ -86,7 +86,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Ми повідомимо вас про важливі події"
+                android:text="@string/notifications_empty_subtitle"
                 android:textSize="18sp"
                 android:gravity="center"
                 android:textColor="#B0B0B0"/>

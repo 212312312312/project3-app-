@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="picker_title_where_to">Where to?</string>
+    <string name="hint_from_where">From where?</string>
+    <string name="text_current_location">Current location</string>
+    <string name="hint_to_where">To where?</string>
+    <string name="btn_my_location">My location</string>
+    <string name="btn_pick_on_map">Pick on map</string>
+
+
+    <string name="title_add_home">Add Home</string>
+    <string name="hint_add_home">Enter home address</string>
+    <string name="title_add_work">Add Work</string>
+    <string name="hint_add_work">Enter work address</string>
+    <string name="title_where_from">Where from?</string>
+
+
+    <string name="agreement_title">User Agreement</string>
+    <string name="agreement_text">By continuing, you agree to our terms of service and privacy policy.</string>
+    <string name="btn_accept_continue">Accept and continue</string>
+
+
+
+
+
+    <string name="chat_title">Chat with driver</string>
+    <string name="chat_hint_message">Message...</string>
+
+    <string name="title_choose_city">Choose city</string>
+    <string name="hint_search_city">Search city</string>
+
+    <string name="comment_title">Comment</string>
+    <string name="btn_done">Done</string>
+    <string name="comment_hint">Write a comment...</string>
+    <string name="suggestion_wait">Wait near...</string>
+    <string name="suggestion_entry">Entrance from...</string>
+    <string name="suggestion_change">Need change from...</string>
+    <string name="suggestion_nocall">Do not call me</string>
+
+
+    <string name="favorite_addresses_title">Favorite addresses</string>
+    <string name="hint_provide_address">Provide address</string>
+
+
+    <string name="help_title">Help</string>
+    <string name="help_section_support">Support</string>
+    <string name="help_contact_us">Contact us</string>
+    <string name="help_section_other">Other questions</string>
+    <string name="help_tariffs">Tariffs</string>
+    <string name="help_payment">Payment</string>
+    <string name="help_waiting">Waiting</string>
+
+    <string name="title_discounts">Ride discounts</string>
+    <string name="empty_state_no_discounts">You have no active discounts</string>
+    <string name="empty_state_discounts_hint">Complete tasks in the Promos section!</string>
+    <string name="btn_add_promo">Add promo code</string>
+
+
+    <string name="help_payment_title">Payment</string>
+    <string name="help_payment_recalc_title">Cost recalculation</string>
+    <string name="help_payment_recalc_desc">If the route changes during the trip, the order cost will be recalculated. Here is how it works. If a dynamic multiplier is applied when creating an order, it is also taken into account for all subsequent changes to the order, including increased mileage.</string>
+    <string name="help_payment_card_title">Card payment</string>
+    <string name="help_payment_card_desc">In case of card payment, funds are reserved after finding a car. In case of order cancellation, the reserved funds on your account will be available again shortly.</string>
+    <string name="help_payment_cancel_title">Order cancellation</string>
+    <string name="help_payment_cancel_desc">If you cancel the order after the car has arrived due to your fault, including if you did not show up at the specified address, the car delivery fee will be deducted from your card depending on its class according to the tariffs.</string>
+
+
+    <string name="title_tariffs">Tariffs</string>
+    <string name="tariff_details_title">Tariff details</string>
+    <string name="tariff_base_price">Base fare</string>
+    <string name="tariff_price_per_km">Price per km</string>
+    <string name="tariff_price_per_min">Waiting per minute</string>
+
+    <string name="help_waiting_title">Waiting</string>
+    <string name="help_waiting_desc">After the driver arrives at the address, free waiting begins. It lasts 3 minutes, and the trip cost does not change.\n\nStarting from the 4th minute, waiting is charged for each minute of waiting.</string>
+
+    <string name="history_title">My rides</string>
+    <string name="history_empty_list">The list is empty.</string>
+
+    <string name="welcome_title">Welcome!</string>
+    <string name="welcome_subtitle">Enter your number to register</string>
+    <string name="phone_hint">XX XXX XX XX</string>
+    <string name="btn_continue">Continue</string>
+
+    <string name="sms_verify_title">Verification code</string>
+    <string name="sms_verify_subtitle">Enter the code from SMS</string>
+    <string name="sms_resend_placeholder">Resend code in 300</string>
+    <string name="btn_login">Log in</string>
+
+    <string name="toast_default_message">Message</string>
+
+    <string name="map_selected_point">SELECTED POINT</string>
+    <string name="map_searching_address">Searching address...</string>
+    <string name="btn_confirm">Confirm</string>
+
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_empty_title">No new notifications</string>
+    <string name="notifications_empty_subtitle">We will notify you about important events</string>
+
+    <string name="no_network_title">Oops.. No network</string>
+    <string name="no_network_desc">Check your Wi-Fi or mobile data connection and try again.</string>
+    <string name="btn_retry">Retry</string>
+
+    <string name="payment_method_title">Payment method</string>
+    <string name="payment_method_subtitle">Default order payment</string>
+    <string name="payment_cash">Cash</string>
+    <string name="payment_card">Transfer to driver\'s card</string>
+
+    <string name="promo_tasks_title">Promotional tasks</string>
+    <string name="promo_tasks_empty_title">There are no tasks here yet</string>
+    <string name="promo_tasks_empty_subtitle">but they will appear soon!</string>
+
+    <string name="services_title">Services</string>
+
+    <string name="statistics_title">Statistics</string>
+    <string name="stat_section_general">General indicators</string>
+    <string name="stat_driven_distance">Driven</string>
+    <string name="stat_time_on_road">Time on road</string>
+    <string name="stat_total_rides">Total rides</string>
+    <string name="stat_fav_tariff">Favorite tariff</string>
+    <string name="stat_active_day">Most active day</string>
+    <string name="stat_default_km">0 km</string>
+    <string name="stat_default_min">0 min</string>
+
+    <string name="profile_title">My Profile</string>
+    <string name="profile_hint_name">Your name</string>
+    <string name="profile_default_name">Rider</string>
+    <string name="profile_rating">Rating:</string>
+    <string name="btn_logout">Log out</string>
+    <string name="btn_delete_account">Delete account</string>
+
+    <string name="promo_dialog_title">Promo name</string>
+    <string name="promo_dialog_desc">Task description</string>
+    <string name="promo_your_discount">Your discount</string>
+    <string name="promo_max_limit">Up to</string>
+    <string name="promo_no_limit">no limit</string>
+    <string name="promo_expires_unlimited">Valid until: Unlimited</string>
+    <string name="btn_got_it">Got it</string>
+
+
+    <string name="dialog_price_title">Trip cost</string>
+    <string name="dialog_price_normal">Normal</string>
+    <string name="dialog_price_max_multiplier">×3</string>
+    <string name="dialog_default_price">110 ₴</string>
+    <string name="btn_save">Save</string>
+
+
+    <string name="dialog_delete_account_title">Delete account?</string>
+    <string name="dialog_delete_account_message">Are you sure? All your data will be lost.</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_delete">Delete</string>
+
+
+    <string name="dialog_driver_health_title">Attention! Driver\'s special conditions</string>
+    <string name="dialog_driver_health_desc">Please take this into account during the trip and when communicating with the driver.</string>
+
+    <string name="dialog_promo_title">Enter promo code</string>
+    <string name="dialog_promo_hint">Promo code</string>
+    <string name="btn_activate">Activate</string>
+
+
+
+
+
+
+</resources>
+
+
+
+

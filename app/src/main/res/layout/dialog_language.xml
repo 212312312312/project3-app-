@@ -17,38 +17,50 @@
         android:gravity="center_horizontal">
 
         <TextView
-            android:id="@+id/tv_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/dialog_promo_title"
-            android:textSize="20sp"
+            android:text="Оберіть мову / Choose language"
+            android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
             android:layout_marginBottom="24dp"
             android:textAlignment="center"/>
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/til_promo_code"
+        <RadioGroup
+            android:id="@+id/rg_languages"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/dialog_promo_hint"
-            android:layout_marginBottom="24dp"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+            android:layout_marginBottom="24dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/et_promo_code"
+            <RadioButton
+                android:id="@+id/rb_lang_ua"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textCapCharacters"
-                android:maxLines="1"
-                android:textColor="@color/text_primary"/>
-        </com.google.android.material.textfield.TextInputLayout>
+                android:text="🇺🇦 Українська"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:paddingVertical="12dp"
+                android:layoutDirection="rtl"
+                android:textAlignment="textStart"/>
+
+            <RadioButton
+                android:id="@+id/rb_lang_en"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🇬🇧 English"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:paddingVertical="12dp"
+                android:layoutDirection="rtl"
+                android:textAlignment="textStart"
+                android:layout_marginTop="8dp"/>
+        </RadioGroup>
 
         <Button
-            android:id="@+id/btn_activate"
+            android:id="@+id/btn_save_language"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="@string/btn_activate"
+            android:text="Зберегти"
             android:textAllCaps="false"
             android:textSize="16sp"
             android:textStyle="bold"
@@ -57,6 +69,5 @@
             app:backgroundTint="@null"
             android:elevation="0dp"
             android:stateListAnimator="@null" />
-
     </LinearLayout>
 </androidx.cardview.widget.CardView>

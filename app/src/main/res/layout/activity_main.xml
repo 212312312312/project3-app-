@@ -23,7 +23,7 @@
             android:id="@+id/tv_title_welcome"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Ласкаво просимо!"
+            android:text="@string/welcome_title"
             android:textColor="?attr/colorOnBackground"
             android:textSize="28sp"
             android:textStyle="bold" />
@@ -33,7 +33,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Введіть номер для реєстрації"
+            android:text="@string/welcome_subtitle"
             android:textColor="@color/text_secondary"
             android:textSize="16sp" />
 
@@ -65,7 +65,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="@null"
-                android:hint="XX XXX XX XX"
+                android:hint="@string/phone_hint"
                 android:textColorHint="@color/text_secondary"
                 android:inputType="phone"
                 android:maxLength="9"
@@ -84,7 +84,7 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:background="@drawable/bg_button_yellow"
-            android:text="Продовжити"
+            android:text="@string/btn_continue"
             android:textAllCaps="false"
             android:textColor="@color/black"
             android:textSize="16sp"
@@ -103,7 +103,6 @@
 
     </LinearLayout>
 
-
     <LinearLayout
         android:id="@+id/layout_sms_verify"
         android:layout_width="match_parent"
@@ -119,7 +118,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Код підтвердження"
+            android:text="@string/sms_verify_title"
             android:textColor="?attr/colorOnBackground"
             android:textSize="28sp"
             android:textStyle="bold" />
@@ -129,7 +128,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Введіть код з SMS"
+            android:text="@string/sms_verify_subtitle"
             android:textColor="@color/text_secondary"
             android:textSize="16sp" />
 
@@ -161,7 +160,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="24dp"
-            android:text="Відправити повторно через 300"
+            android:text="@string/sms_resend_placeholder"
             android:textColor="@color/text_secondary"
             android:textSize="14sp"
             android:clickable="false"
@@ -186,7 +185,7 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:background="@drawable/bg_button_yellow"
-            android:text="Увійти"
+            android:text="@string/btn_login"
             android:textAllCaps="false"
             android:textColor="@color/black"
             android:textSize="16sp"
@@ -232,7 +231,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
-                android:text="Повідомлення"
+                android:text="@string/toast_default_message"
                 android:textColor="@color/toast_text"
                 android:textSize="16sp"
                 android:textStyle="bold"

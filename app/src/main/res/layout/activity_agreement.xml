@@ -15,7 +15,7 @@
         <ImageView
             android:layout_width="80dp"
             android:layout_height="80dp"
-            android:src="@drawable/ic_avatar_placeholder" 
+            android:src="@drawable/ic_avatar_placeholder"
             android:layout_marginBottom="24dp"
             android:alpha="0.5"/>
 
@@ -45,7 +45,7 @@
         android:id="@+id/btn_accept_agreement"
         android:layout_width="match_parent"
         android:layout_height="60dp"
-        android:text="Прийняти та продовжити"
+        android:text="@string/btn_accept_continue"
         android:background="@drawable/bg_button_yellow"
         android:textColor="@color/black"
         android:textStyle="bold"

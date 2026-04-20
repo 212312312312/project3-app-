@@ -5,4 +5,168 @@
 
     <string name="agreement_title">Угода користувача та Політика приватності</string>
     <string name="agreement_text">Продовжуючи, ти погоджуєшся з умовами <a href="https://example.com/terms">Угоди користувача</a> та обробкою ваших персональних даних відповідно до <a href="https://example.com/privacy">Політики приватності</a>.</string>
+
+    <string name="btn_accept_continue">Прийняти та продовжити</string>
+
+    <string name="picker_title_where_to">Куди їдемо?</string>
+    <string name="hint_from_where">Звідки?</string>
+    <string name="text_current_location">Поточне місце</string>
+    <string name="hint_to_where">Куди?</string>
+    <string name="btn_my_location">Моє місцезнаходження</string>
+    <string name="btn_pick_on_map">Вказати на карті</string>
+
+    <string name="title_add_home">Додати дім</string>
+    <string name="hint_add_home">Введіть адресу дому</string>
+    <string name="title_add_work">Додати роботу</string>
+    <string name="hint_add_work">Введіть адресу роботи</string>
+    <string name="title_where_from">Звідки їдемо?</string>
+
+    <string name="chat_title">Чат з водієм</string>
+    <string name="chat_hint_message">Повідомлення...</string>
+
+
+
+    <string name="title_choose_city">Оберіть місто</string>
+    <string name="hint_search_city">Пошук міста</string>
+
+
+    <string name="comment_title">Коментар</string>
+    <string name="btn_done">Готово</string>
+    <string name="comment_hint">Напишіть коментар...</string>
+    <string name="suggestion_wait">Чекайте біля...</string>
+    <string name="suggestion_entry">Заїзд зі сторони...</string>
+    <string name="suggestion_change">Потрібна решта з...</string>
+    <string name="suggestion_nocall">Не телефонуйте мені</string>
+
+    <string name="favorite_addresses_title">Обрані адреси</string>
+    <string name="hint_provide_address">Вкажіть адресу</string>
+
+    <string name="help_title">Допомога</string>
+    <string name="help_section_support">Підтримка</string>
+    <string name="help_contact_us">Зв\'язатися з нами</string>
+    <string name="help_section_other">Інші запитання</string>
+    <string name="help_tariffs">Тарифи</string>
+    <string name="help_payment">Оплата</string>
+    <string name="help_waiting">Очікування</string>
+
+    <string name="title_discounts">Знижки на поїздки</string>
+    <string name="empty_state_no_discounts">У вас немає активних знижок</string>
+    <string name="empty_state_discounts_hint">Виконуйте завдання в розділі Акції!</string>
+    <string name="btn_add_promo">Додати промокод</string>
+
+
+    <string name="help_payment_title">Оплата</string>
+    <string name="help_payment_recalc_title">Перерахування вартості</string>
+    <string name="help_payment_recalc_desc">Якщо під час поїздки змінюється маршрут, вартість замовлення буде перерахована. Ось як це працює. Якщо під час створення замовлення застосовується динамічний коефіцієнт, то він також враховується до всіх подальших змін замовлення, включаючи збільшений кілометраж.</string>
+    <string name="help_payment_card_title">Оплата карткою</string>
+    <string name="help_payment_card_desc">У разі оплати картою, кошти резервуються після знаходження авто. У разі скасування замовлення, зарезервовані на вашому рахунку кошти будуть знову доступні найближчим часом.</string>
+    <string name="help_payment_cancel_title">Скасування замовлення</string>
+    <string name="help_payment_cancel_desc">При скасуванні вами замовлення після подачі авто з вашої провини, в т.ч. у випадку, якщо ви не вийшли за вказаною адресою, з вашої картки списується вартість подачі авто в залежності від його класу відповідно до тарифів.</string>
+
+
+
+    <string name="title_tariffs">Тарифи</string>
+    <string name="tariff_details_title">Деталі тарифу</string>
+    <string name="tariff_base_price">Подача</string>
+    <string name="tariff_price_per_km">Вартість за км</string>
+    <string name="tariff_price_per_min">Хвилина очікування</string>
+
+
+    <string name="help_waiting_title">Очікування</string>
+    <string name="help_waiting_desc">Після того, як водій прибув за адресою, починається безкоштовне очікування. Воно триває 3 хвилини, та вартість поїздки не змінюється.\n\nПочинаючи з 4-ої хвилини, очікування сплачується за кожну хвилину очікування.</string>
+
+    <string name="history_title">Мої поїздки</string>
+    <string name="history_empty_list">Список порожній.</string>
+
+
+    <string name="welcome_title">Ласкаво просимо!</string>
+    <string name="welcome_subtitle">Введіть номер для реєстрації</string>
+    <string name="phone_hint">XX XXX XX XX</string>
+    <string name="btn_continue">Продовжити</string>
+
+    <string name="sms_verify_title">Код підтвердження</string>
+    <string name="sms_verify_subtitle">Введіть код з SMS</string>
+    <string name="sms_resend_placeholder">Відправити повторно через 300</string>
+    <string name="btn_login">Увійти</string>
+
+    <string name="toast_default_message">Повідомлення</string>
+
+
+    <string name="map_selected_point">ОБРАНА ТОЧКА</string>
+    <string name="map_searching_address">Пошук адреси...</string>
+    <string name="btn_confirm">Підтвердити</string>
+
+    <string name="notifications_title">Сповіщення</string>
+    <string name="notifications_empty_title">Немає нових сповіщень</string>
+    <string name="notifications_empty_subtitle">Ми повідомимо вас про важливі події</string>
+
+    <string name="no_network_title">Ой.. Нема мережі</string>
+    <string name="no_network_desc">Перевірте з’єднання Wi-Fi або мобільного інтернету та спробуйте знову.</string>
+    <string name="btn_retry">Оновити</string>
+
+    <string name="payment_method_title">Спосіб оплати</string>
+    <string name="payment_method_subtitle">Оплата замовлень за замовчуванням</string>
+    <string name="payment_cash">Готівка</string>
+    <string name="payment_card">Водію на картку</string>
+
+
+    <string name="promo_tasks_title">Акційні завдання</string>
+    <string name="promo_tasks_empty_title">Тут поки немає завдань</string>
+    <string name="promo_tasks_empty_subtitle">але вони скоро з\'являться!</string>
+
+    <string name="services_title">Послуги</string>
+
+    <string name="statistics_title">Статистика</string>
+    <string name="stat_section_general">Загальні показники</string>
+    <string name="stat_driven_distance">Проїхано</string>
+    <string name="stat_time_on_road">В дорозі</string>
+    <string name="stat_total_rides">Всього поїздок</string>
+    <string name="stat_fav_tariff">Улюблений тариф</string>
+    <string name="stat_active_day">Найактивніший день</string>
+    <string name="stat_default_km">0 км</string>
+    <string name="stat_default_min">0 хв</string>
+
+    <string name="profile_title">Мій профіль</string>
+    <string name="profile_hint_name">Ваше ім\'я</string>
+    <string name="profile_default_name">Райдер</string>
+    <string name="profile_rating">Рейтинг:</string>
+    <string name="btn_logout">Вийти з акаунту</string>
+    <string name="btn_delete_account">Видалити акаунт</string>
+
+    <string name="promo_dialog_title">Назва акції</string>
+    <string name="promo_dialog_desc">Опис завдання</string>
+    <string name="promo_your_discount">Ваша знижка</string>
+    <string name="promo_max_limit">Не більше ніж</string>
+    <string name="promo_no_limit">без ліміту</string>
+    <string name="promo_expires_unlimited">Діє до: Безстроково</string>
+    <string name="btn_got_it">Зрозуміло</string>
+
+
+    <string name="dialog_price_title">Вартість поїздки</string>
+    <string name="dialog_price_normal">Звичайна</string>
+    <string name="dialog_price_max_multiplier">×3</string>
+    <string name="dialog_default_price">110 ₴</string>
+    <string name="btn_save">Зберегти</string>
+
+    <string name="dialog_delete_account_title">Видалити акаунт?</string>
+    <string name="dialog_delete_account_message">Ви впевнені? Всі ваші дані будуть втрачені.</string>
+    <string name="btn_cancel">Скасувати</string>
+    <string name="btn_delete">Видалити</string>
+
+
+    <string name="dialog_driver_health_title">Увага! Особливості водія</string>
+    <string name="dialog_driver_health_desc">Будь ласка, враховуйте це під час поїздки та при спілкуванні з водієм.</string>
+
+    <string name="dialog_promo_title">Введіть промокод</string>
+    <string name="dialog_promo_hint">Промокод</string>
+    <string name="btn_activate">Активувати</string>
+
+
+
+
+
+
+
+
+
 </resources>

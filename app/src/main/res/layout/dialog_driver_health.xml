@@ -26,7 +26,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Увага! Особливості водія"
+            android:text="@string/dialog_driver_health_title"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
@@ -45,7 +45,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Будь ласка, враховуйте це під час поїздки та при спілкуванні з водієм."
+            android:text="@string/dialog_driver_health_desc"
             android:textColor="@color/text_secondary"
             android:textSize="14sp"
             android:textAlignment="center"
@@ -55,7 +55,7 @@
             android:id="@+id/btn_understand_health"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="Зрозуміло"
+            android:text="@string/btn_got_it"
             android:textAllCaps="false"
             android:textSize="16sp"
             android:textStyle="bold"

@@ -29,7 +29,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Допомога"
+            android:text="@string/help_title"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -51,7 +51,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Підтримка"
+                android:text="@string/help_section_support"
                 android:textColor="@color/text_hint"
                 android:textSize="14sp"
                 android:textStyle="bold"
@@ -81,7 +81,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Зв'язатися з нами"
+                        android:text="@string/help_contact_us"
                         android:textSize="16sp"
                         android:textColor="?attr/colorOnSurface"/>
 
@@ -96,7 +96,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Інші запитання"
+                android:text="@string/help_section_other"
                 android:textColor="@color/text_hint"
                 android:textSize="14sp"
                 android:textStyle="bold"
@@ -131,7 +131,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Тарифи"
+                            android:text="@string/help_tariffs"
                             android:textSize="16sp"
                             android:textColor="?attr/colorOnSurface"/>
 
@@ -164,7 +164,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Оплата"
+                            android:text="@string/help_payment"
                             android:textSize="16sp"
                             android:textColor="?attr/colorOnSurface"/>
 
@@ -197,7 +197,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Очікування"
+                            android:text="@string/help_waiting"
                             android:textSize="16sp"
                             android:textColor="?attr/colorOnSurface"/>
 

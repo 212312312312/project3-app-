@@ -18,7 +18,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Ой.. Нема мережі"
+        android:text="@string/no_network_title"
         android:textSize="22sp"
         android:textColor="@color/text_primary"
         android:textStyle="bold"
@@ -28,22 +28,36 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Перевірте з’єднання Wi-Fi або мобільного інтернету та спробуйте знову."
+        android:text="@string/no_network_desc"
         android:textSize="14sp"
         android:textColor="@color/text_secondary"
         android:gravity="center"
         android:layout_marginBottom="32dp"/>
 
-    <Button
-        android:id="@+id/btn_retry_connection"
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:text="Оновити"
-        android:textColor="@color/black"
-        android:backgroundTint="@color/taxi_yellow"
-        android:textAllCaps="false"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        app:cornerRadius="12dp"/>
+        android:layout_height="60dp"
+        android:layout_marginHorizontal="4dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_button_yellow">
+
+        <Button
+            android:id="@+id/btn_retry_connection"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:text="@string/btn_retry"
+            android:textAllCaps="false"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#454754"
+            android:background="@android:color/transparent"
+            android:stateListAnimator="@null"
+            android:elevation="0dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </LinearLayout>

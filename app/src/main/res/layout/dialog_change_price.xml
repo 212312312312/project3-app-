@@ -8,7 +8,8 @@
     android:paddingStart="24dp"
     android:paddingEnd="24dp"
     android:paddingTop="24dp"
-    android:paddingBottom="16dp"> 
+    android:paddingBottom="16dp">
+
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -17,7 +18,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Вартість поїздки"
+            android:text="@string/dialog_price_title"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -48,7 +49,7 @@
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_remove" 
+                android:src="@drawable/ic_remove"
                 android:layout_gravity="center"
                 app:tint="?attr/colorOnBackground"/>
         </FrameLayout>
@@ -58,7 +59,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="110 ₴"
+            android:text="@string/dialog_default_price"
             android:textSize="34sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnBackground"
@@ -96,14 +97,14 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Звичайна"
+            android:text="@string/dialog_price_normal"
             android:textSize="12sp"
             android:textColor="#9E9E9E"/>
         <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="×3"
+            android:text="@string/dialog_price_max_multiplier"
             android:textSize="12sp"
             android:textColor="#9E9E9E"/>
     </LinearLayout>
@@ -112,7 +113,7 @@
         android:id="@+id/btn_save_price"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:text="Зберегти"
+        android:text="@string/btn_save"
         android:textSize="16sp"
         android:textStyle="bold"
         android:textColor="@color/black"

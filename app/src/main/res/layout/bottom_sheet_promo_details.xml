@@ -11,10 +11,10 @@
         android:id="@+id/tv_sheet_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Назва акції"
+        android:text="@string/promo_dialog_title"
         android:textSize="22sp"
         android:textStyle="bold"
-        android:textColor="@color/text_primary" 
+        android:textColor="@color/text_primary"
         android:gravity="center"
         android:layout_marginBottom="8dp"/>
 
@@ -22,7 +22,7 @@
         android:id="@+id/tv_sheet_desc"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Опис завдання"
+        android:text="@string/promo_dialog_desc"
         android:textSize="16sp"
         android:textColor="#808080"
         android:gravity="center"
@@ -33,7 +33,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:background="@drawable/rounded_dialog_bg"
-        android:backgroundTint="@color/menu_background_color" 
+        android:backgroundTint="@color/menu_background_color"
         android:padding="16dp"
         android:layout_marginBottom="24dp"
         android:weightSum="2"
@@ -45,22 +45,22 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center">
-            
-            <TextView 
+
+            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Ваша знижка" 
-                android:textSize="13sp" 
+                android:text="@string/promo_your_discount"
+                android:textSize="13sp"
                 android:textColor="@color/text_primary"
                 android:alpha="0.6"/>
-            
-            <TextView 
-                android:id="@+id/tv_sheet_percent" 
+
+            <TextView
+                android:id="@+id/tv_sheet_percent"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="15%" 
-                android:textSize="26sp" 
-                android:textStyle="bold" 
+                android:text="15%"
+                android:textSize="26sp"
+                android:textStyle="bold"
                 android:textColor="@color/text_primary"/>
         </LinearLayout>
 
@@ -71,21 +71,21 @@
             android:orientation="vertical"
             android:gravity="center">
 
-            <TextView 
+            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Не більше ніж" 
-                android:textSize="13sp" 
+                android:text="@string/promo_max_limit"
+                android:textSize="13sp"
                 android:textColor="@color/text_primary"
                 android:alpha="0.6"/>
-                
-            <TextView 
-                android:id="@+id/tv_sheet_limit" 
+
+            <TextView
+                android:id="@+id/tv_sheet_limit"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="без ліміту" 
-                android:textSize="26sp" 
-                android:textStyle="bold" 
+                android:text="@string/promo_no_limit"
+                android:textSize="26sp"
+                android:textStyle="bold"
                 android:textColor="@color/text_primary"/>
         </LinearLayout>
     </LinearLayout>
@@ -94,7 +94,7 @@
         android:id="@+id/tv_sheet_expires"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Діє до: Безстроково"
+        android:text="@string/promo_expires_unlimited"
         android:textSize="14sp"
         android:textColor="#808080"
         android:gravity="center"
@@ -104,7 +104,7 @@
         android:id="@+id/btn_sheet_close"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Зрозуміло"
+        android:text="@string/btn_got_it"
         android:textSize="16sp"
         android:textStyle="bold"
         android:textColor="@color/text_primary"
@@ -112,6 +112,6 @@
         app:backgroundTint="@color/menu_background_color"
         app:cornerRadius="16dp"
         app:elevation="0dp"
-        app:strokeWidth="0dp"/> 
+        app:strokeWidth="0dp"/>
 
 </LinearLayout>

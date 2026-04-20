@@ -39,7 +39,7 @@ import android.view.inputmethod.InputMethodManager
 import com.taxiapp.client.utils.ViewUtils
 import java.util.Locale
 
-class AddressPickerActivity : AppCompatActivity() {
+class AddressPickerActivity : BaseActivity() {
 
     companion object {
         const val MODE_STANDARD = 0
@@ -188,15 +188,15 @@ class AddressPickerActivity : AppCompatActivity() {
 
         when (mode) {
             MODE_SAVE_HOME -> {
-                title.text = "Додати дім"
-                configureSingleFieldMode(etDestination, R.drawable.ic_home_custom, "Введіть адресу дому")
+                title.text = getString(R.string.title_add_home)
+                configureSingleFieldMode(etDestination, R.drawable.ic_home_custom, getString(R.string.hint_add_home))
             }
             MODE_SAVE_WORK -> {
-                title.text = "Додати роботу"
-                configureSingleFieldMode(etDestination, R.drawable.ic_work_custom, "Введіть адресу роботи")
+                title.text = getString(R.string.title_add_work)
+                configureSingleFieldMode(etDestination, R.drawable.ic_work_custom, getString(R.string.hint_add_work))
             }
             else -> {
-                title.text = if (isOriginMode) "Звідки їдемо?" else "Куди їдемо?"
+                title.text = if (isOriginMode) getString(R.string.title_where_from) else getString(R.string.picker_title_where_to)
                 configureStandardMode(isOriginMode, currentAddressA, currentLatA, currentLngA)
             }
         }
