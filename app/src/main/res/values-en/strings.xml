@@ -159,6 +159,50 @@
     <string name="btn_activate">Activate</string>
 
 
+    <string name="dialog_language_title">Choose language / Оберіть мову</string>
+    <string name="lang_ukrainian">🇺🇦 Українська</string>
+    <string name="lang_english">🇬🇧 English</string>
+
+    <string name="dialog_notifications_title">Turn on notifications?</string>
+    <string name="dialog_notifications_desc">Allow us to notify you about the car\'s arrival and order status so you don\'t miss your trip.</string>
+    <string name="btn_later">Later</string>
+    <string name="btn_enable">Enable</string>
+    <string name="rating_title">Rate the trip</string>
+    <string name="rating_comment_hint">Your comment (optional)</string>
+    <string name="btn_submit">Submit</string>
+
+    <string name="dialog_schedule_title">Choose pickup time</string>
+    <string name="dialog_schedule_tab_date">Date</string>
+    <string name="dialog_schedule_tab_time">Time</string>
+
+
+    <string name="item_discount_default_percent">-10%</string>
+    <string name="item_discount_default_title">Discount name</string>
+    <string name="item_discount_default_date">until 12/20/2025</string>
+
+
+    <string name="item_order_status_scheduled">Scheduled</string>
+    <string name="item_order_default_time">12:30</string>
+    <string name="item_order_default_price">145 ₴</string>
+    <string name="item_order_default_from">Address A</string>
+    <string name="item_order_waypoints">+ stop...</string>
+    <string name="item_order_default_to">Address B</string>
+    <string name="item_order_driver_assigned">Driver assigned</string>
+    <string name="item_order_default_driver">Alexander</string>
+    <string name="item_order_default_car">Toyota Prius</string>
+    <string name="btn_cancel_order">Cancel</string>
+
+    <string name="item_history_default_date">Date</string>
+    <string name="item_history_default_price">0 ₴</string>
+    <string name="item_history_default_from">Address A</string>
+    <string name="item_history_waypoints">+ stop...</string>
+    <string name="item_history_default_to">Address B</string>
+
+
+    <string name="dialog_contact_title">Choose contact method</string>
+    <string name="contact_telegram">Telegram</string>
+    <string name="contact_call">Call</string>
+
 
 
 

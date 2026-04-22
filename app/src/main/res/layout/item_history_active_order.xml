@@ -25,26 +25,36 @@
             android:gravity="center_vertical"
             android:layout_marginBottom="16dp">
 
-            <TextView
-                android:id="@+id/tv_status_badge"
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Заплановано"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="@color/white"
+                android:layout_marginEnd="12dp"
                 android:background="@drawable/bg_status_pill"
-                android:backgroundTint="#FF9800"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="4dp"
-                android:layout_marginEnd="12dp" />
+                android:backgroundTint="#FF9800">
+
+                <TextView
+                    android:id="@+id/tv_status_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/item_order_status_scheduled"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/white"
+                    android:background="@android:color/transparent"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <TextView
                 android:id="@+id/tv_date"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="12:30"
+                android:text="@string/item_order_default_time"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:fontFamily="sans-serif-medium" />
@@ -53,7 +63,7 @@
                 android:id="@+id/tv_price"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="145 ₴"
+                android:text="@string/item_order_default_price"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary" />
@@ -93,7 +103,7 @@
                 android:id="@+id/tv_from"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Адреса А"
+                android:text="@string/item_order_default_from"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
                 android:layout_marginStart="12dp"
@@ -105,7 +115,7 @@
                 android:id="@+id/tv_waypoints"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="+ зупинка..."
+                android:text="@string/item_order_waypoints"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginTop="12dp"
@@ -128,7 +138,7 @@
                 android:id="@+id/tv_to"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Адреса Б"
+                android:text="@string/item_order_default_to"
                 android:textSize="16sp"
                 android:textColor="@color/text_primary"
                 android:layout_marginStart="12dp"
@@ -152,7 +162,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Водій призначений"
+                android:text="@string/item_order_driver_assigned"
                 android:textSize="12sp"
                 android:textColor="@color/text_secondary" />
 
@@ -168,7 +178,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Олександр"
+                    android:text="@string/item_order_default_driver"
                     android:textColor="@color/text_primary"
                     android:textStyle="bold"
                     android:textSize="15sp" />
@@ -177,25 +187,36 @@
                     android:id="@+id/tv_car_model"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Toyota Prius"
+                    android:text="@string/item_order_default_car"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
             </LinearLayout>
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btn_cancel_order"
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:text="Скасувати"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="@color/white"
-            android:backgroundTint="#D32F2F"
             android:layout_marginTop="16dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            app:cornerRadius="12dp" />
+            android:background="@drawable/bg_button_yellow"
+            android:backgroundTint="#D32F2F">
+
+            <Button
+                android:id="@+id/btn_cancel_order"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:text="@string/btn_cancel_order"
+                android:textAllCaps="false"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/white"
+                android:background="@android:color/transparent"
+                android:stateListAnimator="@null"
+                android:elevation="0dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

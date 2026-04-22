@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
             android:gravity="center"
-            android:text="Увімкнути сповіщення?"
+            android:text="@string/dialog_notifications_title"
             android:textColor="@color/text_primary"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -38,7 +38,7 @@
             android:layout_marginBottom="24dp"
             android:gravity="center"
             android:lineSpacingExtra="4dp"
-            android:text="Дозвольте нам повідомляти вас про прибуття авто та статус замовлення, щоб ви не пропустили поїздку."
+            android:text="@string/dialog_notifications_desc"
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
 
@@ -55,7 +55,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:text="Пізніше"
+                android:text="@string/btn_later"
                 android:textColor="@color/text_secondary" />
 
             <com.google.android.material.button.MaterialButton
@@ -64,7 +64,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:backgroundTint="@color/taxi_yellow"
-                android:text="Увімкнути"
+                android:text="@string/btn_enable"
                 android:textColor="@color/black"
                 app:cornerRadius="12dp" />
         </LinearLayout>

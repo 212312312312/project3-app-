@@ -162,6 +162,51 @@
     <string name="btn_activate">Активувати</string>
 
 
+    <string name="dialog_language_title">Оберіть мову / Choose language</string>
+    <string name="lang_ukrainian">🇺🇦 Українська</string>
+    <string name="lang_english">🇬🇧 English</string>
+
+    <string name="dialog_notifications_title">Увімкнути сповіщення?</string>
+    <string name="dialog_notifications_desc">Дозвольте нам повідомляти вас про прибуття авто та статус замовлення, щоб ви не пропустили поїздку.</string>
+    <string name="btn_later">Пізніше</string>
+    <string name="btn_enable">Увімкнути</string>
+
+    <string name="rating_title">Оцініть поїздку</string>
+    <string name="rating_comment_hint">Ваш коментар (необов\'язково)</string>
+    <string name="btn_submit">Відправити</string>
+
+    <string name="dialog_schedule_title">Оберіть час подачі</string>
+    <string name="dialog_schedule_tab_date">Дата</string>
+    <string name="dialog_schedule_tab_time">Час</string>
+
+
+    <string name="item_discount_default_percent">-10%</string>
+    <string name="item_discount_default_title">Назва знижки</string>
+    <string name="item_discount_default_date">до 20.12.2025</string>
+
+    <string name="item_order_status_scheduled">Заплановано</string>
+    <string name="item_order_default_time">12:30</string>
+    <string name="item_order_default_price">145 ₴</string>
+    <string name="item_order_default_from">Адреса А</string>
+    <string name="item_order_waypoints">+ зупинка...</string>
+    <string name="item_order_default_to">Адреса Б</string>
+    <string name="item_order_driver_assigned">Водій призначений</string>
+    <string name="item_order_default_driver">Олександр</string>
+    <string name="item_order_default_car">Toyota Prius</string>
+    <string name="btn_cancel_order">Скасувати</string>
+
+
+    <string name="item_history_default_date">Дата</string>
+    <string name="item_history_default_price">0 ₴</string>
+    <string name="item_history_default_from">Адреса А</string>
+    <string name="item_history_waypoints">+ зупинка...</string>
+    <string name="item_history_default_to">Адреса Б</string>
+
+
+    <string name="dialog_contact_title">Оберіть спосіб зв\'язку</string>
+    <string name="contact_telegram">Telegram</string>
+    <string name="contact_call">Зателефонувати</string>
+
 
 
 
