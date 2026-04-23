@@ -17,7 +17,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-class StatsActivity : AppCompatActivity() {
+class StatsActivity : BaseActivity()  {
 
     // UI View Variables
     private lateinit var tvKm: TextView

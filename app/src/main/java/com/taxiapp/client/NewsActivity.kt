@@ -19,7 +19,7 @@ import retrofit2.Callback
 import android.widget.LinearLayout
 import retrofit2.Response
 
-class NewsActivity : AppCompatActivity() {
+class NewsActivity : BaseActivity()  {
 
     private lateinit var adapter: NewsAdapter
     private lateinit var progressBar: ProgressBar

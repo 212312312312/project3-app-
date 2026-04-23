@@ -25,7 +25,7 @@ import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 import java.util.Locale
 
-class MapPickerActivity : AppCompatActivity(), OnMapReadyCallback, OnMapsSdkInitializedCallback {
+class MapPickerActivity : BaseActivity() , OnMapReadyCallback, OnMapsSdkInitializedCallback {
 
     private lateinit var mMap: GoogleMap
     private lateinit var tvAddress: TextView

@@ -20,7 +20,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class HelpDiscountsActivity : AppCompatActivity() {
+class HelpDiscountsActivity : BaseActivity() {
 
     private lateinit var adapter: DiscountAdapter
     private lateinit var progressBar: ProgressBar

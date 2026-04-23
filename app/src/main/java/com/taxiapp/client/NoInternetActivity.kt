@@ -10,7 +10,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import com.taxiapp.client.HomeActivity
 
-class NoInternetActivity : AppCompatActivity() {
+class NoInternetActivity : BaseActivity()  {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

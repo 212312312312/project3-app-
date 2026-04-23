@@ -109,17 +109,28 @@
             android:textColor="#9E9E9E"/>
     </LinearLayout>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_save_price"
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:text="@string/btn_save"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="@color/black"
-        app:backgroundTint="@color/taxi_yellow"
-        app:cornerRadius="12dp"
-        android:insetTop="0dp"
-        android:insetBottom="0dp"/>
+        android:layout_height="60dp"
+        android:background="@drawable/bg_button_yellow">
+
+        <Button
+            android:id="@+id/btn_save_price"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:text="@string/btn_save"
+            android:textAllCaps="false"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#454754"
+            android:background="@android:color/transparent"
+            android:stateListAnimator="@null"
+            android:elevation="0dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </LinearLayout>

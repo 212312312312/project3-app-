@@ -13,7 +13,7 @@ import com.google.android.libraries.places.api.model.Place
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 
-class FavoriteAddressesActivity : AppCompatActivity() {
+class FavoriteAddressesActivity : BaseActivity() {
 
     private lateinit var sessionManager: SessionManager
 

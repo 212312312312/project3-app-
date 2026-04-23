@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ServicesActivity : AppCompatActivity() {
+class ServicesActivity : BaseActivity()  {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ServicesAdapter

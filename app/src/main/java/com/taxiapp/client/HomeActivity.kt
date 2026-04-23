@@ -83,7 +83,7 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.ceil
 
-class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
+class HomeActivity : BaseActivity() , OnMapReadyCallback {
 
     companion object {
         private const val REQUEST_CODE_CITY = 101
@@ -243,6 +243,9 @@ class HomeActivity : AppCompatActivity(), OnMapReadyCallback {
     private var originPlace: Place? = null
     private var destinationPlace: Place? = null
     private var currentCity: CityData? = null
+
+    private var polylineAnim: Polyline? = null
+    private var routeAnimator: ValueAnimator? = null
 
 
 
@@ -474,6 +477,7 @@ private lateinit var tvNewWaitingTimer: TextView
         setupProfileLogic()
         setupTariffAdapter()
         updateFavoriteButtonsUI()
+        updateThemeLabel()
 
         loadSectors()
         // loadTariffs() - теперь вызывается через ViewModel или по требованию
@@ -886,6 +890,7 @@ tvNewWaitingTimer = findViewById(R.id.tv_new_waiting_timer)
         ivIconWork = findViewById(R.id.iv_icon_work)
         indicatorAddWork = findViewById(R.id.indicator_add_work)
         ivPaymentIcon = findViewById(R.id.iv_payment_icon)
+
 
         activeOrderCard = findViewById(R.id.active_order_card)
         layoutActiveOrderPrice = findViewById(R.id.layout_active_order_price)
@@ -1915,6 +1920,12 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         overlayOrigin.animate().alpha(1f).setDuration(1000).start()
         overlayDest.animate().alpha(1f).setDuration(1000).start()
 
+        polylineAnimator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                animateRoute(path) // Запускаем наше сияние!
+            }
+        })
+
         polylineAnimator.start()
         markerAnimator.start()
 
@@ -1964,6 +1975,11 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         selectedTariffItem = null
         btnOrderTaxi.isEnabled = false
         btnOrderTaxi.text = "Замовити"
+
+        polylineAnim?.remove()
+        polylineAnim = null
+        routeAnimator?.cancel()
+        routeAnimator = null
 
         overlayOrigin.visibility = View.GONE
         overlayDest.visibility = View.GONE
@@ -2297,6 +2313,71 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         webSocketManager?.disconnect()
         driverMarker?.remove()
         driverMarker = null
+    }
+
+    private fun animateRoute(path: List<LatLng>) {
+        if (path.isEmpty() || mMap == null) return
+
+        val isDark = sessionManager.isDarkMode()
+        val colorBase = ContextCompat.getColor(this, R.color.route_main)
+        
+        // Для темной темы — почти белый (240)
+        // Для светлой темы — мягкий черный / графитовый (50)
+        val colorGlow = if (isDark) {
+            Color.rgb(240, 240, 240) 
+        } else {
+            Color.rgb(112, 112, 112) 
+        }
+
+        val animOpts = PolylineOptions()
+            .addAll(path)
+            .width(8f) 
+            .color(colorBase) 
+            .zIndex(2.5f) 
+            .startCap(RoundCap())
+            .endCap(RoundCap())
+            .jointType(JointType.ROUND) 
+
+        polylineAnim = mMap?.addPolyline(animOpts)
+
+        // Итоговый тайминг: 750мс (вспышка) + 500мс (удержание) + 2500мс (спад) + 1750мс (пауза) = 5500 мс
+        val totalDurationMs = 5500f
+        val argbEvaluator = android.animation.ArgbEvaluator() 
+
+        routeAnimator = ValueAnimator.ofFloat(0f, 1f)
+        routeAnimator?.duration = totalDurationMs.toLong()
+        routeAnimator?.interpolator = LinearInterpolator()
+        routeAnimator?.repeatCount = ValueAnimator.INFINITE
+        routeAnimator?.repeatMode = ValueAnimator.RESTART
+
+        routeAnimator?.addUpdateListener { animator ->
+            try {
+                val progress = animator.animatedValue as Float
+                val timeMs = progress * totalDurationMs
+                
+                val fraction = when {
+                    timeMs <= 750f -> {
+                        // Этап 1: Вспышка (0.75 сек)
+                        timeMs / 750f
+                    }
+                    timeMs <= 1250f -> {
+                        // Этап 2: Удержание (0.5 сек)
+                        1f
+                    }
+                    timeMs <= 3750f -> {
+                        // Этап 3: Затухание (2.5 сек)
+                        1f - ((timeMs - 1250f) / 2500f)
+                    }
+                    else -> 0f // Этап 4: Пауза (1.75 сек)
+                }
+
+                val currentColor = argbEvaluator.evaluate(fraction, colorBase, colorGlow) as Int
+                polylineAnim?.color = currentColor
+                
+            } catch (_: Exception) {}
+        }
+        
+        routeAnimator?.start()
     }
 
     private fun updateDriverMarker(loc: TrackingLocationDto) {
@@ -3470,6 +3551,17 @@ if (healthIssues.isNotEmpty()) {
 
         recenterMapOnUser()
     }
+
+    private fun updateThemeLabel() {
+    val tvThemeLabel = findViewById<TextView>(R.id.tv_theme_label)
+    
+    if (sessionManager.isDarkMode()) {
+        // Берем строку из ресурсов (она автоматически будет на нужном языке)
+        tvThemeLabel.text = getString(R.string.theme_label_dark)
+    } else {
+        tvThemeLabel.text = getString(R.string.theme_label_light)
+    }
+}
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)

@@ -19,7 +19,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class PromoActivity : AppCompatActivity() {
+class PromoActivity : BaseActivity()  {
 
     private lateinit var adapter: PromoAdapter
     private lateinit var progressBar: ProgressBar

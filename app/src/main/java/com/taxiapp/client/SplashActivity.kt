@@ -11,7 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 
-class SplashActivity : AppCompatActivity() {
+class SplashActivity : BaseActivity()  {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

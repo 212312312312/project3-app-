@@ -10,7 +10,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 import com.taxiapp.client.utils.ViewUtils // <--- ВАЖЛИВИЙ ІМПОРТ
 
-class HelpActivity : AppCompatActivity() {
+class HelpActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

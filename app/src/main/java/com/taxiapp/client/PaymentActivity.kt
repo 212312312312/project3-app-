@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.taxiapp.client.utils.ViewUtils
 import com.taxiapp.client.utils.SessionManager
 
-class PaymentActivity : AppCompatActivity() {
+class PaymentActivity : BaseActivity()  {
 
     private lateinit var sessionManager: SessionManager
     private lateinit var ivCheckCash: ImageView

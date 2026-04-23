@@ -18,7 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.taxiapp.client.utils.ViewUtils
 
-class CommentActivity : AppCompatActivity() {
+class CommentActivity : BaseActivity() {
 
     private lateinit var etComment: EditText
     private lateinit var tvCounter: TextView

@@ -203,9 +203,32 @@
     <string name="item_history_default_to">Адреса Б</string>
 
 
+
+    <string name="where_from">Звідки? (Точка А)</string>
+    <string name="where_to">Куди їдемо?</string>
+    <string name="where_to_hint">Куди?</string>
+
     <string name="dialog_contact_title">Оберіть спосіб зв\'язку</string>
     <string name="contact_telegram">Telegram</string>
     <string name="contact_call">Зателефонувати</string>
+
+
+    <string name="default_avatar_letter">U</string>
+    <string name="default_user_rating">5.0</string>
+    <string name="default_user_name">Райдер</string>
+    <string name="menu_city_placeholder">Місто: Київ</string>
+
+    <string name="menu_statistics">Статистика</string>
+    <string name="menu_my_rides">Мої поїздки</string>
+    <string name="menu_payment">Оплата</string>
+    <string name="menu_favorite_addresses">Обрані адреси</string>
+    <string name="menu_discounts">Знижки</string>
+    <string name="menu_news">Новини</string>
+    <string name="menu_help">Допомога</string>
+    <string name="theme_label_light">Світла тема</string>
+    <string name="theme_label_dark">Темна тема</string>
+
+
 
 
 
