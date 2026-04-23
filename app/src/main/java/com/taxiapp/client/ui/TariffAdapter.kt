@@ -41,7 +41,7 @@ class TariffAdapter(
     private var maxDiscountAmount: Double = 0.0
 
     // НАЛАШТУВАННЯ СЕРВЕРА
-    private val SERVER_IP = "192.168.0.106" // Твій IP
+    private val SERVER_IP = "192.168.0.107" // Твій IP
     private val SERVER_PORT = "8080"
 
     inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
