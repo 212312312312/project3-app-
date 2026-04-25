@@ -232,6 +232,8 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
 
     private lateinit var mapLoadingCurtain: ImageView
     private lateinit var contentBottomSheet: View
+
+    private var currentActiveLanguage: String = ""       
     
     private var loadedSectors: List<SectorDto> = emptyList()
     private var isRatingDialogVisible = false
@@ -451,6 +453,8 @@ private lateinit var tvNewWaitingTimer: TextView
         }
 
         sessionManager = SessionManager(applicationContext)
+
+        currentActiveLanguage = sessionManager.getLanguage()
 
         webSocketManager = WebSocketManager(ApiClient.BASE_URL)
         fetchCustomCarIcon()
@@ -720,9 +724,16 @@ private lateinit var tvNewWaitingTimer: TextView
 
     override fun onResume() {
         super.onResume()
+
+        val savedLanguage = sessionManager.getLanguage()
+        if (currentActiveLanguage != savedLanguage) {
+            currentActiveLanguage = savedLanguage
+            recreate() // Пересоздаем HomeActivity с новым языком
+            return // Прерываем выполнение старого onResume
+        }
         updateFavoriteButtonsUI()
         updateDrawerHeader()
-        
+
         if (tariffsPanel.visibility == View.VISIBLE) {
             fetchTariffsAndShowPanel()
         }
