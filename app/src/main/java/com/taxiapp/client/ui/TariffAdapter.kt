@@ -52,6 +52,7 @@ class TariffAdapter(
         val desc: TextView = view.findViewById(R.id.tv_tariff_desc)
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
         val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge)
+        val betaBadge: TextView = view.findViewById(R.id.tv_beta_badge) // <-- ДОБАВЛЕНО
 
         fun bind(item: TariffItem, isSelected: Boolean) {
             val tariff = item.tariff
@@ -65,28 +66,30 @@ class TariffAdapter(
                 desc.visibility = View.GONE
             }
 
+            // --- BETA БЕЙДЖ ---
+            if (tariff.isBeta) {
+                betaBadge.visibility = View.VISIBLE
+            } else {
+                betaBadge.visibility = View.GONE
+            }
+            // ------------------
+
             // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
             if (!tariff.imageUrl.isNullOrEmpty()) {
                 val rawUrl = tariff.imageUrl
 
-                // УНИВЕРСАЛЬНАЯ ПРОВЕРКА И ОЧИСТКА ССЫЛКИ
                 val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
-                    // 1. Если в БД уже лежит готовая полная ссылка — просто берем её
                     rawUrl
                 } else {
-                    // 2. Если это просто путь: вычищаем ВСЕ двойные слеши и слеши в начале
-                    var cleanPath = rawUrl.replace("\\", "/") // меняем виндовые слеши на обычные
-                        .replace(Regex("/{2,}"), "/")         // заменяем любые // или /// на один /
-                        .trimStart('/')                       // убираем слеш в самом начале строки
+                    var cleanPath = rawUrl.replace("\\", "/")
+                        .replace(Regex("/{2,}"), "/")
+                        .trimStart('/')
 
-                    // 3. Защита от задвоения папки uploads (если путь уже начинается на uploads/)
                     if (!cleanPath.startsWith("uploads/")) {
                         cleanPath = "uploads/$cleanPath"
                     }
                     "http://$SERVER_IP:$SERVER_PORT/$cleanPath"
                 }
-
-                Log.d("TariffAdapter", "Glide is trying to load: $fullUrl")
 
                 Glide.with(itemView.context)
                     .load(fullUrl)
@@ -132,19 +135,36 @@ class TariffAdapter(
                 price.text = "${item.priceValue.roundToInt()} ₴"
             }
 
-            // Стиль виділення
-            if (isSelected) {
-                cardView.cardElevation = 0f
-                cardView.strokeWidth = 6
-                cardView.strokeColor = ContextCompat.getColor(itemView.context, R.color.taxi_yellow)
-            } else {
+            // --- ЛОГИКА НЕДОСТУПНОГО ТАРИФА (UNAVAILABLE) ---
+            if (tariff.isUnavailable) {
+                // Делаем тусклым, убираем выделение и отключаем клики
+                cardView.alpha = 0.4f
                 cardView.strokeWidth = 0
                 cardView.cardElevation = 0f
+                itemView.isEnabled = false
+                itemView.isClickable = false
+            } else {
+                // Возвращаем нормальный вид
+                cardView.alpha = 1.0f
+                itemView.isEnabled = true
+                itemView.isClickable = true
+
+                // Стиль виділення
+                if (isSelected) {
+                    cardView.cardElevation = 0f
+                    cardView.strokeWidth = 6
+                    cardView.strokeColor = ContextCompat.getColor(itemView.context, R.color.taxi_yellow)
+                } else {
+                    cardView.strokeWidth = 0
+                    cardView.cardElevation = 0f
+                }
             }
 
             itemView.setOnClickListener {
+                if (tariff.isUnavailable) return@setOnClickListener // Дополнительная защита
+
                 val prev = selectedPosition
-                selectedPosition = bindingAdapterPosition // Використовуємо bindingAdapterPosition замість adapterPosition
+                selectedPosition = bindingAdapterPosition
                 notifyItemChanged(prev)
                 notifyItemChanged(selectedPosition)
                 onTariffSelected(item)
