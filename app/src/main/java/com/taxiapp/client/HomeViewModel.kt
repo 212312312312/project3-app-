@@ -105,8 +105,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
-                _isLoading.value = false
-                _errorMessage.value = "Помилка мережі: ${t.message}"
             }
         })
     }
@@ -146,7 +144,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
-                    _errorMessage.value = "Помилка маршруту: ${t.message}"
+                    _errorMessage.value = "Не вдалося побудувати маршрут"
                 }
             })
     }
