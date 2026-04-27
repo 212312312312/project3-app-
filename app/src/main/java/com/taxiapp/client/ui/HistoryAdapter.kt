@@ -14,38 +14,70 @@ import com.taxiapp.client.network.dto.TaxiOrderDto
 
 class HistoryAdapter(
     private var orders: List<TaxiOrderDto>,
-    private val onItemClick: ((Long) -> Unit)? = null,   // <-- ДОДАНО: Клік по картці для розгортання
-    private val onCancelClick: ((Long) -> Unit)? = null  // <-- Клік по кнопці скасування
+    private val onItemClick: ((Long) -> Unit)? = null,
+    private val onCancelClick: ((Long) -> Unit)? = null
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-) : RecyclerView.Adapter<HistoryAdapter.OrderViewHolder>() {
+    companion object {
+        private const val VIEW_TYPE_ACTIVE = 1
+        private const val VIEW_TYPE_ARCHIVE = 2
+    }
 
     fun submitList(newOrders: List<TaxiOrderDto>) {
         orders = newOrders
         notifyDataSetChanged()
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): OrderViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_history_active_order, parent, false)
-        return OrderViewHolder(view)
+    // ВИЗНАЧАЄМО ТИП ЗАМОВЛЕННЯ
+    override fun getItemViewType(position: Int): Int {
+        val status = orders[position].status
+        val isActive = status == "SCHEDULED" || status == "REQUESTED" ||
+                status == "OFFERING" || status == "ACCEPTED" ||
+                status == "DRIVER_ARRIVED" || status == "IN_PROGRESS"
+
+        return if (isActive) VIEW_TYPE_ACTIVE else VIEW_TYPE_ARCHIVE
     }
 
-    override fun onBindViewHolder(holder: OrderViewHolder, position: Int) {
-        holder.bind(orders[position], onItemClick, onCancelClick)
+    // РОЗДУВАЄМО ПОТРІБНИЙ МАКЕТ
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        return if (viewType == VIEW_TYPE_ACTIVE) {
+            val view = inflater.inflate(R.layout.item_history_active_order, parent, false)
+            ActiveOrderViewHolder(view)
+        } else {
+            val view = inflater.inflate(R.layout.item_history_order, parent, false)
+            ArchiveOrderViewHolder(view)
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val order = orders[position]
+        if (holder is ActiveOrderViewHolder) {
+            holder.bind(order, onItemClick, onCancelClick)
+        } else if (holder is ArchiveOrderViewHolder) {
+            holder.bind(order, onItemClick)
+        }
     }
 
     override fun getItemCount(): Int = orders.size
 
-    class OrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+    // =========================================================
+    // 1. VIEWHOLDER ДЛЯ АКТИВНИХ ПОЇЗДОК (зі статусом і кнопкою)
+    // =========================================================
+    class ActiveOrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvStatusBadge: TextView = itemView.findViewById(R.id.tv_status_badge)
         private val tvDateTime: TextView = itemView.findViewById(R.id.tv_date)
         private val tvFrom: TextView = itemView.findViewById(R.id.tv_from)
         private val tvTo: TextView = itemView.findViewById(R.id.tv_to)
         private val tvPrice: TextView = itemView.findViewById(R.id.tv_price)
+
+        // Знаходимо саме КОНТЕЙНЕР кнопки, а не тільки кнопку
+        private val layoutCancelContainer: View = itemView.findViewById(R.id.layout_cancel_container)
         private val btnCancel: Button = itemView.findViewById(R.id.btn_cancel_order)
+
         private val layoutDriverInfo: LinearLayout = itemView.findViewById(R.id.layout_driver_info)
         private val tvDriverName: TextView = itemView.findViewById(R.id.tv_driver_name)
         private val tvCarModel: TextView = itemView.findViewById(R.id.tv_car_model)
-
         private val tvWaypoints: TextView? = itemView.findViewById(R.id.tv_waypoints)
         private val ivWaypointDot: ImageView? = itemView.findViewById(R.id.iv_marker_waypoint)
 
@@ -54,79 +86,49 @@ class HistoryAdapter(
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
 
-            // --- ЛОГІКА СТАТУСУ ТА ВИДИМОСТІ КНОПКИ ---
-            // --- ЛОГІКА СТАТУСУ ТА ВИДИМОСТІ КНОПКИ ---
-            val isActive = order.status == "SCHEDULED" || order.status == "REQUESTED" ||
-                    order.status == "OFFERING" || order.status == "ACCEPTED" ||
-                    order.status == "DRIVER_ARRIVED" || order.status == "IN_PROGRESS"
+            // За замовчуванням показуємо кнопку
+            layoutCancelContainer.visibility = View.VISIBLE
+            tvDateTime.text = "Зараз"
 
-            if (isActive) {
-                // АКТИВНЕ ЗАМОВЛЕННЯ
-                btnCancel.visibility = View.VISIBLE
-                tvStatusBadge.visibility = View.VISIBLE
-                tvDateTime.text = "Зараз" // За замовчуванням "Зараз"
-
-                // Детальний розбір активних статусів
-                when (order.status) {
-                    "SCHEDULED" -> {
-                        val timeStr = order.scheduledAt?.replace("T", " ")?.take(16) ?: ""
-                        tvDateTime.text = timeStr
-                        tvStatusBadge.text = "Заплановано"
-                        tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#FF9800")) // Помаранчевий
-                    }
-                    "REQUESTED", "OFFERING" -> {
-                        tvStatusBadge.text = "Пошук водія"
-                        // Можемо зробити синім, щоб відрізнялося від того, коли водій вже знайдений
-                        tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#2196F3"))
-                    }
-                    "ACCEPTED" -> {
-                        tvStatusBadge.text = "Водій їде"
-                        tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#4CAF50")) // Зелений
-                    }
-                    "DRIVER_ARRIVED" -> {
-                        tvStatusBadge.text = "Водій на місці"
-                        tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#4CAF50")) // Зелений
-
-                        // Коли водій на місці, скасування вже зазвичай заборонено/платне,
-                        // але залежить від твоєї логіки. Якщо треба сховати кнопку:
-                        // btnCancel.visibility = View.GONE
-                    }
-                    "IN_PROGRESS" -> {
-                        tvStatusBadge.text = "В дорозі"
-                        tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#4CAF50")) // Зелений
-                        btnCancel.visibility = View.GONE // В дорозі точно не можна скасувати
-                    }
-                    else -> {
-                        tvStatusBadge.text = "В роботі"
-                        tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#4CAF50"))
-                    }
+            when (order.status) {
+                "SCHEDULED" -> {
+                    val timeStr = order.scheduledAt?.replace("T", " ")?.take(16) ?: ""
+                    tvDateTime.text = timeStr
+                    tvStatusBadge.text = "Заплановано"
+                    tvStatusBadge.background.setTint(Color.parseColor("#FF9800"))
                 }
-            } else {
-                // АРХІВНЕ (Завершено або Скасовано)
-                btnCancel.visibility = View.GONE
-                tvStatusBadge.visibility = View.VISIBLE
-
-                if (order.status == "CANCELLED") {
-                    tvStatusBadge.text = "Скасовано"
-                    tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#F44336")) // Червоний
-                } else {
-                    tvStatusBadge.text = "Завершено"
-                    tvStatusBadge.background.setTint(android.graphics.Color.parseColor("#9E9E9E")) // Сірий
+                "REQUESTED", "OFFERING" -> {
+                    tvStatusBadge.text = "Пошук водія"
+                    tvStatusBadge.background.setTint(Color.parseColor("#2196F3"))
                 }
-
-                tvDateTime.text = order.createdAt?.replace("T", " ")?.take(16) ?: "Дата"
+                "ACCEPTED" -> {
+                    tvStatusBadge.text = "Водій їде"
+                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
+                }
+                "DRIVER_ARRIVED" -> {
+                    tvStatusBadge.text = "Водій на місці"
+                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
+                }
+                "IN_PROGRESS" -> {
+                    tvStatusBadge.text = "В дорозі"
+                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
+                    // ТУТ ХОВАЄМО ВЕСЬ КОНТЕЙНЕР, щоб не було пустої червоної пігулки!
+                    layoutCancelContainer.visibility = View.GONE
+                }
+                else -> {
+                    tvStatusBadge.text = "В роботі"
+                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
+                }
             }
 
-            // --- ВОДІЙ ---
             if (order.driver != null) {
                 layoutDriverInfo.visibility = View.VISIBLE
-                tvDriverName.text = "${order.driver.fullName}"
+                tvDriverName.text = order.driver.fullName
                 tvCarModel.text = "${order.driver.carColor} ${order.driver.carModel} • ${order.driver.carPlateNumber}"
             } else {
                 layoutDriverInfo.visibility = View.GONE
             }
 
-            // --- ЗУПИНКИ ---
             if (!order.formattedWaypoints.isNullOrEmpty()) {
                 tvWaypoints?.text = order.formattedWaypoints
                 tvWaypoints?.visibility = View.VISIBLE
@@ -136,17 +138,38 @@ class HistoryAdapter(
                 ivWaypointDot?.visibility = View.GONE
             }
 
-            // --- ОБРОБКА КЛІКІВ ---
+            itemView.setOnClickListener { onItemClick?.invoke(order.id) }
+            btnCancel.setOnClickListener { onCancelClick?.invoke(order.id) }
+        }
+    }
 
-            // 1. Клік по всій картці (розгортає замовлення на головний екран)
-            itemView.setOnClickListener {
-                onItemClick?.invoke(order.id)
+    // =========================================================
+    // 2. VIEWHOLDER ДЛЯ АРХІВУ (без кнопок і зайвого коду)
+    // =========================================================
+    class ArchiveOrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val tvDateTime: TextView = itemView.findViewById(R.id.tv_date_time)
+        private val tvPrice: TextView = itemView.findViewById(R.id.tv_price)
+        private val tvFrom: TextView = itemView.findViewById(R.id.tv_from)
+        private val tvTo: TextView = itemView.findViewById(R.id.tv_to)
+        private val tvWaypoints: TextView? = itemView.findViewById(R.id.tv_waypoints)
+        private val ivWaypointDot: ImageView? = itemView.findViewById(R.id.iv_marker_waypoint)
+
+        fun bind(order: TaxiOrderDto, onItemClick: ((Long) -> Unit)?) {
+            tvFrom.text = order.fromAddress
+            tvTo.text = order.toAddress
+            tvPrice.text = "${order.price.toInt()} ₴"
+            tvDateTime.text = order.createdAt?.replace("T", " ")?.take(16) ?: "Дата"
+
+            if (!order.formattedWaypoints.isNullOrEmpty()) {
+                tvWaypoints?.text = order.formattedWaypoints
+                tvWaypoints?.visibility = View.VISIBLE
+                ivWaypointDot?.visibility = View.VISIBLE
+            } else {
+                tvWaypoints?.visibility = View.GONE
+                ivWaypointDot?.visibility = View.GONE
             }
 
-            // 2. Клік тільки по кнопці "Скасувати"
-            btnCancel.setOnClickListener {
-                onCancelClick?.invoke(order.id)
-            }
+            itemView.setOnClickListener { onItemClick?.invoke(order.id) }
         }
     }
 }
