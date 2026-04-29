@@ -1666,7 +1666,9 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
     }
 
     private fun updateOrderProgress(step: Int) {
-    val activeColor = android.graphics.Color.parseColor("#33cca1")
+    // ТЕПЕРЬ ЦВЕТ АДАПТИВНЫЙ (будет брать text_primary, который меняется от темы)
+    val activeColor = androidx.core.content.ContextCompat.getColor(this, R.color.text_primary)
+    
     val inactiveColor = androidx.core.content.ContextCompat.getColor(this, R.color.divider_color)
     val bgCardColor = androidx.core.content.ContextCompat.getColor(this, R.color.card_background)
 
@@ -1696,17 +1698,14 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
 
     // Круг 1 (Створення)
     setCircle(statusCircle1, statusIcon1, isFilled = step >= 1, isActiveOutline = false)
-    // Лінія 1 стає бірюзовою відразу на 1-му кроці (будує міст до Круга 2)
     statusLine1.setCardBackgroundColor(if (step >= 1) activeColor else inactiveColor)
 
     // Круг 2 (Прийнято)
     setCircle(statusCircle2, statusIcon2, isFilled = step >= 2, isActiveOutline = step == 1)
-    // Лінія 2 стає бірюзовою на 2-му кроці (будує міст до Круга 3)
     statusLine2.setCardBackgroundColor(if (step >= 2) activeColor else inactiveColor)
 
     // Круг 3 (В дорозі)
     setCircle(statusCircle3, statusIcon3, isFilled = step >= 3, isActiveOutline = step == 2)
-    // Лінія 3 стає бірюзовою на 3-му кроці (будує міст до Круга 4)
     statusLine3.setCardBackgroundColor(if (step >= 3) activeColor else inactiveColor)
 
     // Круг 4 (Завершено)

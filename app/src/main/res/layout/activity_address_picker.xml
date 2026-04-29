@@ -195,7 +195,7 @@
                 android:padding="12dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="?attr/selectableItemBackground">
+                android:background="@android:color/transparent">
 
                 <ImageView
                     android:layout_width="24dp"
@@ -222,7 +222,7 @@
                 android:padding="12dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="?attr/selectableItemBackground">
+                android:background="@android:color/transparent">
 
                 <ImageView
                     android:layout_width="28dp"

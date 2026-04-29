@@ -75,21 +75,19 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
                     android:paddingHorizontal="24dp"
-                    android:paddingVertical="20dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/help_contact_us"
-                        android:textSize="16sp"
-                        android:textColor="?attr/colorOnSurface"/>
+                    android:paddingVertical="16dp"> <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/help_contact_us"
+                    android:textSize="16sp"
+                    android:textColor="?attr/colorOnSurface"/>
 
                     <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
                         android:src="@drawable/ic_support_agent"
-                        app:tint="#4B5563"/>
+                        app:tint="?attr/colorOnSurface"/>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

@@ -83,11 +83,11 @@
                         android:padding="20dp"
                         android:gravity="center_vertical">
                         <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
                             android:src="@drawable/ic_stat_distance"
                             app:tint="@color/text_primary"
-                            android:padding="8dp" />
+                            android:padding="6dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -128,11 +128,11 @@
                         android:padding="20dp"
                         android:gravity="center_vertical">
                         <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
                             android:src="@drawable/ic_stat_time"
                             app:tint="@color/text_primary"
-                            android:padding="8dp" />
+                            android:padding="6dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -173,11 +173,11 @@
                         android:padding="20dp"
                         android:gravity="center_vertical">
                         <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
                             android:src="@drawable/ic_stat_check"
                             app:tint="@color/text_primary"
-                            android:padding="8dp" />
+                            android:padding="6dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -218,11 +218,11 @@
                         android:padding="20dp"
                         android:gravity="center_vertical">
                         <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
                             android:src="@drawable/ic_stat_star"
                             app:tint="@color/text_primary"
-                            android:padding="8dp" />
+                            android:padding="6dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -263,11 +263,11 @@
                         android:padding="20dp"
                         android:gravity="center_vertical">
                         <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:src="@drawable/ic_calendar_today"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:src="@drawable/ic_day"
                             app:tint="@color/text_primary"
-                            android:padding="8dp" />
+                            android:padding="6dp" />
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
