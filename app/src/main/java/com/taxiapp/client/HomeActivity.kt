@@ -828,6 +828,26 @@ tvNewWaitingTimer = findViewById(R.id.tv_new_waiting_timer)
         creationPanelCard = findViewById(R.id.bottom_sheet_card)
         addressPanel = findViewById(R.id.address_panel)
         tariffsPanel = findViewById(R.id.tariffs_panel)
+        val displayMetrics = resources.displayMetrics
+        val screenHeight = displayMetrics.heightPixels
+        val maxTariffHeight = (screenHeight * 0.45).toInt()
+
+        tariffsPanel.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                // Если высота больше лимита и мы еще не установили жесткий размер
+                if (tariffsPanel.height > maxTariffHeight && tariffsPanel.layoutParams.height != maxTariffHeight) {
+                    val params = tariffsPanel.layoutParams
+                    params.height = maxTariffHeight
+                    tariffsPanel.layoutParams = params
+                    tariffsPanel.requestLayout()
+                    
+                    // ВАЖНО: Возвращаем false! Это отменяет отрисовку "высокого" кадра 
+                    // и полностью убирает мелькание на экране.
+                    return false
+                }
+                return true
+            }
+        })
         tariffsProgressBar = findViewById(R.id.tariffs_progress_bar)
         btnOrderTaxi = findViewById(R.id.btn_order_taxi)
         btnOrderTaxi.setOnClickListener {

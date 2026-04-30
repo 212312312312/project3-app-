@@ -62,9 +62,13 @@ class MainActivity : BaseActivity()  {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         sessionManager = SessionManager(applicationContext)
-        
+
+        // --- ДОБАВЛЕНО: Передаем SessionManager в ApiClient для автоматического рефреша ---
+        ApiClient.sessionManager = sessionManager
+        // ---------------------------------------------------------------------------------
+
         // Якщо користувач вже залогінений -> відразу додому
         if (sessionManager.fetchAuthToken() != null) {
             updateFcmTokenOnServer()

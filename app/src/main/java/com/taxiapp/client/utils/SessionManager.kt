@@ -20,6 +20,7 @@ class SessionManager(context: Context) {
 
         const val KEY_LANGUAGE = "app_language"
         const val USER_TOKEN = "user_token"
+        const val REFRESH_TOKEN = "refresh_token" // <-- ДОБАВЛЕН REFRESH TOKEN
         const val USER_FULL_NAME = "user_full_name"
         const val USER_PHONE = "user_phone"
         const val USER_CITY_NAME = "user_city_name"
@@ -43,7 +44,7 @@ class SessionManager(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    // --- TOKEN ---
+    // --- TOKENS ---
     fun saveAuthToken(token: String) {
         prefs.edit().putString(USER_TOKEN, token).apply()
     }
@@ -51,6 +52,16 @@ class SessionManager(context: Context) {
     fun fetchAuthToken(): String? {
         return prefs.getString(USER_TOKEN, null)
     }
+
+    // <-- НОВЫЕ МЕТОДЫ ДЛЯ REFRESH TOKEN -->
+    fun saveRefreshToken(token: String) {
+        prefs.edit().putString(REFRESH_TOKEN, token).apply()
+    }
+
+    fun fetchRefreshToken(): String? {
+        return prefs.getString(REFRESH_TOKEN, null)
+    }
+    // <------------------------------------>
 
     // --- USER INFO ---
     fun saveUserInfo(name: String, phone: String) {
@@ -123,7 +134,6 @@ class SessionManager(context: Context) {
     }
 
     fun getLanguage(): String {
-        // За замовчуванням повертаємо "ua", якщо мову ще не обрали
         return prefs.getString(KEY_LANGUAGE, "ua") ?: "ua"
     }
 
@@ -157,6 +167,7 @@ class SessionManager(context: Context) {
     fun clearSession() {
         prefs.edit().apply {
             remove(USER_TOKEN)
+            remove(REFRESH_TOKEN) // <-- Очищаем и Refresh тоже
             remove(USER_CITY_NAME)
             remove(USER_CITY_LAT)
             remove(USER_CITY_LNG)
@@ -207,7 +218,6 @@ class SessionManager(context: Context) {
         return str?.toDoubleOrNull() ?: 0.0
     }
 
-    // !!! НОВИЙ МЕТОД ДЛЯ ВИПРАВЛЕННЯ ПОМИЛКИ !!!
     fun fetchActivePromo(): SessionPromoData? {
         val percent = fetchPromoDiscount()
         if (percent <= 0.0) return null

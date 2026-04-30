@@ -14,6 +14,9 @@ data class RateDriverRequest(
     val score: Int,
     val comment: String?
 )
+
+// <-- ДОБАВЛЕН DTO ДЛЯ РЕФРЕША -->
+data class TokenRefreshRequestDto(val refreshToken: String)
 // ==========================================
 
 interface ApiService {
@@ -24,6 +27,10 @@ interface ApiService {
 
     @POST("auth/client/sms/verify")
     fun verifySmsCode(@Body request: SmsVerifyDto): Call<LoginResponseDto>
+
+    // <-- ДОБАВЛЕН ЭНДПОИНТ ДЛЯ РЕФРЕША -->
+    @POST("auth/refresh")
+    fun refreshToken(@Body request: TokenRefreshRequestDto): Call<LoginResponseDto>
 
     @POST("auth/fcm-token")
     fun updateFcmToken(
@@ -76,7 +83,7 @@ interface ApiService {
     @DELETE("client/account")
     fun deleteAccount(@Header("Authorization") token: String): Call<MessageResponse>
 
-    // --- ОЦЕНКА (ИСПРАВЛЕНО) ---
+    // --- ОЦЕНКА ---
     @POST("client/rate")
     fun rateDriver(
         @Header("Authorization") token: String,
