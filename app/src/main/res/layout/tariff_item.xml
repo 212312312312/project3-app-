@@ -51,7 +51,7 @@
             android:textSize="10sp"
             android:textStyle="bold"
             android:letterSpacing="0.05"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:background="@drawable/bg_beta_badge"
             android:paddingStart="6dp"
             android:paddingEnd="6dp"
