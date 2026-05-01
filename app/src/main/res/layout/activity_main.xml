@@ -7,6 +7,7 @@
     android:padding="24dp"
     tools:context=".MainActivity">
 
+    <!-- === ЕКРАН 1: СТАНДАРТНИЙ ВХІД ТА GOOGLE === -->
     <LinearLayout
         android:id="@+id/layout_phone_input"
         android:layout_width="match_parent"
@@ -91,6 +92,28 @@
             android:textStyle="bold" />
 
         <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:gravity="center"
+            android:text="АБО"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <android.widget.Button
+            android:id="@+id/btn_google_sign_in"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:backgroundTint="#FFFFFF"
+            android:text="Увійти через Google"
+            android:textAllCaps="false"
+            android:textColor="#757575"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:cornerRadius="8dp" />
+
+        <TextView
             android:id="@+id/tv_privacy_disclaimer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -103,6 +126,7 @@
 
     </LinearLayout>
 
+    <!-- === ЕКРАН 2: ВВЕДЕННЯ СМС КОДУ === -->
     <LinearLayout
         android:id="@+id/layout_sms_verify"
         android:layout_width="match_parent"
@@ -192,6 +216,90 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- === ЕКРАН 3: ПРИВ'ЯЗКА НОМЕРА (ПІСЛЯ GOOGLE) === -->
+    <LinearLayout
+        android:id="@+id/layout_link_phone"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Майже готово! 🥳"
+            android:textColor="?attr/colorOnBackground"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Для безпеки та зв'язку з водієм додайте номер телефону."
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="32dp"
+            android:background="@drawable/bg_phone_input"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="+380"
+                android:textColor="?attr/colorOnBackground"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginEnd="12dp"/>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="24dp"
+                android:background="#DDDDDD"/>
+
+            <EditText
+                android:id="@+id/et_link_phone_number"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:hint="@string/phone_hint"
+                android:textColorHint="@color/text_secondary"
+                android:inputType="phone"
+                android:maxLength="9"
+                android:paddingStart="12dp"
+                android:textColor="?attr/colorOnBackground"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2" />
+
+        <android.widget.Button
+            android:id="@+id/btn_link_phone"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_button_yellow"
+            android:text="Підтвердити"
+            android:textAllCaps="false"
+            android:textColor="@color/black"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- === TOAST ПОВІДОМЛЕННЯ === -->
     <androidx.cardview.widget.CardView
         android:id="@+id/custom_toast_container"
         android:layout_width="wrap_content"

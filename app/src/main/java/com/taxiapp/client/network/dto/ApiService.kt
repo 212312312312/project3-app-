@@ -17,6 +17,8 @@ data class RateDriverRequest(
 
 // <-- ДОБАВЛЕН DTO ДЛЯ РЕФРЕША -->
 data class TokenRefreshRequestDto(val refreshToken: String)
+
+data class GoogleAuthRequestDto(val idToken: String)
 // ==========================================
 
 interface ApiService {
@@ -27,6 +29,15 @@ interface ApiService {
 
     @POST("auth/client/sms/verify")
     fun verifySmsCode(@Body request: SmsVerifyDto): Call<LoginResponseDto>
+
+    @POST("auth/client/google")
+    fun loginWithGoogle(@Body request: GoogleAuthRequestDto): Call<LoginResponseDto>
+
+    @POST("auth/client/link-phone")
+    fun linkPhone(
+        @Header("Authorization") token: String,
+        @Body request: SmsVerifyDto
+    ): Call<LoginResponseDto>
 
     // <-- ДОБАВЛЕН ЭНДПОИНТ ДЛЯ РЕФРЕША -->
     @POST("auth/refresh")
