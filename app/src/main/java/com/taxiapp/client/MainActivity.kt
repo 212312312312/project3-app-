@@ -78,6 +78,9 @@ class MainActivity : BaseActivity() {
     // Флаг, который показывает, что мы сейчас привязываем номер, а не просто логинимся
     private var isLinkingPhoneState = false
 
+    // ВРЕМЕННЫЙ ТОКЕН: Сохраняем токен от Google здесь, пока не подтвердим телефон
+    private var tempAuthToken: String? = null
+
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
@@ -90,12 +93,10 @@ class MainActivity : BaseActivity() {
                     showToast("Помилка: Google не повернув токен")
                 }
             } catch (e: ApiException) {
-                // <--- ВОТ ТУТ МЫ ЛОВИМ ОШИБКУ --->
                 Log.e("GoogleAuth", "Помилка входу Google. Код: ${e.statusCode}", e)
                 showToast("Помилка Google: ${e.statusCode}")
             }
         } else {
-            // <--- И ВОТ ТУТ МЫ ЛОВИМ ОШИБКУ --->
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             try {
                 task.getResult(ApiException::class.java)
@@ -112,10 +113,17 @@ class MainActivity : BaseActivity() {
         sessionManager = SessionManager(applicationContext)
         ApiClient.sessionManager = sessionManager
 
-        if (sessionManager.fetchAuthToken() != null) {
+        // Если токен ЕСТЬ и телефон ЕСТЬ, пускаем дальше.
+        // Важно: проверяем наличие телефона, чтобы подстраховаться от старых забагованных сессий
+        val token = sessionManager.fetchAuthToken()
+        val phone = sessionManager.getUserPhone()
+        if (token != null && phone.isNotEmpty()) {
             updateFcmTokenOnServer()
             goToHomeActivity()
             return
+        } else if (token != null) {
+            // Если токен есть, а телефона нет — это битая сессия, очищаем
+            sessionManager.clearSession()
         }
 
         setContentView(R.layout.activity_main)
@@ -123,7 +131,7 @@ class MainActivity : BaseActivity() {
 
         // НАСТРОЙКА GOOGLE SIGN IN
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken("359347918144-au70gopljkd5gnfheu3kjbhg96qcbek0.apps.googleusercontent.com") // <--- ВАЖНО: ВЕРНИ СЮДА СВОЙ КЛЮЧ
+            .requestIdToken("359347918144-au70gopljkd5gnfheu3kjbhg96qcbek0.apps.googleusercontent.com")
             .requestEmail()
             .build()
         googleSignInClient = GoogleSignIn.getClient(this, gso)
@@ -186,14 +194,16 @@ class MainActivity : BaseActivity() {
                     val phone = body?.phoneNumber
 
                     if (token != null) {
-                        // Сохраняем токен сразу (он нужен для привязки номера)
-                        sessionManager.saveAuthToken(token)
-
                         if (phone.isNullOrEmpty()) {
-                            // НЕТ НОМЕРА -> Показываем новый экран привязки
+                            // НЕТ НОМЕРА -> Сохраняем токен во ВРЕМЕННУЮ переменную и идем привязывать номер
+                            tempAuthToken = token
                             showLinkPhoneScreen()
                         } else {
-                            // НОМЕР ЕСТЬ -> Пускаем дальше
+                            // НОМЕР ЕСТЬ -> Сразу сохраняем все в SessionManager и пускаем дальше
+                            sessionManager.saveAuthToken(token)
+                            if (body.refreshToken != null) {
+                                sessionManager.saveRefreshToken(body.refreshToken)
+                            }
                             sessionManager.saveUserInfo(body.fullName, phone)
                             updateFcmTokenOnServer()
                             checkWhereToGo(body.isNewUser)
@@ -218,14 +228,20 @@ class MainActivity : BaseActivity() {
 
         if (isLinkingPhoneState) {
             // ЛОГИКА ПРИВЯЗКИ НОМЕРА
-            val token = sessionManager.fetchAuthToken() ?: return
-            ApiClient.instance.linkPhone("Bearer $token", request).enqueue(object : Callback<LoginResponseDto> {
+            // Используем ВРЕМЕННЫЙ токен, а не из SessionManager
+            val tokenToUse = tempAuthToken ?: return
+
+            ApiClient.instance.linkPhone("Bearer $tokenToUse", request).enqueue(object : Callback<LoginResponseDto> {
                 override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
                     setLoading(false)
                     if (response.isSuccessful) {
                         val body = response.body()
                         if (body != null) {
+                            // УРА! Телефон подтвержден. ТЕПЕРЬ сохраняем токен в постоянную память.
                             sessionManager.saveAuthToken(body.token)
+                            if (body.refreshToken != null) {
+                                sessionManager.saveRefreshToken(body.refreshToken)
+                            }
                             sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
                             resendTimer?.cancel()
                             updateFcmTokenOnServer()
@@ -248,7 +264,11 @@ class MainActivity : BaseActivity() {
                     if (response.isSuccessful) {
                         val body = response.body()
                         if (body != null) {
+                            // То же самое, сохраняем токены
                             sessionManager.saveAuthToken(body.token)
+                            if (body.refreshToken != null) {
+                                sessionManager.saveRefreshToken(body.refreshToken)
+                            }
                             sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
                             resendTimer?.cancel()
                             updateFcmTokenOnServer()
@@ -287,17 +307,15 @@ class MainActivity : BaseActivity() {
         otpEdits[0].requestFocus()
     }
 
-    // ... остальной код (initUI, onDestroy, startResendTimer, setupOtpInputs, requestSms, updateFcmTokenOnServer, setLoading, goToHomeActivity, goToAgreementActivity, showTopMessage, hideTopMessage, showToast)
-
     private fun initUI() {
         layoutPhone = findViewById(R.id.layout_phone_input)
         layoutSms = findViewById(R.id.layout_sms_verify)
-        layoutLinkPhone = findViewById(R.id.layout_link_phone) // Инициализация нового экрана
+        layoutLinkPhone = findViewById(R.id.layout_link_phone)
         progressBar = findViewById(R.id.progress_bar)
         etPhoneNumber = findViewById(R.id.et_phone_number)
-        etLinkPhoneNumber = findViewById(R.id.et_link_phone_number) // Инициализация нового ввода
+        etLinkPhoneNumber = findViewById(R.id.et_link_phone_number)
         btnGetCode = findViewById(R.id.btn_get_code)
-        btnLinkPhone = findViewById(R.id.btn_link_phone) // Инициализация новой кнопки
+        btnLinkPhone = findViewById(R.id.btn_link_phone)
         btnVerify = findViewById(R.id.btn_verify)
         btnGoogleSignIn = findViewById(R.id.btn_google_sign_in)
         tvSmsSubtitle = findViewById(R.id.tv_sms_subtitle)
@@ -309,6 +327,8 @@ class MainActivity : BaseActivity() {
         customToastContainer = findViewById(R.id.custom_toast_container)
         tvToastMessage = findViewById(R.id.tv_toast_message)
         ivToastIcon = findViewById(R.id.iv_toast_icon)
+        setupPhoneAutoformat(etPhoneNumber)
+        setupPhoneAutoformat(etLinkPhoneNumber)
     }
 
     override fun onDestroy() {
@@ -446,6 +466,44 @@ class MainActivity : BaseActivity() {
     private fun hideTopMessage() {
         customToastContainer.animate().translationY(-200f).alpha(0f).setDuration(300)
             .withEndAction { customToastContainer.visibility = View.INVISIBLE }.start()
+    }
+
+    private fun setupPhoneAutoformat(editText: EditText) {
+        editText.addTextChangedListener(object : TextWatcher {
+            var isUpdating = false
+
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating || s == null) return
+                isUpdating = true
+
+                // 1. Залишаємо лише цифри (прибираємо +, пробіли, дужки)
+                var text = s.toString().replace(Regex("[^0-9]"), "")
+
+                // 2. Розумно прибираємо код країни (спрацює і для +380, і для 80, і для 0)
+                if (text.startsWith("380")) {
+                    text = text.removePrefix("380")
+                } else if (text.startsWith("80")) {
+                    text = text.removePrefix("80")
+                } else if (text.startsWith("0")) {
+                    text = text.removePrefix("0")
+                }
+
+                // 3. Жорстко обрізаємо до 9 цифр ТІЛЬКИ ПІСЛЯ очистки коду країни
+                if (text.length > 9) {
+                    text = text.substring(0, 9)
+                }
+
+                // 4. Оновлюємо поле, якщо текст змінився, і ставимо курсор у кінець
+                if (s.toString() != text) {
+                    s.replace(0, s.length, text)
+                }
+
+                isUpdating = false
+            }
+        })
     }
 
     private fun showToast(msg: String) {

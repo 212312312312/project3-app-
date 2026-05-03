@@ -69,7 +69,6 @@
                 android:hint="@string/phone_hint"
                 android:textColorHint="@color/text_secondary"
                 android:inputType="phone"
-                android:maxLength="9"
                 android:paddingStart="12dp"
                 android:textColor="?attr/colorOnBackground"
                 android:textSize="18sp" />
@@ -80,44 +79,77 @@
             android:layout_height="0dp"
             android:layout_weight="2" />
 
-        <android.widget.Button
-            android:id="@+id/btn_get_code"
+        <!-- Нова кнопка: Продовжити -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_button_yellow"
-            android:text="@string/btn_continue"
-            android:textAllCaps="false"
-            android:textColor="@color/black"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="60dp"
             android:layout_marginTop="16dp"
-            android:layout_marginBottom="16dp"
-            android:gravity="center"
-            android:text="АБО"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
+            android:background="@drawable/bg_button_yellow">
 
-        <android.widget.Button
-            android:id="@+id/btn_google_sign_in"
+            <Button
+                android:id="@+id/btn_get_code"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:text="@string/btn_continue"
+                android:textAllCaps="false"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#454754"
+                android:background="@android:color/transparent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Нова кнопка: Продовжити з Google -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:backgroundTint="#FFFFFF"
-            android:text="Увійти через Google"
-            android:textAllCaps="false"
-            android:textColor="#757575"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:cornerRadius="8dp" />
+            android:layout_height="60dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_button_secondary">
+
+            <!-- Іконка Google зліва -->
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginStart="24dp"
+                android:src="@drawable/ic_google"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- Текст рівно по центру -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Продовжити з Google"
+                android:textAllCaps="false"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#757575"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- Прозора кнопка поверх усього (щоб в Kotlin не міняти логіку кліків) -->
+            <Button
+                android:id="@+id/btn_google_sign_in"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:background="@android:color/transparent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView
             android:id="@+id/tv_privacy_disclaimer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="24dp"
             android:gravity="center"
             android:text="@string/privacy_disclaimer"
             android:textColor="@color/text_secondary"
@@ -204,16 +236,28 @@
             android:visibility="gone"
             android:layout_marginBottom="16dp"/>
 
-        <android.widget.Button
-            android:id="@+id/btn_verify"
+        <!-- Нова кнопка: Ввійти (Перевірка СМС) -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_button_yellow"
-            android:text="@string/btn_login"
-            android:textAllCaps="false"
-            android:textColor="@color/black"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:layout_height="60dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_button_yellow">
+
+            <Button
+                android:id="@+id/btn_verify"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:text="@string/btn_login"
+                android:textAllCaps="false"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#454754"
+                android:background="@android:color/transparent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
     <!-- === ЕКРАН 3: ПРИВ'ЯЗКА НОМЕРА (ПІСЛЯ GOOGLE) === -->
@@ -232,7 +276,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Майже готово! 🥳"
+            android:text="Майже готово!"
             android:textColor="?attr/colorOnBackground"
             android:textSize="28sp"
             android:textStyle="bold" />
@@ -276,7 +320,7 @@
                 android:hint="@string/phone_hint"
                 android:textColorHint="@color/text_secondary"
                 android:inputType="phone"
-                android:maxLength="9"
+                android:autofillHints="phone"
                 android:paddingStart="12dp"
                 android:textColor="?attr/colorOnBackground"
                 android:textSize="18sp" />
@@ -287,16 +331,28 @@
             android:layout_height="0dp"
             android:layout_weight="2" />
 
-        <android.widget.Button
-            android:id="@+id/btn_link_phone"
+        <!-- Нова кнопка: Підтвердити привязку -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_button_yellow"
-            android:text="Підтвердити"
-            android:textAllCaps="false"
-            android:textColor="@color/black"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:layout_height="60dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_button_yellow">
+
+            <Button
+                android:id="@+id/btn_link_phone"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:text="Підтвердити"
+                android:textAllCaps="false"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#454754"
+                android:background="@android:color/transparent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
     <!-- === TOAST ПОВІДОМЛЕННЯ === -->
