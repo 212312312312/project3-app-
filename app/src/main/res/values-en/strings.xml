@@ -20,7 +20,12 @@
     <string name="btn_accept_continue">Accept and continue</string>
 
 
-
+    <string name="bind_card">Bind card</string>
+    <string name="add_payment_method">Add payment method</string>
+    <string name="card_bound_successfully">Card successfully bound</string>
+    <string name="card_bind_error">Error binding card</string>
+    <string name="saved_card">Card: %1$s</string>
+    <string name="unbind_card">Unbind card</string>
 
 
     <string name="chat_title">Chat with driver</string>

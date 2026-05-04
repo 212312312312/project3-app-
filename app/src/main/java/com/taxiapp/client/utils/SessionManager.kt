@@ -38,11 +38,14 @@ class SessionManager(context: Context) {
         const val KEY_PAYMENT_METHOD = "payment_method"
         const val KEY_PROMO_DISCOUNT = "promo_discount_percent"
         const val KEY_PROMO_LIMIT = "promo_discount_limit"
+        const val KEY_CARD_MASK = "card_mask" // <-- ДОБАВЛЕНО
     }
 
     init {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
+
+
 
     // --- TOKENS ---
     fun saveAuthToken(token: String) {
@@ -164,10 +167,11 @@ class SessionManager(context: Context) {
     }
 
     // --- LOGOUT ---
+    // --- LOGOUT ---
     fun clearSession() {
         prefs.edit().apply {
             remove(USER_TOKEN)
-            remove(REFRESH_TOKEN) // <-- Очищаем и Refresh тоже
+            remove(REFRESH_TOKEN)
             remove(USER_CITY_NAME)
             remove(USER_CITY_LAT)
             remove(USER_CITY_LNG)
@@ -177,6 +181,7 @@ class SessionManager(context: Context) {
             remove(USER_PHONE)
             remove(KEY_PROMO_DISCOUNT)
             remove(KEY_PROMO_LIMIT)
+            remove(KEY_CARD_MASK) // <-- ДОБАВЛЕНО
             apply()
         }
     }
@@ -222,6 +227,18 @@ class SessionManager(context: Context) {
         val percent = fetchPromoDiscount()
         if (percent <= 0.0) return null
         return SessionPromoData(percent.toInt(), fetchPromoLimit())
+    }
+    // --- BIND CARD ---
+    fun saveCardMask(mask: String?) {
+        if (mask == null) {
+            prefs.edit().remove(KEY_CARD_MASK).apply()
+        } else {
+            prefs.edit().putString(KEY_CARD_MASK, mask).apply()
+        }
+    }
+
+    fun getCardMask(): String? {
+        return prefs.getString(KEY_CARD_MASK, null)
     }
 
     fun clearDiscounts() {

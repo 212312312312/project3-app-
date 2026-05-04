@@ -15,10 +15,18 @@ data class RateDriverRequest(
     val comment: String?
 )
 
+data class ClientProfileResponse(
+    val id: Long,
+    val phoneNumber: String,
+    val fullName: String,
+    val isBlocked: Boolean,
+    val cardMask: String? // <-- Самое главное поле для нас
+)
 // <-- ДОБАВЛЕН DTO ДЛЯ РЕФРЕША -->
 data class TokenRefreshRequestDto(val refreshToken: String)
 
 data class GoogleAuthRequestDto(val idToken: String)
+data class InitBindCardResponse(val paymentUrl: String)
 // ==========================================
 
 interface ApiService {
@@ -39,6 +47,12 @@ interface ApiService {
         @Body request: SmsVerifyDto
     ): Call<LoginResponseDto>
 
+
+    // --- ОПЛАТА ---
+    @POST("payments/bind-card/init")
+    fun initBindCard(
+        @Header("Authorization") token: String
+    ): Call<InitBindCardResponse>
     // <-- ДОБАВЛЕН ЭНДПОИНТ ДЛЯ РЕФРЕША -->
     @POST("auth/refresh")
     fun refreshToken(@Body request: TokenRefreshRequestDto): Call<LoginResponseDto>
@@ -100,6 +114,11 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body request: RateDriverRequest
     ): Call<MessageResponse>
+
+    @GET("client/profile")
+    fun getClientProfile(
+        @Header("Authorization") token: String
+    ): Call<ClientProfileResponse>
 
     // --- ІСТОРІЯ ---
     @GET("client/orders")

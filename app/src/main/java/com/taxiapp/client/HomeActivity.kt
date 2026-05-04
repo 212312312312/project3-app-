@@ -146,6 +146,8 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     private lateinit var profileBtnDetails: LinearLayout 
     private lateinit var profileCityText: TextView
     private lateinit var profileBtnCity: LinearLayout 
+
+    private lateinit var tvPaymentMethodText: TextView
     
     private lateinit var themeSwitchContainer: ConstraintLayout
     private lateinit var themeSwitchThumb: View
@@ -733,6 +735,7 @@ private lateinit var tvNewWaitingTimer: TextView
         }
         updateFavoriteButtonsUI()
         updateDrawerHeader()
+        updatePaymentMethodFromSession()
 
         if (tariffsPanel.visibility == View.VISIBLE) {
             fetchTariffsAndShowPanel()
@@ -790,6 +793,9 @@ statusIcon4 = findViewById(R.id.status_icon_4)
         
         btnRecenter = findViewById(R.id.btn_recenter_location)
         btnRecenterRoute = findViewById(R.id.btn_recenter_route)
+
+        ivPaymentIcon = findViewById(R.id.iv_payment_icon)
+        tvPaymentMethodText = findViewById(R.id.tv_payment_method_text) // <-- ДОБАВИТЬ ЭТО
 
         customToastContainer = findViewById(R.id.custom_toast_container)
         tvToastMessage = findViewById(R.id.tv_toast_message)
@@ -1353,11 +1359,43 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         }
     }
 
+    private fun updatePaymentMethodFromSession() {
+        currentPaymentMethod = sessionManager.fetchPaymentMethod()
+        val cardMask = sessionManager.getCardMask()
+
+        // Если выбран CARD, но маски нет (например, слетела авторизация) - откатываем на CASH
+        if (currentPaymentMethod == "CARD" && cardMask.isNullOrEmpty()) {
+            currentPaymentMethod = "CASH"
+            sessionManager.savePaymentMethod("CASH")
+        }
+
+        updatePaymentIcon()
+    }
+
     private fun updatePaymentIcon() {
-        if (currentPaymentMethod == "CARD") {
+        if (!::ivPaymentIcon.isInitialized) return // Защита от краша при старте
+
+        val mask = sessionManager.getCardMask()
+
+        if (currentPaymentMethod == "CARD" && !mask.isNullOrEmpty()) {
             ivPaymentIcon.setImageResource(R.drawable.ic_card)
+            
+            // Выделяем фирменным желтым цветом, чтобы пассажир точно видел карту
+            val highlightColor = ContextCompat.getColor(this, R.color.taxi_yellow)
+            ivPaymentIcon.setColorFilter(highlightColor)
+            
+            // Показываем последние 4 цифры маски (LiqPay присылает 4149****1234)
+            tvPaymentMethodText.visibility = View.VISIBLE
+            val shortMask = if (mask.length >= 4) "*${mask.takeLast(4)}" else mask
+            tvPaymentMethodText.text = shortMask
+            tvPaymentMethodText.setTextColor(highlightColor)
         } else {
             ivPaymentIcon.setImageResource(R.drawable.ic_cash)
+            
+            // Возвращаем стандартный цвет
+            val defaultColor = ContextCompat.getColor(this, R.color.text_primary)
+            ivPaymentIcon.setColorFilter(defaultColor)
+            tvPaymentMethodText.visibility = View.GONE
         }
     }
 

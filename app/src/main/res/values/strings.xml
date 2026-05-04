@@ -24,6 +24,12 @@
     <string name="chat_title">Чат з водієм</string>
     <string name="chat_hint_message">Повідомлення...</string>
 
+    <string name="bind_card">Прив\'язати карту</string>
+    <string name="add_payment_method">Додати спосіб оплати</string>
+    <string name="card_bound_successfully">Карту успішно прив\'язано</string>
+    <string name="card_bind_error">Помилка при прив\'язці карти</string>
+    <string name="saved_card">Карта: %1$s</string>
+    <string name="unbind_card">Відв\'язати карту</string>
 
 
     <string name="title_choose_city">Оберіть місто</string>

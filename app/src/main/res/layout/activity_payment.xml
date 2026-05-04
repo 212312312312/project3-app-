@@ -124,13 +124,25 @@
                     app:tint="@color/text_primary"/>
 
                 <TextView
+                    android:id="@+id/tv_card_title"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/payment_card"
+                    android:text="@string/bind_card"
                     android:textSize="17sp"
                     android:textColor="?attr/colorOnBackground"
                     android:layout_marginStart="16dp"/>
+
+                <!-- Кнопка отвязки карты -->
+                <ImageView
+                    android:id="@+id/iv_unbind_card"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:src="@drawable/ic_close_small"
+                    app:tint="@color/text_hint"
+                    android:visibility="gone"
+                    android:background="?attr/selectableItemBackgroundBorderless"/>
 
                 <ImageView
                     android:id="@+id/iv_check_card"

@@ -509,23 +509,38 @@
                             app:tint="@color/text_primary" />
                     </FrameLayout>
 
-                    <FrameLayout
+                    <LinearLayout
                         android:id="@+id/btn_open_payment"
                         android:layout_width="0dp"
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:layout_marginHorizontal="3dp"
                         android:background="@drawable/bg_status_pill"
+                        android:gravity="center"
+                        android:orientation="horizontal"
                         android:clickable="true"
                         android:focusable="true">
+                        
                         <ImageView
                             android:id="@+id/iv_payment_icon"
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:layout_gravity="center"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
                             android:src="@drawable/ic_cash"
                             app:tint="@color/text_primary" />
-                    </FrameLayout>
+                            
+                        <!-- ДОБАВЛЕНО: Текст для маски карты -->
+                        <TextView
+                            android:id="@+id/tv_payment_method_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"
+                            android:layout_marginStart="4dp"
+                            android:visibility="gone"
+                            tools:text="*1234"
+                            tools:visibility="visible" />
+                    </LinearLayout>
 
                     <FrameLayout
                         android:id="@+id/btn_open_services"
