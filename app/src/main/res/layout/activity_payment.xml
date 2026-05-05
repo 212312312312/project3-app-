@@ -61,14 +61,13 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <LinearLayout
+            <!-- Изменили на RelativeLayout -->
+            <RelativeLayout
                 android:id="@+id/btn_cash"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
                 android:paddingVertical="16dp"
                 android:paddingHorizontal="24dp"
-                android:gravity="center_vertical"
                 android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true">
@@ -78,15 +77,18 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@drawable/ic_cash"
-                    app:tint="@color/text_primary"/>
+                    app:tint="@color/text_primary"
+                    android:layout_centerVertical="true"
+                    android:layout_alignParentStart="true"/>
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:text="@string/payment_cash"
                     android:textSize="17sp"
                     android:textColor="?attr/colorOnBackground"
+                    android:layout_centerVertical="true"
+                    android:layout_toEndOf="@id/iv_cash"
                     android:layout_marginStart="16dp"/>
 
                 <ImageView
@@ -94,8 +96,10 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@drawable/ic_check_blue"
-                    android:visibility="gone"/>
-            </LinearLayout>
+                    android:layout_centerVertical="true"
+                    android:layout_alignParentEnd="true"
+                    android:visibility="invisible"/> <!-- Используем INVISIBLE вместо GONE -->
+            </RelativeLayout>
 
             <View
                 android:layout_width="match_parent"
@@ -104,14 +108,13 @@
                 android:layout_marginStart="64dp"
                 android:layout_marginEnd="24dp"/>
 
-            <LinearLayout
+            <!-- Изменили на RelativeLayout -->
+            <RelativeLayout
                 android:id="@+id/btn_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
                 android:paddingVertical="16dp"
                 android:paddingHorizontal="24dp"
-                android:gravity="center_vertical"
                 android:background="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true">
@@ -121,19 +124,32 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@drawable/ic_card"
-                    app:tint="@color/text_primary"/>
+                    app:tint="@color/text_primary"
+                    android:layout_centerVertical="true"
+                    android:layout_alignParentStart="true"/>
 
                 <TextView
                     android:id="@+id/tv_card_title"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:text="@string/bind_card"
                     android:textSize="17sp"
                     android:textColor="?attr/colorOnBackground"
+                    android:layout_centerVertical="true"
+                    android:layout_toEndOf="@id/iv_card"
                     android:layout_marginStart="16dp"/>
 
-                <!-- Кнопка отвязки карты -->
+                <!-- Галочка теперь привязана к правому краю -->
+                <ImageView
+                    android:id="@+id/iv_check_card"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_check_blue"
+                    android:layout_centerVertical="true"
+                    android:layout_alignParentEnd="true"
+                    android:visibility="invisible"/> <!-- Используем INVISIBLE -->
+
+                <!-- Крестик отвязки карты находится слева от галочки -->
                 <ImageView
                     android:id="@+id/iv_unbind_card"
                     android:layout_width="24dp"
@@ -142,15 +158,10 @@
                     android:src="@drawable/ic_close_small"
                     app:tint="@color/text_hint"
                     android:visibility="gone"
-                    android:background="?attr/selectableItemBackgroundBorderless"/>
-
-                <ImageView
-                    android:id="@+id/iv_check_card"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_check_blue"
-                    android:visibility="gone"/>
-            </LinearLayout>
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:layout_centerVertical="true"
+                android:layout_toStartOf="@id/iv_check_card"/>
+            </RelativeLayout>
 
         </LinearLayout>
     </androidx.cardview.widget.CardView>

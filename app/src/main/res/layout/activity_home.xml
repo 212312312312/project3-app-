@@ -523,8 +523,8 @@
                         
                         <ImageView
                             android:id="@+id/iv_payment_icon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
                             android:src="@drawable/ic_cash"
                             app:tint="@color/text_primary" />
                             
@@ -617,41 +617,45 @@
                 </RelativeLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="60dp"
-                    android:layout_marginHorizontal="9dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:background="@drawable/bg_button_yellow">
+    android:layout_width="match_parent"
+    android:layout_height="60dp"
+    android:layout_marginHorizontal="9dp"
+    android:layout_marginTop="16dp"
+    android:layout_marginBottom="16dp"
+    android:background="@drawable/bg_button_yellow">
 
-                    <Button
-                        android:id="@+id/btn_order_taxi"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:text="Замовити"
-                        android:textAllCaps="false"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:textColor="#454754"
-                        android:background="@android:color/transparent"
-                        android:enabled="false"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintBottom_toBottomOf="parent" />
-                    
-                    <ImageButton
-                        android:id="@+id/btn_schedule"
-                        android:layout_width="60dp"
-                        android:layout_height="match_parent"
-                        android:src="@drawable/ic_calendar_today"
-                        android:background="@android:color/transparent"
-                        android:padding="18dp"
-                        app:tint="#454754"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintBottom_toBottomOf="parent" />
-                </androidx.constraintlayout.widget.ConstraintLayout>
+    <!-- Кнопка заказа -->
+    <Button
+        android:id="@+id/btn_order_taxi"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:text="Замовити"
+        android:textAllCaps="false"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#454754"
+        android:background="@android:color/transparent"
+        android:elevation="0dp" 
+        android:stateListAnimator="@null"
+        android:enabled="false"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/btn_schedule"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <!-- Кнопка календаря -->
+    <ImageButton
+        android:id="@+id/btn_schedule"
+        android:layout_width="60dp"
+        android:layout_height="match_parent"
+        android:src="@drawable/ic_calendar_today"
+        android:background="@android:color/transparent"
+        android:padding="18dp"
+        app:tint="#454754"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -829,35 +833,9 @@
                 android:visibility="gone"/>
         </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/status_line_3"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="4dp"
-            android:layout_marginHorizontal="12dp"
-            app:cardBackgroundColor="@color/divider_color"
-            app:cardCornerRadius="2dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="0dp"/>
+       
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/status_circle_4"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            app:cardCornerRadius="16dp"
-            app:cardBackgroundColor="@color/card_background"
-            app:strokeWidth="4dp"
-            app:strokeColor="@color/divider_color"
-            app:cardElevation="0dp">
-            <ImageView
-                android:id="@+id/status_icon_4"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:src="@drawable/ic_check_blue"
-                app:tint="@color/menu_background_color"
-                android:padding="5dp"
-                android:visibility="gone"/>
-        </com.google.android.material.card.MaterialCardView>
+        
     </LinearLayout>
     <TextView
         android:id="@+id/order_status_text"

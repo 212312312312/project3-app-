@@ -1,13 +1,19 @@
 package com.taxiapp.client
 
+import android.app.Dialog
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
+import android.view.Window
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.taxiapp.client.network.ApiClient
@@ -46,19 +52,17 @@ class PaymentActivity : BaseActivity() {
         updateUI()
 
         // Клик по "Наличные"
-        findViewById<LinearLayout>(R.id.btn_cash).setOnClickListener {
+        findViewById<RelativeLayout>(R.id.btn_cash).setOnClickListener {
             sessionManager.savePaymentMethod("CASH")
             updateUI()
         }
 
         // Клик по "Карта"
-        findViewById<LinearLayout>(R.id.btn_card).setOnClickListener {
+        findViewById<RelativeLayout>(R.id.btn_card).setOnClickListener {
             val mask = sessionManager.getCardMask()
             if (mask.isNullOrEmpty()) {
-                // Карты нет - инициируем процесс привязки
                 bindNewCard()
             } else {
-                // Карта есть - выбираем её как способ оплаты
                 sessionManager.savePaymentMethod("CARD")
                 updateUI()
             }
@@ -66,18 +70,40 @@ class PaymentActivity : BaseActivity() {
 
         // Клик по крестику (Отвязать карту)
         ivUnbindCard.setOnClickListener {
-            // В идеале тут нужен запрос к серверу на удаление токена.
-            // Пока просто удаляем локально и переключаем на наличные.
+            showUnbindCardDialog()
+        }
+    }
+
+    // Показываем диалог подтверждения
+    private fun showUnbindCardDialog() {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_delete_card) // Наш новый файл диалога
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+
+        val btnCancel = dialog.findViewById<Button>(R.id.btn_cancel)
+        val btnConfirm = dialog.findViewById<Button>(R.id.btn_confirm_delete)
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        btnConfirm.setOnClickListener {
+            dialog.dismiss()
+            // Здесь отправляешь запрос на сервер для отвязки
+            // ...
+            // Пока удаляем локально
             sessionManager.saveCardMask(null)
             sessionManager.savePaymentMethod("CASH")
             updateUI()
         }
+
+        dialog.show()
     }
 
     override fun onResume() {
         super.onResume()
-        // Даем серверу 2 секунды на то, чтобы обработать callback от LiqPay
-        // перед тем, как запрашивать обновленный профиль.
         Handler(Looper.getMainLooper()).postDelayed({
             fetchClientProfile()
         }, 2000)
@@ -90,23 +116,16 @@ class PaymentActivity : BaseActivity() {
             override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
                 if (response.isSuccessful && response.body() != null) {
                     val profile = response.body()!!
-
-                    // Обновляем маску карты в локальном хранилище
                     sessionManager.saveCardMask(profile.cardMask)
 
-                    // Если карта отвязана, но был выбран метод CARD - сбрасываем на CASH
                     if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
                         sessionManager.savePaymentMethod("CASH")
                     }
-
-                    // Обновляем экран
                     updateUI()
                 }
             }
 
             override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {
-                // Если произошла ошибка (например, нет интернета), просто ничего не делаем.
-                // Пользователь останется с теми данными, которые были закэшированы локально.
                 t.printStackTrace()
             }
         })
@@ -116,7 +135,7 @@ class PaymentActivity : BaseActivity() {
         val mask = sessionManager.getCardMask()
         val method = sessionManager.fetchPaymentMethod()
 
-        // Текст и крестик отвязки
+        // Используем INVISIBLE вместо GONE для галочек, чтобы ширина не скакала
         if (!mask.isNullOrEmpty()) {
             tvCardTitle.text = getString(R.string.saved_card, mask)
             ivUnbindCard.visibility = View.VISIBLE
@@ -124,16 +143,14 @@ class PaymentActivity : BaseActivity() {
             tvCardTitle.text = getString(R.string.bind_card)
             ivUnbindCard.visibility = View.GONE
 
-            // Если карты нет, но она выбрана как метод - принудительно ставим наличные
             if (method == "CARD") {
                 sessionManager.savePaymentMethod("CASH")
             }
         }
 
-        // Галочки
         val currentMethod = sessionManager.fetchPaymentMethod()
-        ivCheckCash.visibility = if (currentMethod == "CASH") View.VISIBLE else View.GONE
-        ivCheckCard.visibility = if (currentMethod == "CARD" && !mask.isNullOrEmpty()) View.VISIBLE else View.GONE
+        ivCheckCash.visibility = if (currentMethod == "CASH") View.VISIBLE else View.INVISIBLE
+        ivCheckCard.visibility = if (currentMethod == "CARD" && !mask.isNullOrEmpty()) View.VISIBLE else View.INVISIBLE
     }
 
     private fun bindNewCard() {
@@ -143,13 +160,8 @@ class PaymentActivity : BaseActivity() {
             override fun onResponse(call: Call<InitBindCardResponse>, response: Response<InitBindCardResponse>) {
                 if (response.isSuccessful && response.body() != null) {
                     val url = response.body()!!.paymentUrl
-
-                    // Открываем форму LiqPay в браузере устройства
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     startActivity(intent)
-
-                    // TODO: После возврата из браузера нужно будет обновить профиль пользователя
-                    // чтобы получить с сервера маску привязанной карты и сохранить её в SessionManager.
                 } else {
                     Toast.makeText(this@PaymentActivity, getString(R.string.card_bind_error), Toast.LENGTH_SHORT).show()
                 }

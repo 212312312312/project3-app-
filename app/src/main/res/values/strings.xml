@@ -15,6 +15,15 @@
     <string name="btn_my_location">Моє місцезнаходження</string>
     <string name="btn_pick_on_map">Вказати на карті</string>
 
+
+
+    <!-- Диалог отвязки карты -->
+    <string name="dialog_delete_card_title">Видалення картки</string>
+    <string name="dialog_delete_card_message">Ви впевнені, що хочете відв\'язати цю картку? Для оплати нею в майбутньому доведеться додати її знову.</string>
+    <string name="action_cancel">Скасувати</string>
+    <string name="action_delete">Видалити</string>
+
+
     <string name="title_add_home">Додати дім</string>
     <string name="hint_add_home">Введіть адресу дому</string>
     <string name="title_add_work">Додати роботу</string>

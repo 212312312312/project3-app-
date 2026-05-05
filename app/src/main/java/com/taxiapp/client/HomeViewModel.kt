@@ -267,6 +267,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         statusHandler.post(statusRunnable)
     }
 
+    // --- API: Смена типа оплаты "на лету" ---
+    fun updateActiveOrderPaymentMethod(method: String) {
+        val id = activeOrderId ?: return
+        val token = sessionManager.fetchAuthToken() ?: return
+        _isLoading.value = true
+
+        ApiClient.instance.updatePaymentMethod("Bearer $token", id, method).enqueue(object : Callback<MessageResponseDto> {
+            override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
+                _isLoading.value = false
+                if (response.isSuccessful) {
+                    // Сервер сам пришлет WebSocket обновление,
+                    // но мы можем пнуть поллинг для надежности
+                    startStatusPolling()
+                } else {
+                    _errorMessage.value = "Помилка зміни оплати"
+                }
+            }
+            override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
+                _isLoading.value = false
+                _errorMessage.value = "Помилка мережі"
+            }
+        })
+    }
+
+    // --- API: Изменение цены "на лету" ---
+    fun updateActiveOrderPrice(addedValue: Double) {
+        val id = activeOrderId ?: return
+        val token = sessionManager.fetchAuthToken() ?: return
+        _isLoading.value = true
+
+        ApiClient.instance.updateOrderPrice("Bearer $token", id, addedValue).enqueue(object : Callback<MessageResponseDto> {
+            override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
+                _isLoading.value = false
+                if (response.isSuccessful) {
+                    // Форсируем обновление заказа
+                    startStatusPolling()
+                } else {
+                    _errorMessage.value = "Помилка зміни ціни"
+                }
+            }
+            override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
+                _isLoading.value = false
+                _errorMessage.value = "Помилка мережі"
+            }
+        })
+    }
+
     fun stopStatusPolling() {
         statusHandler.removeCallbacks(statusRunnable)
     }
@@ -281,6 +328,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         // обзервер не получил старый "призрачный" заказ и не показал карточку.
         _activeOrder.value = null
     }
+
 
     override fun onCleared() {
         super.onCleared()

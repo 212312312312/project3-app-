@@ -267,10 +267,8 @@ private lateinit var statusLine2: com.google.android.material.card.MaterialCardV
 
 private lateinit var statusCircle3: com.google.android.material.card.MaterialCardView
 private lateinit var statusIcon3: ImageView
-private lateinit var statusLine3: com.google.android.material.card.MaterialCardView
 
-private lateinit var statusCircle4: com.google.android.material.card.MaterialCardView
-private lateinit var statusIcon4: ImageView
+
 
 private lateinit var cardWaitingTimer: View
 private lateinit var tvNewWaitingTimer: TextView
@@ -783,10 +781,8 @@ statusLine2 = findViewById(R.id.status_line_2)
 
 statusCircle3 = findViewById(R.id.status_circle_3)
 statusIcon3 = findViewById(R.id.status_icon_3)
-statusLine3 = findViewById(R.id.status_line_3)
 
-statusCircle4 = findViewById(R.id.status_circle_4)
-statusIcon4 = findViewById(R.id.status_icon_4)
+
 
         mapLoadingCurtain = findViewById(R.id.map_loading_curtain)
         contentBottomSheet = findViewById(R.id.content_bottom_sheet)
@@ -1089,6 +1085,20 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
             drawerLayout.closeDrawer(GravityCompat.START)
         }
 
+        val btnChangePayment = activeOrderCard.findViewById<View>(R.id.btn_search_change_payment)
+val btnChangePrice = activeOrderCard.findViewById<View>(R.id.btn_search_change_price)
+
+// Привязываем логику
+btnChangePayment.setOnClickListener {
+    showChangePaymentDialog()
+}
+
+btnChangePrice.setOnClickListener {
+    // Получаем текущую цену из активного заказа, чтобы передать в диалог
+    val currentPrice = viewModel.activeOrder.value?.price ?: 0.0
+    showChangePriceDialog(currentPrice)
+}
+
         findViewById<View>(R.id.btn_open_payment).setOnClickListener {
             val intent = Intent(this, PaymentActivity::class.java)
             intent.putExtra("EXTRA_PAYMENT_METHOD", currentPaymentMethod)
@@ -1225,19 +1235,24 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
     }
 
     private fun updateCommentIconState() {
-        if (orderComment.isNotEmpty()) {
-            ivCommentIcon.setColorFilter(ContextCompat.getColor(this, R.color.taxi_yellow))
-        } else {
-            val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-            val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    // ВАЖНО: Мы убрали условие if (orderComment.isNotEmpty()), 
+    // чтобы иконка больше НИКОГДА не красилась в желтый цвет.
 
-            if (isDarkMode) {
-                ivCommentIcon.setColorFilter(android.graphics.Color.WHITE)
-            } else {
-                ivCommentIcon.setColorFilter(android.graphics.Color.BLACK)
-            }
-        }
+    // Получаем текущую тему устройства (светлая/темная)
+    val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+    val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    // Всегда применяем стандартный цвет (белый для темной темы, черный для светлой)
+    if (isDarkMode) {
+        ivCommentIcon.setColorFilter(android.graphics.Color.WHITE)
+        findViewById<ImageView>(R.id.iv_services_icon)?.setColorFilter(android.graphics.Color.WHITE)
+        findViewById<ImageView>(R.id.iv_price_icon)?.setColorFilter(android.graphics.Color.WHITE)
+    } else {
+        ivCommentIcon.setColorFilter(android.graphics.Color.BLACK)
+        findViewById<ImageView>(R.id.iv_services_icon)?.setColorFilter(android.graphics.Color.BLACK)
+        findViewById<ImageView>(R.id.iv_price_icon)?.setColorFilter(android.graphics.Color.BLACK)
     }
+}
 
     private fun onFavoriteAddressClick(isHome: Boolean) {
         currentWaypoints.clear()
@@ -1373,32 +1388,24 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
     }
 
     private fun updatePaymentIcon() {
-        if (!::ivPaymentIcon.isInitialized) return // Защита от краша при старте
+    if (!::ivPaymentIcon.isInitialized) return // Защита от краша при старте
 
-        val mask = sessionManager.getCardMask()
+    val mask = sessionManager.getCardMask()
+    val defaultColor = ContextCompat.getColor(this, R.color.text_primary)
 
-        if (currentPaymentMethod == "CARD" && !mask.isNullOrEmpty()) {
-            ivPaymentIcon.setImageResource(R.drawable.ic_card)
-            
-            // Выделяем фирменным желтым цветом, чтобы пассажир точно видел карту
-            val highlightColor = ContextCompat.getColor(this, R.color.taxi_yellow)
-            ivPaymentIcon.setColorFilter(highlightColor)
-            
-            // Показываем последние 4 цифры маски (LiqPay присылает 4149****1234)
-            tvPaymentMethodText.visibility = View.VISIBLE
-            val shortMask = if (mask.length >= 4) "*${mask.takeLast(4)}" else mask
-            tvPaymentMethodText.text = shortMask
-            tvPaymentMethodText.setTextColor(highlightColor)
-        } else {
-            ivPaymentIcon.setImageResource(R.drawable.ic_cash)
-            
-            // Возвращаем стандартный цвет
-            val defaultColor = ContextCompat.getColor(this, R.color.text_primary)
-            ivPaymentIcon.setColorFilter(defaultColor)
-            tvPaymentMethodText.visibility = View.GONE
-        }
+    // В любом случае прячем текст с маской карты
+    tvPaymentMethodText.visibility = View.GONE
+
+    if (currentPaymentMethod == "CARD" && !mask.isNullOrEmpty()) {
+        // Устанавливаем иконку карты
+        ivPaymentIcon.setImageResource(R.drawable.ic_card)
+        ivPaymentIcon.setColorFilter(defaultColor)
+    } else {
+        // Устанавливаем иконку наличных
+        ivPaymentIcon.setImageResource(R.drawable.ic_cash)
+        ivPaymentIcon.setColorFilter(defaultColor)
     }
-
+}
     private fun findClosestCity(lat: Double, lng: Double): String? {
         var closestCity: String? = null
         var minDistance = Float.MAX_VALUE
@@ -1724,13 +1731,10 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
     }
 
     private fun updateOrderProgress(step: Int) {
-    // ТЕПЕРЬ ЦВЕТ АДАПТИВНЫЙ (будет брать text_primary, который меняется от темы)
     val activeColor = androidx.core.content.ContextCompat.getColor(this, R.color.text_primary)
-    
     val inactiveColor = androidx.core.content.ContextCompat.getColor(this, R.color.divider_color)
     val bgCardColor = androidx.core.content.ContextCompat.getColor(this, R.color.card_background)
 
-    // Вспомогательная функция для настройки кружка
     fun setCircle(
         card: com.google.android.material.card.MaterialCardView, 
         icon: ImageView, 
@@ -1754,22 +1758,24 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         }
     }
 
-    // Круг 1 (Створення)
-    setCircle(statusCircle1, statusIcon1, isFilled = step >= 1, isActiveOutline = false)
+    // Шаг 0 = Пошук (тільки контур 1-го круга)
+    // Шаг 1 = Знайдений/На місці (1-й зафарбований, лінія 1 горить, 2-й контур)
+    // Шаг 2 = В дорозі (1, 2 зафарбовані, обидві лінії горять, 3-й контур)
+    // Шаг 3 = Завершено (все зафарбовано)
+
+    // Круг 1
+    setCircle(statusCircle1, statusIcon1, isFilled = step >= 1, isActiveOutline = step == 0)
+    // Линия 1 (ведет ко второму кругу)
     statusLine1.setCardBackgroundColor(if (step >= 1) activeColor else inactiveColor)
 
-    // Круг 2 (Прийнято)
+    // Круг 2
     setCircle(statusCircle2, statusIcon2, isFilled = step >= 2, isActiveOutline = step == 1)
+    // Линия 2 (ведет к третьему кругу)
     statusLine2.setCardBackgroundColor(if (step >= 2) activeColor else inactiveColor)
 
-    // Круг 3 (В дорозі)
+    // Круг 3
     setCircle(statusCircle3, statusIcon3, isFilled = step >= 3, isActiveOutline = step == 2)
-    statusLine3.setCardBackgroundColor(if (step >= 3) activeColor else inactiveColor)
-
-    // Круг 4 (Завершено)
-    setCircle(statusCircle4, statusIcon4, isFilled = step >= 4, isActiveOutline = step == 3)
 }
-
     private fun getAddressForOrigin(latLng: LatLng) {
         Thread {
             try {
@@ -2446,6 +2452,83 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         }
         
         routeAnimator?.start()
+    }
+
+    private fun showChangePaymentDialog() {
+        // У тебя уже должен быть какой-то диалог выбора оплаты на главном экране. 
+        // Здесь мы делаем простую версию через BottomSheetDialog или AlertDialog.
+        val options = arrayOf("Готівка", "Картка")
+        val values = arrayOf("CASH", "CARD")
+        
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Оберіть тип оплати")
+            .setItems(options) { dialog, which ->
+                val selectedMethod = values[which]
+                viewModel.updateActiveOrderPaymentMethod(selectedMethod)
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showChangePriceDialog(basePrice: Double) {
+        // Создаем диалог на основе твоего существующего layout'а dialog_change_price.xml
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+        val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
+        dialog.setContentView(view)
+
+        val tvPrice = view.findViewById<android.widget.TextView>(R.id.tv_dialog_price)
+        val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
+        val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
+        val seekBar = view.findViewById<android.widget.SeekBar>(R.id.seekbar_price)
+        val btnSave = view.findViewById<android.widget.Button>(R.id.btn_save_price)
+        val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
+
+        val minPrice = basePrice.toInt()
+        val maxPrice = minPrice + 200 // Разрешаем накинуть до 200 грн
+        var selectedPrice = minPrice
+
+        seekBar.max = maxPrice - minPrice
+
+        fun updateUI() {
+            tvPrice.text = "$selectedPrice ₴"
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                seekBar.setProgress(selectedPrice - minPrice, true)
+            } else {
+                seekBar.progress = selectedPrice - minPrice
+            }
+        }
+
+        updateUI()
+
+        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(p0: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    selectedPrice = minPrice + progress
+                    tvPrice.text = "$selectedPrice ₴"
+                }
+            }
+            override fun onStartTrackingTouch(p0: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(p0: android.widget.SeekBar?) {}
+        })
+
+        btnPlus.setOnClickListener {
+            if (selectedPrice + 10 <= maxPrice) selectedPrice += 10 else selectedPrice = maxPrice
+            updateUI()
+        }
+
+        btnMinus.setOnClickListener {
+            if (selectedPrice - 10 >= minPrice) selectedPrice -= 10 else selectedPrice = minPrice
+            updateUI()
+        }
+
+        btnSave.setOnClickListener {
+            val addedValue = (selectedPrice - minPrice).toDouble()
+            viewModel.updateActiveOrderPrice(addedValue)
+            dialog.dismiss()
+        }
+
+        btnClose.setOnClickListener { dialog.dismiss() }
+        dialog.show()
     }
 
     private fun updateDriverMarker(loc: TrackingLocationDto) {
@@ -3243,7 +3326,7 @@ private fun stopWaitingTimer() {
 
     when(order.status) {
         "REQUESTED", "OFFERING" -> {
-            updateOrderProgress(1)
+            updateOrderProgress(0)
             orderStatusText.text = "Пошук водія..."
             startStatusBlinking()
             
@@ -3263,7 +3346,7 @@ private fun stopWaitingTimer() {
         }
         
         "ACCEPTED" -> {
-            updateOrderProgress(2)
+            updateOrderProgress(1)
             stopStatusBlinking()
             orderStatusText.text = "Водій їде до вас"
             
@@ -3298,7 +3381,7 @@ private fun stopWaitingTimer() {
         }
 
         "DRIVER_ARRIVED" -> {
-            updateOrderProgress(2)
+            updateOrderProgress(1)
             stopStatusBlinking()
             orderStatusText.text = "Водій на місці" 
             
@@ -3334,7 +3417,7 @@ private fun stopWaitingTimer() {
         }
 
         "IN_PROGRESS" -> {
-            updateOrderProgress(3)
+            updateOrderProgress(2)
             stopStatusBlinking()
             orderStatusText.text = "В дорозі"
             
@@ -3370,7 +3453,7 @@ private fun stopWaitingTimer() {
         }
         
         "COMPLETED" -> {
-            updateOrderProgress(4)
+            updateOrderProgress(3)
             stopStatusBlinking()
             orderStatusText.text = "Поїздку завершено"
             

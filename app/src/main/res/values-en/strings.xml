@@ -28,6 +28,14 @@
     <string name="unbind_card">Unbind card</string>
 
 
+    <!-- Unbind card dialog -->
+    <string name="dialog_delete_card_title">Remove Card</string>
+    <string name="dialog_delete_card_message">Are you sure you want to remove this card? You will need to add it again to use it for future payments.</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Remove</string>
+
+
+
     <string name="chat_title">Chat with driver</string>
     <string name="chat_hint_message">Message...</string>
 
