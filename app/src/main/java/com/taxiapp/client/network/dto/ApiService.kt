@@ -4,6 +4,7 @@ import com.taxiapp.client.network.dto.*
 import com.taxiapp.client.data.model.TaxiService
 import com.taxiapp.client.network.dto.MessageResponseDto
 import retrofit2.Call
+import retrofit2.Response
 import retrofit2.http.*
 
 // === ВАЖНО: Эти классы должны быть здесь ===
@@ -85,18 +86,18 @@ interface ApiService {
     ): Call<MessageResponse>
 
 
-    @PUT("api/orders/{id}/payment-method")
-    fun updatePaymentMethod(
-        @Header("Authorization") token: String,
-        @Path("id") orderId: Long,
-        @Query("method") method: String
-    ): Call<MessageResponseDto> // Или любой другой DTO для простого ответа { "message": "Ок" }
-
-    @PUT("api/orders/{id}/price")
+    @PUT("orders/{id}/price")
     fun updateOrderPrice(
         @Header("Authorization") token: String,
         @Path("id") orderId: Long,
         @Query("addedValue") addedValue: Double
+    ): Call<MessageResponseDto>
+
+    @PUT("orders/{id}/payment-method")
+    fun updatePaymentMethod(
+        @Header("Authorization") token: String,
+        @Path("id") orderId: Long,
+        @Query("method") method: String
     ): Call<MessageResponseDto>
 
     // --- ЗАМОВЛЕННЯ ---
