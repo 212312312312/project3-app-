@@ -98,8 +98,6 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     private var currentTariffPrice: Double = 0.0 
     private lateinit var tvPrice: TextView
 
-    var initialBasePrice: Double? = null
-
     // Эти переменные теперь обновляются из ViewModel
     private var decodedRoutePoints: List<LatLng>? = null
     private var routeDistanceMeters: Int = 0
