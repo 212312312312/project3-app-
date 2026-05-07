@@ -2,6 +2,7 @@ package com.taxiapp.client
 
 import android.app.Dialog
 import android.content.Intent
+import com.taxiapp.client.network.dto.MessageResponseDto
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
@@ -78,7 +79,7 @@ class PaymentActivity : BaseActivity() {
     private fun showUnbindCardDialog() {
         val dialog = Dialog(this)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        dialog.setContentView(R.layout.dialog_delete_card) // Наш новый файл диалога
+        dialog.setContentView(R.layout.dialog_delete_card)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialog.window?.setLayout(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
 
@@ -90,13 +91,32 @@ class PaymentActivity : BaseActivity() {
         }
 
         btnConfirm.setOnClickListener {
-            dialog.dismiss()
-            // Здесь отправляешь запрос на сервер для отвязки
-            // ...
-            // Пока удаляем локально
-            sessionManager.saveCardMask(null)
-            sessionManager.savePaymentMethod("CASH")
-            updateUI()
+            // Блокируем кнопку, чтобы не нажали дважды
+            btnConfirm.isEnabled = false
+            btnConfirm.text = "Видалення..."
+
+            val token = "Bearer ${sessionManager.fetchAuthToken()}"
+
+            // Отправляем запрос на сервер
+            ApiClient.instance.unbindCard(token).enqueue(object : Callback<MessageResponseDto> {
+                override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
+                    dialog.dismiss()
+                    if (response.isSuccessful) {
+                        // Только если сервер подтвердил удаление, удаляем локально
+                        sessionManager.saveCardMask(null)
+                        sessionManager.savePaymentMethod("CASH")
+                        updateUI()
+                        Toast.makeText(this@PaymentActivity, "Картку видалено", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@PaymentActivity, "Помилка при видаленні", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
+                    dialog.dismiss()
+                    Toast.makeText(this@PaymentActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
+                }
+            })
         }
 
         dialog.show()

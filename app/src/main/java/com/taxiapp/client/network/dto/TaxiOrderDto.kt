@@ -29,6 +29,7 @@ data class TaxiOrderDto(
     val paymentMethod: String? = "CASH",
     val serviceIds: List<Long>? = null,
     val comment: String? = null,
+    val addedValue: Double = 0.0,
 
     @SerializedName("services")
     val services: List<OrderServiceDto> = emptyList(),

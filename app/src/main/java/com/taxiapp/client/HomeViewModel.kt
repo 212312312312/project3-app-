@@ -34,6 +34,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeOrder = MutableLiveData<TaxiOrderDto?>()
     val activeOrder: LiveData<TaxiOrderDto?> get() = _activeOrder
 
+    private val _cardBoundEvent = MutableLiveData<Boolean>()
+    val cardBoundEvent: LiveData<Boolean> get() = _cardBoundEvent
+
+    private var profilePollingHandler = Handler(Looper.getMainLooper())
+    private var profilePollingRunnable: Runnable? = null
+
     private val _orderStatus = MutableLiveData<String>()
     val orderStatus: LiveData<String> get() = _orderStatus
 
@@ -107,6 +113,46 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
             }
         })
+    }
+
+    fun startCheckingCardBinding() {
+        profilePollingRunnable = object : Runnable {
+            override fun run() {
+                val token = sessionManager.fetchAuthToken() ?: return
+                
+                ApiClient.instance.getClientProfile("Bearer $token").enqueue(object : Callback<com.taxiapp.client.network.ClientProfileResponse> {
+                    override fun onResponse(call: Call<com.taxiapp.client.network.ClientProfileResponse>, response: Response<com.taxiapp.client.network.ClientProfileResponse>) {
+                        if (response.isSuccessful) {
+                            val profile = response.body()
+                            // Если сервер получил вебхук от LiqPay и записал маску:
+                            if (profile != null && !profile.cardMask.isNullOrEmpty()) {
+                                sessionManager.saveCardMask(profile.cardMask) // Сохраняем локально
+                                _cardBoundEvent.value = true // Даем сигнал Activity!
+                                stopCheckingCardBinding() // Останавливаем проверку
+                            } else {
+                                // Карты еще нет, ждем 3 сек. ИСПОЛЬЗУЕМ ПЕРЕМЕННУЮ ВМЕСТО this@Runnable
+                                profilePollingRunnable?.let { profilePollingHandler.postDelayed(it, 3000) }
+                            }
+                        } else {
+                            profilePollingRunnable?.let { profilePollingHandler.postDelayed(it, 3000) }
+                        }
+                    }
+                    override fun onFailure(call: Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
+                        profilePollingRunnable?.let { profilePollingHandler.postDelayed(it, 3000) }
+                    }
+                })
+            }
+        }
+        // Запускаем в первый раз
+        profilePollingHandler.post(profilePollingRunnable!!)
+    }
+
+    fun stopCheckingCardBinding() {
+        profilePollingRunnable?.let { profilePollingHandler.removeCallbacks(it) }
+    }
+
+    fun resetCardBoundEvent() {
+        _cardBoundEvent.value = false
     }
 
     // --- API: Маршрут ---

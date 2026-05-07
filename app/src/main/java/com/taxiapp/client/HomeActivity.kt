@@ -249,6 +249,7 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     private var currentCity: CityData? = null
 
     private var polylineAnim: Polyline? = null
+    private var webViewDialog: Dialog? = null
     private var routeAnimator: ValueAnimator? = null
 
 
@@ -581,6 +582,23 @@ private lateinit var tvNewWaitingTimer: TextView
             displayTariffs() 
         }
 
+        viewModel.cardBoundEvent.observe(this) { isBound ->
+            if (isBound) {
+                // 1. Закрываем браузер!
+                webViewDialog?.dismiss()
+                
+                // 2. Автоматически переключаем метод оплаты текущего заказа на КАРТУ
+                viewModel.updateActiveOrderPaymentMethod("CARD")
+                currentPaymentMethod = "CARD"
+                updatePaymentIcon()
+                
+                showToast("Картку успішно прив'язано!")
+                
+                // Сбрасываем ивент, чтобы он не сработал при перевороте экрана
+                viewModel.resetCardBoundEvent()
+            }
+        }
+
         // 3. Активный заказ (обновление статуса)
         viewModel.activeOrder.observe(this) { order ->
             if (order != null) {
@@ -738,6 +756,11 @@ private lateinit var tvNewWaitingTimer: TextView
         if (tariffsPanel.visibility == View.VISIBLE) {
             fetchTariffsAndShowPanel()
         }
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!isDestroyed && !isFinishing) {
+                fetchClientProfile()
+            }
+        }, 2000)
     }
 
     private fun initUI() {
@@ -1094,9 +1117,15 @@ btnChangePayment.setOnClickListener {
 }
 
 btnChangePrice.setOnClickListener {
-    // Получаем текущую цену из активного заказа, чтобы передать в диалог
-    val currentPrice = viewModel.activeOrder.value?.price ?: 0.0
-    showChangePriceDialog(currentPrice)
+    val order = viewModel.activeOrder.value
+    if (order != null) {
+        val currentPrice = order.price
+        val addedValue = order.addedValue
+        // Вычисляем чистую базовую цену (без надбавок ползунка)
+        val basePrice = currentPrice - addedValue 
+                
+        showChangePriceDialogForActiveOrder(basePrice, addedValue)
+    }
 }
 
         findViewById<View>(R.id.btn_open_payment).setOnClickListener {
@@ -1377,6 +1406,7 @@ btnChangePrice.setOnClickListener {
     private fun updatePaymentMethodFromSession() {
         currentPaymentMethod = sessionManager.fetchPaymentMethod()
         val cardMask = sessionManager.getCardMask()
+
 
         // Если выбран CARD, но маски нет (например, слетела авторизация) - откатываем на CASH
         if (currentPaymentMethod == "CARD" && cardMask.isNullOrEmpty()) {
@@ -2382,6 +2412,37 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         }
     }
 
+    private fun openLiqPayInApp(url: String) {
+        // Создаем диалог на весь экран
+        webViewDialog = Dialog(this, android.R.style.Theme_Light_NoTitleBar_Fullscreen)
+        val view = layoutInflater.inflate(R.layout.dialog_liqpay_webview, null)
+        webViewDialog?.setContentView(view)
+
+        val webView = view.findViewById<android.webkit.WebView>(R.id.liqpay_webview)
+        val btnClose = view.findViewById<ImageView>(R.id.btn_close_webview)
+
+        // ВАЖНО: Включаем JavaScript и DOM Storage. Без этого банковские 3DS страницы не работают!
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+        webView.webViewClient = android.webkit.WebViewClient() // Чтобы ссылки не выкидывали в Chrome
+
+        webView.loadUrl(url)
+
+        btnClose.setOnClickListener {
+            webViewDialog?.dismiss()
+        }
+
+        // Если пользователь сам закрыл браузер, останавливаем проверку во ViewModel
+        webViewDialog?.setOnDismissListener {
+            viewModel.stopCheckingCardBinding()
+        }
+
+        webViewDialog?.show()
+
+        // ЗАПУСКАЕМ НАШ УМНЫЙ ПОЛЛИНГ!
+        viewModel.startCheckingCardBinding()
+    }
+
     private fun stopDriverTracking() {
         isDriverTrackingActive = false
         webSocketManager?.disconnect()
@@ -2455,75 +2516,239 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun showChangePaymentDialog() {
-        // У тебя уже должен быть какой-то диалог выбора оплаты на главном экране. 
-        // Здесь мы делаем простую версию через BottomSheetDialog или AlertDialog.
-        val options = arrayOf("Готівка", "Картка")
-        val values = arrayOf("CASH", "CARD")
-        
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Оберіть тип оплати")
-            .setItems(options) { dialog, which ->
-                val selectedMethod = values[which]
-                viewModel.updateActiveOrderPaymentMethod(selectedMethod)
-                dialog.dismiss()
+        // Создаем красивый BottomSheetDialog
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+        val view = layoutInflater.inflate(R.layout.dialog_change_payment, null)
+        dialog.setContentView(view)
+
+        // Настройка статус баров под тему
+        dialog.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.statusBarColor = Color.TRANSPARENT
+
+            val isNightMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            if (isNightMode) {
+                window.navigationBarColor = androidx.core.content.ContextCompat.getColor(this, android.R.color.black)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    var flags = window.decorView.systemUiVisibility
+                    flags = flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
+                    flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                    window.decorView.systemUiVisibility = flags
+                }
+            } else {
+                window.navigationBarColor = androidx.core.content.ContextCompat.getColor(this, android.R.color.white)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    var flags = window.decorView.systemUiVisibility
+                    flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+                    flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    window.decorView.systemUiVisibility = flags
+                }
             }
-            .show()
+        }
+
+        val rbCash = view.findViewById<RadioButton>(R.id.rb_cash)
+        val rbCard = view.findViewById<RadioButton>(R.id.rb_card)
+        val btnSave = view.findViewById<Button>(R.id.btn_save_payment)
+        val btnClose = view.findViewById<ImageView>(R.id.btn_close_dialog)
+
+        // Получаем текущий метод оплаты и маску из локального хранилища
+        val currentMethod = viewModel.activeOrder.value?.paymentMethod ?: "CASH"
+        val cardMask = sessionManager.getCardMask()
+        
+
+        // 1. ПОКАЗЫВАЕМ МАСКУ КАРТЫ В ДИАЛОГЕ
+        if (!cardMask.isNullOrEmpty()) {
+            rbCard.text = "Картка ($cardMask)"
+        } else {
+            rbCard.text = "Картка"
+        }
+
+        // Выставляем правильную галочку
+        if (currentMethod == "CARD") {
+            rbCard.isChecked = true
+        } else {
+            rbCash.isChecked = true
+        }
+
+        // Кнопка сохранения
+        btnSave.setOnClickListener {
+            val selectedMethod = if (rbCard.isChecked) "CARD" else "CASH"
+
+            // 2. ПРЯМАЯ ИНТЕГРАЦИЯ LIQPAY
+            if (selectedMethod == "CARD" && cardMask.isNullOrEmpty()) {
+                btnSave.isEnabled = false
+                btnSave.text = "Зачекайте..."
+
+                val token = "Bearer ${sessionManager.fetchAuthToken()}"
+                
+                ApiClient.instance.initBindCard(token).enqueue(object : retrofit2.Callback<com.taxiapp.client.network.InitBindCardResponse> {
+                    override fun onResponse(call: retrofit2.Call<com.taxiapp.client.network.InitBindCardResponse>, response: retrofit2.Response<com.taxiapp.client.network.InitBindCardResponse>) {
+                        dialog.dismiss()
+                        if (response.isSuccessful && response.body() != null) {
+                            
+                            // === ИЗМЕНЕНИЕ ЗДЕСЬ ===
+                            val url = response.body()!!.paymentUrl
+                            openLiqPayInApp(url) // Вызываем встроенный браузер!
+                            // =======================
+
+                        } else {
+                            showToast("Помилка підключення карти")
+                        }
+                    }
+
+                    override fun onFailure(call: retrofit2.Call<com.taxiapp.client.network.InitBindCardResponse>, t: Throwable) {
+                        dialog.dismiss()
+                        showToast("Помилка мережі")
+                    }
+                })
+                
+                return@setOnClickListener
+            }
+
+            // Если карта уже есть или выбрали "Готівка", отправляем запрос на обновление в заказе
+            viewModel.updateActiveOrderPaymentMethod(selectedMethod)
+            
+            // Обновляем UI локально
+            currentPaymentMethod = selectedMethod
+            updatePaymentIcon()
+
+            dialog.dismiss()
+        }
+
+        // Кнопка закрытия
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
-    private fun showChangePriceDialog(basePrice: Double) {
-        // Создаем диалог на основе твоего существующего layout'а dialog_change_price.xml
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+    private fun fetchClientProfile() {
+        val token = sessionManager.fetchAuthToken()
+        if (token.isNullOrEmpty()) return
+
+        ApiClient.instance.getClientProfile("Bearer $token").enqueue(object : retrofit2.Callback<com.taxiapp.client.network.ClientProfileResponse> {
+            override fun onResponse(
+                call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, 
+                response: retrofit2.Response<com.taxiapp.client.network.ClientProfileResponse>
+            ) {
+                if (response.isSuccessful && response.body() != null) {
+                    val profile = response.body()!!
+                    
+                    // Сохраняем новую маску (или null, если карту удалили)
+                    sessionManager.saveCardMask(profile.cardMask)
+
+                    // Если карты нет, а способ оплаты стоит CARD — сбрасываем на наличку
+                    if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
+                        sessionManager.savePaymentMethod("CASH")
+                        
+                        // Если есть активный заказ, отправляем запрос на смену оплаты на сервере
+                        if (activeOrderId != null) {
+                            viewModel.updateActiveOrderPaymentMethod("CASH")
+                        }
+                    }
+                    
+                    // Обновляем иконку на главном экране
+                    updatePaymentIcon()
+                }
+            }
+
+            override fun onFailure(call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
+                // Игнорируем ошибку сети в фоне, пользователь этого не заметит
+            }
+        })
+    }
+
+    private fun showChangePriceDialogForActiveOrder(basePrice: Double, currentAddedValue: Double) {
+        val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
         val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
         dialog.setContentView(view)
 
-        val tvPrice = view.findViewById<android.widget.TextView>(R.id.tv_dialog_price)
+        // Настройка статус баров (оставляем твой код)
+        dialog.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.statusBarColor = Color.TRANSPARENT 
+
+            val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            if (isNightMode) {
+                window.navigationBarColor = ContextCompat.getColor(this, android.R.color.black)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    var flags = window.decorView.systemUiVisibility
+                    flags = flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
+                    flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                    window.decorView.systemUiVisibility = flags
+                }
+            } else {
+                window.navigationBarColor = ContextCompat.getColor(this, android.R.color.white)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    var flags = window.decorView.systemUiVisibility
+                    flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+                    flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    window.decorView.systemUiVisibility = flags
+                }
+            }
+        }
+
+        val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
         val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
         val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
-        val seekBar = view.findViewById<android.widget.SeekBar>(R.id.seekbar_price)
-        val btnSave = view.findViewById<android.widget.Button>(R.id.btn_save_price)
+        val seekBar = view.findViewById<SeekBar>(R.id.seekbar_price)
+        val btnSave = view.findViewById<Button>(R.id.btn_save_price)
         val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
 
         val minPrice = basePrice.toInt()
-        val maxPrice = minPrice + 200 // Разрешаем накинуть до 200 грн
-        var selectedPrice = minPrice
+        val maxPrice = (basePrice * 3).toInt() // Умножаем на 3, как ты и хотел!
+        
+        // Текущее положение ползунка — это базовая цена + текущая надбавка
+        var currentPrice = minPrice + currentAddedValue.toInt()
 
-        seekBar.max = maxPrice - minPrice
-
+        val range = maxPrice - minPrice
+        seekBar.max = range
+        
         fun updateUI() {
-            tvPrice.text = "$selectedPrice ₴"
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                seekBar.setProgress(selectedPrice - minPrice, true)
+            tvPrice.text = "$currentPrice ₴"
+            val progress = currentPrice - minPrice
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                seekBar.setProgress(progress, true)
             } else {
-                seekBar.progress = selectedPrice - minPrice
+                seekBar.progress = progress
             }
         }
 
         updateUI()
 
-        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(p0: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(p0: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    selectedPrice = minPrice + progress
-                    tvPrice.text = "$selectedPrice ₴"
+                    currentPrice = minPrice + progress
+                    tvPrice.text = "$currentPrice ₴"
                 }
             }
-            override fun onStartTrackingTouch(p0: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(p0: android.widget.SeekBar?) {}
+            override fun onStartTrackingTouch(p0: SeekBar?) {}
+            override fun onStopTrackingTouch(p0: SeekBar?) {}
         })
 
         btnPlus.setOnClickListener {
-            if (selectedPrice + 10 <= maxPrice) selectedPrice += 10 else selectedPrice = maxPrice
+            if (currentPrice + 10 <= maxPrice) {
+                currentPrice += 10
+            } else {
+                currentPrice = maxPrice
+            }
             updateUI()
         }
 
         btnMinus.setOnClickListener {
-            if (selectedPrice - 10 >= minPrice) selectedPrice -= 10 else selectedPrice = minPrice
+            if (currentPrice - 10 >= minPrice) {
+                currentPrice -= 10
+            } else {
+                currentPrice = minPrice
+            }
             updateUI()
         }
 
         btnSave.setOnClickListener {
-            val addedValue = (selectedPrice - minPrice).toDouble()
-            viewModel.updateActiveOrderPrice(addedValue)
+            val newAddedValue = (currentPrice - minPrice).toDouble()
+            viewModel.updateActiveOrderPrice(newAddedValue)
             dialog.dismiss()
         }
 

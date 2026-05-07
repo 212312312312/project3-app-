@@ -100,6 +100,9 @@ interface ApiService {
         @Query("method") method: String
     ): Call<MessageResponseDto>
 
+    @DELETE("payments/unbind-card") // <-- ВОТ ТУТ УБРАЛИ api/v1/
+    fun unbindCard(@Header("Authorization") token: String): Call<MessageResponseDto>
+
     // --- ЗАМОВЛЕННЯ ---
     @POST("client/orders")
     fun createOrder(
