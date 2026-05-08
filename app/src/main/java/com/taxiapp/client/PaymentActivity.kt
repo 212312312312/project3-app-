@@ -1,16 +1,16 @@
 package com.taxiapp.client
 
 import android.app.Dialog
-import android.content.Intent
-import com.taxiapp.client.network.dto.MessageResponseDto
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.Window
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -19,8 +19,9 @@ import android.widget.TextView
 import android.widget.Toast
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.InitBindCardResponse
-import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.network.ClientProfileResponse
+import com.taxiapp.client.network.dto.MessageResponseDto
+import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 import retrofit2.Call
 import retrofit2.Callback
@@ -34,6 +35,11 @@ class PaymentActivity : BaseActivity() {
     private lateinit var ivUnbindCard: ImageView
     private lateinit var ivCheckCash: ImageView
     private lateinit var ivCheckCard: ImageView
+
+    // --- ПЕРЕМЕННЫЕ ДЛЯ УМНОГО ПОЛЛИНГА ---
+    private var pollingHandler = Handler(Looper.getMainLooper())
+    private var pollingRunnable: Runnable? = null
+    private var isPolling = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,7 +81,6 @@ class PaymentActivity : BaseActivity() {
         }
     }
 
-    // Показываем диалог подтверждения
     private fun showUnbindCardDialog() {
         val dialog = Dialog(this)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -86,27 +91,21 @@ class PaymentActivity : BaseActivity() {
         val btnCancel = dialog.findViewById<Button>(R.id.btn_cancel)
         val btnConfirm = dialog.findViewById<Button>(R.id.btn_confirm_delete)
 
-        btnCancel.setOnClickListener {
-            dialog.dismiss()
-        }
+        btnCancel.setOnClickListener { dialog.dismiss() }
 
         btnConfirm.setOnClickListener {
-            // Блокируем кнопку, чтобы не нажали дважды
             btnConfirm.isEnabled = false
             btnConfirm.text = "Видалення..."
 
             val token = "Bearer ${sessionManager.fetchAuthToken()}"
 
-            // Отправляем запрос на сервер
             ApiClient.instance.unbindCard(token).enqueue(object : Callback<MessageResponseDto> {
                 override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                     dialog.dismiss()
                     if (response.isSuccessful) {
-                        // Только если сервер подтвердил удаление, удаляем локально
                         sessionManager.saveCardMask(null)
                         sessionManager.savePaymentMethod("CASH")
                         updateUI()
-                        Toast.makeText(this@PaymentActivity, "Картку видалено", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(this@PaymentActivity, "Помилка при видаленні", Toast.LENGTH_SHORT).show()
                     }
@@ -118,7 +117,6 @@ class PaymentActivity : BaseActivity() {
                 }
             })
         }
-
         dialog.show()
     }
 
@@ -126,7 +124,12 @@ class PaymentActivity : BaseActivity() {
         super.onResume()
         Handler(Looper.getMainLooper()).postDelayed({
             fetchClientProfile()
-        }, 2000)
+        }, 1000)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopPolling() // Обязательно останавливаем поллинг при выходе
     }
 
     private fun fetchClientProfile() {
@@ -144,7 +147,6 @@ class PaymentActivity : BaseActivity() {
                     updateUI()
                 }
             }
-
             override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {
                 t.printStackTrace()
             }
@@ -155,7 +157,6 @@ class PaymentActivity : BaseActivity() {
         val mask = sessionManager.getCardMask()
         val method = sessionManager.fetchPaymentMethod()
 
-        // Используем INVISIBLE вместо GONE для галочек, чтобы ширина не скакала
         if (!mask.isNullOrEmpty()) {
             tvCardTitle.text = getString(R.string.saved_card, mask)
             ivUnbindCard.visibility = View.VISIBLE
@@ -180,8 +181,7 @@ class PaymentActivity : BaseActivity() {
             override fun onResponse(call: Call<InitBindCardResponse>, response: Response<InitBindCardResponse>) {
                 if (response.isSuccessful && response.body() != null) {
                     val url = response.body()!!.paymentUrl
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    startActivity(intent)
+                    showLiqPayWebView(url)
                 } else {
                     Toast.makeText(this@PaymentActivity, getString(R.string.card_bind_error), Toast.LENGTH_SHORT).show()
                 }
@@ -191,5 +191,90 @@ class PaymentActivity : BaseActivity() {
                 Toast.makeText(this@PaymentActivity, getString(R.string.card_bind_error), Toast.LENGTH_SHORT).show()
             }
         })
+    }
+
+    private fun showLiqPayWebView(url: String) {
+        val dialog = Dialog(this, android.R.style.Theme_Light_NoTitleBar)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_liqpay_webview)
+
+        val btnClose = dialog.findViewById<ImageView>(R.id.btn_close_webview)
+        val webView = dialog.findViewById<WebView>(R.id.liqpay_webview)
+
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+
+        // Больше никаких перехватчиков URL! Только стандартный клиент.
+        webView.webViewClient = WebViewClient()
+        webView.webChromeClient = WebChromeClient()
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        // Когда диалог закрывается (по любой причине), останавливаем опрос
+        dialog.setOnDismissListener {
+            stopPolling()
+            fetchClientProfile()
+        }
+
+        webView.loadUrl(url)
+        dialog.show()
+
+        // ЗАПУСКАЕМ НАШ УМНЫЙ ПОЛЛИНГ!
+        startPollingCardStatus(dialog)
+    }
+
+    // ==========================================
+    // ЛОГИКА УМНОГО ПОЛЛИНГА
+    // ==========================================
+    private fun startPollingCardStatus(dialog: Dialog) {
+        isPolling = true
+        pollingRunnable = object : Runnable {
+            override fun run() {
+                if (!isPolling) return
+
+                val token = "Bearer ${sessionManager.fetchAuthToken()}"
+                ApiClient.instance.getClientProfile(token).enqueue(object : Callback<ClientProfileResponse> {
+                    override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
+                        if (response.isSuccessful && response.body() != null) {
+                            val profile = response.body()!!
+
+                            // Если сервер вернул маску карты
+                            if (!profile.cardMask.isNullOrEmpty()) {
+                                stopPolling()
+
+                                dialog.dismiss()
+
+                                sessionManager.saveCardMask(profile.cardMask)
+                                sessionManager.savePaymentMethod("CARD")
+                                updateUI()
+                                return // Выходим из функции, чтобы таймер точно не запустился снова
+                            }
+                        }
+
+                        // ИСПРАВЛЕНИЕ: Перезапускаем таймер через переменную pollingRunnable
+                        if (isPolling) {
+                            pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
+                        }
+                    }
+
+                    override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {
+                        // ИСПРАВЛЕНИЕ: Перезапускаем таймер при ошибке сети
+                        if (isPolling) {
+                            pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
+                        }
+                    }
+                })
+            }
+        }
+
+        // Запускаем первую проверку
+        pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
+    }
+
+    private fun stopPolling() {
+        isPolling = false
+        pollingRunnable?.let { pollingHandler.removeCallbacks(it) }
     }
 }

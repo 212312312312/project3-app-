@@ -114,7 +114,6 @@ class MainActivity : BaseActivity() {
         ApiClient.sessionManager = sessionManager
 
         // Если токен ЕСТЬ и телефон ЕСТЬ, пускаем дальше.
-        // Важно: проверяем наличие телефона, чтобы подстраховаться от старых забагованных сессий
         val token = sessionManager.fetchAuthToken()
         val phone = sessionManager.getUserPhone()
         if (token != null && phone.isNotEmpty()) {
@@ -122,7 +121,6 @@ class MainActivity : BaseActivity() {
             goToHomeActivity()
             return
         } else if (token != null) {
-            // Если токен есть, а телефона нет — это битая сессия, очищаем
             sessionManager.clearSession()
         }
 
@@ -194,17 +192,18 @@ class MainActivity : BaseActivity() {
                     val phone = body?.phoneNumber
 
                     if (token != null) {
-                        if (phone.isNullOrEmpty()) {
-                            // НЕТ НОМЕРА -> Сохраняем токен во ВРЕМЕННУЮ переменную и идем привязывать номер
+                        // ПРОПУСК ВЕРИФИКАЦИИ НОМЕРА:
+                        // Если isNewUser == true, значит емейла в базе еще не было (обычный сценарий -> запрашиваем номер).
+                        // Если isNewUser == false, емейл УЖЕ есть в базе -> пропускаем сразу.
+                        if (body.isNewUser) {
                             tempAuthToken = token
                             showLinkPhoneScreen()
                         } else {
-                            // НОМЕР ЕСТЬ -> Сразу сохраняем все в SessionManager и пускаем дальше
                             sessionManager.saveAuthToken(token)
                             if (body.refreshToken != null) {
                                 sessionManager.saveRefreshToken(body.refreshToken)
                             }
-                            sessionManager.saveUserInfo(body.fullName, phone)
+                            sessionManager.saveUserInfo(body.fullName, phone ?: "")
                             updateFcmTokenOnServer()
                             checkWhereToGo(body.isNewUser)
                         }
@@ -227,8 +226,6 @@ class MainActivity : BaseActivity() {
         val request = SmsVerifyDto(phoneNumber = phone, code = code)
 
         if (isLinkingPhoneState) {
-            // ЛОГИКА ПРИВЯЗКИ НОМЕРА
-            // Используем ВРЕМЕННЫЙ токен, а не из SessionManager
             val tokenToUse = tempAuthToken ?: return
 
             ApiClient.instance.linkPhone("Bearer $tokenToUse", request).enqueue(object : Callback<LoginResponseDto> {
@@ -237,7 +234,6 @@ class MainActivity : BaseActivity() {
                     if (response.isSuccessful) {
                         val body = response.body()
                         if (body != null) {
-                            // УРА! Телефон подтвержден. ТЕПЕРЬ сохраняем токен в постоянную память.
                             sessionManager.saveAuthToken(body.token)
                             if (body.refreshToken != null) {
                                 sessionManager.saveRefreshToken(body.refreshToken)
@@ -245,7 +241,7 @@ class MainActivity : BaseActivity() {
                             sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
                             resendTimer?.cancel()
                             updateFcmTokenOnServer()
-                            goToHomeActivity() // Привязка всегда ведет на главный экран
+                            goToHomeActivity()
                         }
                     } else {
                         handleSmsError(response.code())
@@ -257,14 +253,12 @@ class MainActivity : BaseActivity() {
                 }
             })
         } else {
-            // ОБЫЧНАЯ ЛОГИКА ЛОГИНА
             ApiClient.instance.verifySmsCode(request).enqueue(object : Callback<LoginResponseDto> {
                 override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
                     setLoading(false)
                     if (response.isSuccessful) {
                         val body = response.body()
                         if (body != null) {
-                            // То же самое, сохраняем токены
                             sessionManager.saveAuthToken(body.token)
                             if (body.refreshToken != null) {
                                 sessionManager.saveRefreshToken(body.refreshToken)
@@ -479,10 +473,8 @@ class MainActivity : BaseActivity() {
                 if (isUpdating || s == null) return
                 isUpdating = true
 
-                // 1. Залишаємо лише цифри (прибираємо +, пробіли, дужки)
                 var text = s.toString().replace(Regex("[^0-9]"), "")
 
-                // 2. Розумно прибираємо код країни (спрацює і для +380, і для 80, і для 0)
                 if (text.startsWith("380")) {
                     text = text.removePrefix("380")
                 } else if (text.startsWith("80")) {
@@ -491,12 +483,10 @@ class MainActivity : BaseActivity() {
                     text = text.removePrefix("0")
                 }
 
-                // 3. Жорстко обрізаємо до 9 цифр ТІЛЬКИ ПІСЛЯ очистки коду країни
                 if (text.length > 9) {
                     text = text.substring(0, 9)
                 }
 
-                // 4. Оновлюємо поле, якщо текст змінився, і ставимо курсор у кінець
                 if (s.toString() != text) {
                     s.replace(0, s.length, text)
                 }
