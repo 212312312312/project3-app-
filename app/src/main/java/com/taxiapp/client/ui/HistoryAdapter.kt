@@ -71,7 +71,6 @@ class HistoryAdapter(
         private val tvTo: TextView = itemView.findViewById(R.id.tv_to)
         private val tvPrice: TextView = itemView.findViewById(R.id.tv_price)
 
-        // Знаходимо саме КОНТЕЙНЕР кнопки, а не тільки кнопку
         private val layoutCancelContainer: View = itemView.findViewById(R.id.layout_cancel_container)
         private val btnCancel: Button = itemView.findViewById(R.id.btn_cancel_order)
 
@@ -95,29 +94,23 @@ class HistoryAdapter(
                     val timeStr = order.scheduledAt?.replace("T", " ")?.take(16) ?: ""
                     tvDateTime.text = timeStr
                     tvStatusBadge.text = "Заплановано"
-                    tvStatusBadge.background.setTint(Color.parseColor("#FF9800"))
                 }
                 "REQUESTED", "OFFERING" -> {
                     tvStatusBadge.text = "Пошук водія"
-                    tvStatusBadge.background.setTint(Color.parseColor("#2196F3"))
                 }
                 "ACCEPTED" -> {
                     tvStatusBadge.text = "Водій їде"
-                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
                 }
                 "DRIVER_ARRIVED" -> {
                     tvStatusBadge.text = "Водій на місці"
-                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
                 }
                 "IN_PROGRESS" -> {
                     tvStatusBadge.text = "В дорозі"
-                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
                     // ТУТ ХОВАЄМО ВЕСЬ КОНТЕЙНЕР, щоб не було пустої червоної пігулки!
                     layoutCancelContainer.visibility = View.GONE
                 }
                 else -> {
                     tvStatusBadge.text = "В роботі"
-                    tvStatusBadge.background.setTint(Color.parseColor("#4CAF50"))
                 }
             }
 
@@ -146,6 +139,9 @@ class HistoryAdapter(
     // =========================================================
     // 2. VIEWHOLDER ДЛЯ АРХІВУ (без кнопок і зайвого коду)
     // =========================================================
+    // =========================================================
+    // 2. VIEWHOLDER ДЛЯ АРХІВУ (без кнопок і зайвого коду)
+    // =========================================================
     class ArchiveOrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvDateTime: TextView = itemView.findViewById(R.id.tv_date_time)
         private val tvPrice: TextView = itemView.findViewById(R.id.tv_price)
@@ -158,7 +154,17 @@ class HistoryAdapter(
             tvFrom.text = order.fromAddress
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
-            tvDateTime.text = order.createdAt?.replace("T", " ")?.take(16) ?: "Дата"
+
+            // Форматування дати: 09 квіт. 2026, 20:10
+            try {
+                val inputFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                val date = inputFormat.parse(order.createdAt)
+                val outputFormat = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale("uk"))
+                tvDateTime.text = outputFormat.format(date)
+            } catch (e: Exception) {
+                // Фоллбек, якщо дата прийде в іншому форматі
+                tvDateTime.text = order.createdAt?.replace("T", " ")?.take(16) ?: "Дата"
+            }
 
             if (!order.formattedWaypoints.isNullOrEmpty()) {
                 tvWaypoints?.text = order.formattedWaypoints
