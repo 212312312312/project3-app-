@@ -12,7 +12,6 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.taxiapp.client.HomeActivity
 import com.taxiapp.client.R
-import android.content.pm.ServiceInfo
 
 class OrderStatusService : Service() {
 
@@ -30,39 +29,34 @@ class OrderStatusService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Если пришла команда на остановку (заказ завершен/отменен)
+        val orderId = intent?.getLongExtra(EXTRA_ORDER_ID, -1L) ?: -1L
+
+        // Коректна зупинка сервісу
         if (intent?.action == ACTION_STOP) {
-            val orderId = intent.getLongExtra(EXTRA_ORDER_ID, -1L)
             if (orderId != -1L) {
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.cancel(orderId.toInt()) // Убираем конкретное уведомление
+                manager.cancel(orderId.toInt())
             }
-            stopForeground(true) // ДОДАНО: Правильна зупинка Foreground Service
+            stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
         }
 
-        // Читаем данные заказа
-        val orderId = intent?.getLongExtra(EXTRA_ORDER_ID, -1L) ?: return START_NOT_STICKY
-        val status = intent.getStringExtra(EXTRA_STATUS) ?: ""
-        val address = intent.getStringExtra(EXTRA_ADDRESS) ?: "Кінцева точка"
+        val status = intent?.getStringExtra(EXTRA_STATUS) ?: ""
+        val address = intent?.getStringExtra(EXTRA_ADDRESS) ?: "Кінцева точка"
+        val customTitle = intent?.getStringExtra("custom_title")
+        val customBody = intent?.getStringExtra("custom_body")
 
-        // --- ДОДАНО: Читаємо текст із сервера ---
-        val customTitle = intent.getStringExtra("custom_title")
-        val customBody = intent.getStringExtra("custom_body")
-        // ----------------------------------------
-
+        // Гарантований виклик startForeground рятує від крашу ForegroundServiceDidNotStartInTimeException
         val notification = buildNotification(orderId, status, address, customTitle, customBody)
+        val notificationId = if (orderId != -1L) orderId.toInt() else 1
+        startForeground(notificationId, notification)
 
-        // Запускаем или обновляем уведомление.
-        startForeground(orderId.toInt(), notification)
-
-        return START_STICKY
+        // START_NOT_STICKY - забороняє Android перестворювати сервіс з пустим інтентом
+        return START_NOT_STICKY
     }
 
-    // Змінено сигнатуру методу
     private fun buildNotification(orderId: Long, status: String, address: String, customTitle: String?, customBody: String?): Notification {
-        // Маппинг статусов сервера на красивый украинский текст (fallback)
         val statusText = when (status) {
             "SCHEDULED" -> "Заплановано"
             "REQUESTED", "OFFERING" -> "Пошук водія..."
@@ -74,31 +68,25 @@ class OrderStatusService : Service() {
             else -> status
         }
 
-        // --- ДОДАНО: Використовуємо текст із сервера, якщо він є ---
         val finalTitle = customTitle ?: "Замовлення: $address"
         val finalBody = customBody ?: "Статус: $statusText"
-        // -----------------------------------------------------------
 
-        val intent = Intent(this, HomeActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
         val pendingIntent = PendingIntent.getActivity(
-            this, orderId.toInt(), intent,
+            this, orderId.toInt(),
+            Intent(this, HomeActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(finalTitle) // Використовуємо фінальний тайтл
-            .setContentText(finalBody)   // Використовуємо фінальний текст
-            .setStyle(NotificationCompat.BigTextStyle().bigText(finalBody)) // ДОДАНО: Щоб довгий текст влазив
+            .setContentTitle(finalTitle)
+            .setContentText(finalBody)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(finalBody))
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .setOnlyAlertOnce(true) // Звук тільки перший раз, далі - тихе оновлення (ЦЕ ТЕ ЩО НАМ ТРЕБА!)
+            .setOnlyAlertOnce(true)
             .build()
     }
-
-
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -108,7 +96,7 @@ class OrderStatusService : Service() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Відображає поточний статус вашого таксі в реальному часі"
-                setSound(null, null) // Тихі оновлення
+                setSound(null, null)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)

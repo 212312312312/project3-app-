@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.google.android.gms.maps.model.LatLng
@@ -212,11 +213,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun stopOrderStatusService(orderId: Long) {
         val context = getApplication<Application>()
-        val intent = android.content.Intent(context, com.taxiapp.client.service.OrderStatusService::class.java).apply {
-            action = com.taxiapp.client.service.OrderStatusService.ACTION_STOP
-            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_ORDER_ID, orderId)
-        }
-        context.startService(intent)
+
+        // 1. Прямо і безпечно зупиняємо сам сервіс (це працює навіть з фону)
+        val intent = android.content.Intent(context, com.taxiapp.client.service.OrderStatusService::class.java)
+        context.stopService(intent)
+
+        // 2. Для 100% надійності примусово прибираємо нотифікацію
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        manager.cancel(orderId.toInt())
     }
 
     // --- API: Создание заказа ---
@@ -228,20 +232,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful) {
-                    val order = response.body()!!
-                    if (order.status != "SCHEDULED") {
-                        activeOrderId = order.id
-                        sessionManager.saveActiveOrderId(order.id)
-                        _activeOrder.value = order
+                    val order = response.body()
 
-                        // ДОБАВЛЕНО: Запускаем виджет!
-                        updateOrderStatusService(order)
+                    if (order != null) { // Безпечна перевірка замість небезпечного !!
+                        if (order.status != "SCHEDULED") {
+                            activeOrderId = order.id
+                            sessionManager.saveActiveOrderId(order.id)
+                            _activeOrder.value = order
 
-                        startStatusPolling()
+                            // Запускаємо віджет!
+                            updateOrderStatusService(order)
+
+                            startStatusPolling()
+                        } else {
+                            _errorMessage.value = "Замовлення заплановано на ${order.scheduledAt}"
+                            // Для запланированого також показуємо віджет
+                            updateOrderStatusService(order)
+                        }
                     } else {
-                        _errorMessage.value = "Замовлення заплановано на ${order.scheduledAt}"
-                        // Для запланированного тоже можно показать виджет:
-                        updateOrderStatusService(order)
+                        _errorMessage.value = "Помилка: сервер повернув порожню відповідь"
                     }
                 } else {
                     _errorMessage.value = "Помилка створення: ${response.message()}"
@@ -365,6 +374,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearOrderState() {
+        activeOrderId?.let { stopOrderStatusService(it) }
         activeOrderId = null
         sessionManager.clearActiveOrderId()
         stopStatusPolling()
