@@ -1,19 +1,31 @@
 package com.taxiapp.client.network
 
-import android.os.Handler
-import android.os.Looper
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 
 object ServerStatusBus {
-    private var listener: (() -> Unit)? = null
 
-    fun setListener(l: (() -> Unit)?) {
-        listener = l
-    }
+    // Для ошибок сервера (502/503)
+    private val _serverError = MutableLiveData<Boolean>()
+    val serverError: LiveData<Boolean> get() = _serverError
+
+    // Для просроченной сессии (разлогин)
+    private val _sessionExpired = MutableLiveData<Boolean>()
+    val sessionExpired: LiveData<Boolean> get() = _sessionExpired
 
     fun triggerServerError() {
-        // Переключаемся на главный UI поток, чтобы безопасно показать диалог
-        Handler(Looper.getMainLooper()).post {
-            listener?.invoke()
-        }
+        _serverError.postValue(true)
+    }
+
+    fun resetServerError() {
+        _serverError.postValue(false)
+    }
+
+    fun triggerSessionExpired() {
+        _sessionExpired.postValue(true)
+    }
+
+    fun resetSessionExpired() {
+        _sessionExpired.postValue(false)
     }
 }

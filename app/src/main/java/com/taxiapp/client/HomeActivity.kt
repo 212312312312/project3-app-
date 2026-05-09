@@ -2,7 +2,13 @@ package com.taxiapp.client
 
 import android.Manifest
 import android.view.Window
+import android.text.Spannable
 import android.text.SpannableString
+import android.text.style.BackgroundColorSpan
+import android.graphics.Paint
+import android.graphics.RectF
+import android.text.style.ReplacementSpan
+import kotlin.math.roundToInt
 import android.text.Spanned
 import android.content.res.Configuration
 import android.text.style.RelativeSizeSpan
@@ -625,7 +631,7 @@ private lateinit var tvNewWaitingTimer: TextView
         viewModel.errorMessage.observe(this) { msg ->
             showToast(msg)
             btnOrderTaxi.isEnabled = true
-            btnOrderTaxi.text = "Замовити" // Сброс текста кнопки
+            btnOrderTaxi.text = getString(R.string.btn_order) // Сброс текста кнопки
             btnCancelOrder.isEnabled = true
             btnCancelOrder.text = "Скасувати замовлення"
             tariffsProgressBar.visibility = View.GONE
@@ -1807,32 +1813,100 @@ btnChangePrice.setOnClickListener {
     setCircle(statusCircle3, statusIcon3, isFilled = step >= 3, isActiveOutline = step == 2)
 }
     private fun getAddressForOrigin(latLng: LatLng) {
-        Thread {
-            try {
-                val geocoder = Geocoder(this, Locale("uk", "UA"))
-                @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-                
-                val addressName = if (!addresses.isNullOrEmpty()) {
-                    val raw = addresses[0].getAddressLine(0)
-                    AddressUtils.formatAddress(raw)
-                } else "Точка на карті"
-                
-                Handler(Looper.getMainLooper()).post { 
-                    if (viewModel.currentRoutePolyline == null) {
-                        tvOrigin.text = addressName
-                        originPlace = Place.builder().setName(addressName).setLatLng(latLng).build()
-                    }
+    Thread {
+        try {
+            // 1. Берем текущий язык из нашей сессии ("uk" или "en")
+            val sessionManager = SessionManager(this)
+            val currentLang = sessionManager.getLanguage()
+            val locale = Locale(currentLang)
+
+            // 2. Передаем эту локаль в Geocoder
+            val geocoder = Geocoder(this, locale)
+            
+            @Suppress("DEPRECATION")
+            val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+            
+            // 3. Берем переведенный дефолтный текст
+            val defaultPointText = getString(R.string.point_on_map)
+            
+            val addressName = if (!addresses.isNullOrEmpty()) {
+                val raw = addresses[0].getAddressLine(0)
+                AddressUtils.formatAddress(raw)
+            } else defaultPointText
+            
+            Handler(Looper.getMainLooper()).post { 
+                if (viewModel.currentRoutePolyline == null) {
+                    tvOrigin.text = addressName
+                    originPlace = Place.builder().setName(addressName).setLatLng(latLng).build()
                 }
-            } catch (e: Exception) { 
-                Handler(Looper.getMainLooper()).post { 
-                    if (viewModel.currentRoutePolyline == null) {
-                        tvOrigin.text = "Точка на карті" 
-                    }
-                } 
             }
-        }.start()
+        } catch (e: Exception) { 
+            e.printStackTrace()
+            // Если ошибка сети - тоже ставим переведенный текст
+            val defaultPointText = getString(R.string.point_on_map)
+            Handler(Looper.getMainLooper()).post { 
+                if (viewModel.currentRoutePolyline == null) {
+                    tvOrigin.text = defaultPointText 
+                }
+            } 
+        }
+    }.start()
+}
+
+class RoundedBackgroundSpan(
+    private val backgroundColor: Int,
+    private val textColor: Int,
+    private val cornerRadius: Float,
+    private val horizontalPadding: Float,
+    private val verticalPadding: Float // Добавили отдельный параметр для вертикали
+) : ReplacementSpan() {
+
+    override fun getSize(
+        paint: Paint,
+        text: CharSequence?,
+        start: Int,
+        end: Int,
+        fm: Paint.FontMetricsInt?
+    ): Int {
+        // Ширина: текст + отступы слева и справа
+        return (paint.measureText(text, start, end) + 2 * horizontalPadding).roundToInt()
     }
+
+    override fun draw(
+        canvas: Canvas,
+        text: CharSequence?,
+        start: Int,
+        end: Int,
+        x: Float,
+        top: Int,
+        y: Int,
+        bottom: Int,
+        paint: Paint
+    ) {
+        val textWidth = paint.measureText(text, start, end)
+        
+        // Получаем точные метрики шрифта, чтобы центрировать фон по буквам, а не по строке
+        val metrics = paint.fontMetrics
+        
+        // Рассчитываем верх и низ прямоугольника относительно базовой линии (y)
+        // ascent — это расстояние от базовой линии до верха букв (отрицательное число)
+        // descent — до низа букв (положительное число)
+        val rectTop = y + metrics.ascent - verticalPadding
+        val rectBottom = y + metrics.descent + verticalPadding
+        
+        val rect = RectF(x, rectTop, x + textWidth + 2 * horizontalPadding, rectBottom)
+        
+        // Рисуем фон
+        paint.color = backgroundColor
+        paint.style = Paint.Style.FILL
+        canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+        // Рисуем текст
+        paint.color = textColor
+        // Центрируем текст: x + отступ, y остается базовой линией
+        canvas.drawText(text!!, start, end, x + horizontalPadding, y.toFloat(), paint)
+    }
+}
 
     private fun tryDrawRoute() {
         if (originPlace == null || destinationPlace == null) return
@@ -2078,7 +2152,7 @@ btnChangePrice.setOnClickListener {
 
         selectedTariffItem = null
         btnOrderTaxi.isEnabled = false
-        btnOrderTaxi.text = "Замовити"
+        btnOrderTaxi.text = getString(R.string.btn_order)
 
         polylineAnim?.remove()
         polylineAnim = null
@@ -2313,7 +2387,7 @@ private fun showDriverHealthDialog(issues: List<String>) {
         }
 
         // Завжди тільки "Замовити"
-        val topText = "Замовити"
+        val topText = getString(R.string.btn_order)
 
         // Об'єднуємо з переносом рядка
         val fullText = "$topText\n$dateStr"
@@ -2334,7 +2408,7 @@ private fun showDriverHealthDialog(issues: List<String>) {
         // --- ТЕПЕРЬ ЦЕНЫ НЕТ И ЗДЕСЬ ---
         // Якщо час не обрано - просто "Замовити"
         if (selectedTariffItem != null) {
-            btnOrderTaxi.text = "Замовити"
+            btnOrderTaxi.text = getString(R.string.btn_order)
         } else {
             btnOrderTaxi.text = "Оберіть тариф"
         }
@@ -2557,11 +2631,33 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         
 
         // 1. ПОКАЗЫВАЕМ МАСКУ КАРТЫ В ДИАЛОГЕ
-        if (!cardMask.isNullOrEmpty()) {
-            rbCard.text = "Картка ($cardMask)"
-        } else {
-            rbCard.text = "Картка"
-        }
+if (!cardMask.isNullOrEmpty()) {
+    val fullText = getString(R.string.payment_card_format, cardMask)
+    val spannable = SpannableString(fullText)
+    
+    val startIndex = fullText.indexOf(cardMask)
+    if (startIndex != -1) {
+    val bgColor = ContextCompat.getColor(this, R.color.menu_background_color)
+    val textColor = ContextCompat.getColor(this, R.color.text_primary)
+    
+    spannable.setSpan(
+        RoundedBackgroundSpan(
+            backgroundColor = bgColor,
+            textColor = textColor,
+            cornerRadius = 12f,      // Радиус скругления
+            horizontalPadding = 20f,  // Отступ слева и справа (сделали чуть больше)
+            verticalPadding = 8f      // Отступ сверху и снизу (теперь будет одинаково!)
+        ),
+        startIndex,
+        startIndex + cardMask.length,
+        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+    )
+}
+    
+    rbCard.text = spannable
+} else {
+    rbCard.text = getString(R.string.payment_card)
+}
 
         // Выставляем правильную галочку
         if (currentMethod == "CARD") {
@@ -3547,12 +3643,13 @@ private fun stopWaitingTimer() {
     orderStatusText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
     
     btnCancelOrder.isEnabled = true
-    btnCancelOrder.text = "Скасувати замовлення"
+    btnCancelOrder.text = getString(R.string.btn_cancel_order)
 
     when(order.status) {
         "REQUESTED", "OFFERING" -> {
             updateOrderProgress(0)
-            orderStatusText.text = "Пошук водія..."
+            // ИЗМЕНЕНО: Пошук водія...
+            orderStatusText.text = getString(R.string.status_searching_driver)
             startStatusBlinking()
             
             layoutSearchControls.visibility = View.VISIBLE
@@ -3560,11 +3657,9 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.VISIBLE
             layoutDriverDetails.visibility = View.GONE
-            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
+            layoutPaymentCompleted.visibility = View.GONE 
             
             stopDriverTracking()
-            
-            // Зупиняємо таймер (нове табло сховається автоматично)
             stopWaitingTimer()
             
             updateMapPadding(activeOrderCard, 0f, 20f)
@@ -3573,7 +3668,8 @@ private fun stopWaitingTimer() {
         "ACCEPTED" -> {
             updateOrderProgress(1)
             stopStatusBlinking()
-            orderStatusText.text = "Водій їде до вас"
+            // ИЗМЕНЕНО: Водій їде до вас
+            orderStatusText.text = getString(R.string.status_driver_coming)
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.VISIBLE
@@ -3581,11 +3677,9 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
-            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
+            layoutPaymentCompleted.visibility = View.GONE 
             
             updateDriverInfo(order)
-            
-            // Зупиняємо таймер
             stopWaitingTimer()
 
             order.driver?.let { drv ->
@@ -3608,7 +3702,8 @@ private fun stopWaitingTimer() {
         "DRIVER_ARRIVED" -> {
             updateOrderProgress(1)
             stopStatusBlinking()
-            orderStatusText.text = "Водій на місці" 
+            // ИЗМЕНЕНО: Водій на місці
+            orderStatusText.text = getString(R.string.status_driver_arrived) 
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.VISIBLE
@@ -3616,11 +3711,9 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
-            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
+            layoutPaymentCompleted.visibility = View.GONE 
             
             updateDriverInfo(order)
-            
-            // ЗАПУСКАЄМО ТАЙМЕР (нове табло з'явиться автоматично)
             startWaitingTimer(order)
             
             order.driver?.let { drv ->
@@ -3637,14 +3730,14 @@ private fun stopWaitingTimer() {
             }
 
             startDriverTracking(order.id)
-            
             updateMapPadding(activeOrderCard, 0f, 20f)
         }
 
         "IN_PROGRESS" -> {
             updateOrderProgress(2)
             stopStatusBlinking()
-            orderStatusText.text = "В дорозі"
+            // ИЗМЕНЕНО: В дорозі
+            orderStatusText.text = getString(R.string.status_in_progress)
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.VISIBLE
@@ -3652,11 +3745,9 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
-            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
+            layoutPaymentCompleted.visibility = View.GONE 
             
             updateDriverInfo(order)
-            
-            // Поїздка почалась - просто ховаємо табло
             stopWaitingTimer()
 
             order.driver?.let { drv ->
@@ -3673,14 +3764,14 @@ private fun stopWaitingTimer() {
             }
 
             startDriverTracking(order.id)
-            
             updateMapPadding(activeOrderCard, 0f, 20f)
         }
         
         "COMPLETED" -> {
             updateOrderProgress(3)
             stopStatusBlinking()
-            orderStatusText.text = "Поїздку завершено"
+            // ИЗМЕНЕНО: Поїздку завершено
+            orderStatusText.text = getString(R.string.status_completed)
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.GONE
@@ -3689,25 +3780,20 @@ private fun stopWaitingTimer() {
             layoutDriverDetails.visibility = View.GONE
             
             stopDriverTracking()
-            
-            // Ховаємо табло
             stopWaitingTimer()
 
-            // 1. ПОКАЗУЄМО БЛОК ОПЛАТИ
             layoutPaymentCompleted.visibility = View.VISIBLE
             tvFinalPaymentPrice.text = String.format("%.0f ₴", order.price)
             
-            // 2. ОНОВЛЮЄМО ПАДДІНГИ КАРТИ ПІД НОВИЙ РОЗМІР ПАНЕЛІ
             updateMapPadding(activeOrderCard, 0f, 20f)
 
-            // 3. ЛОГІКА КНОПКИ "ЗРОЗУМІЛО"
             btnUnderstandPayment.setOnClickListener {
-                // Ховаємо блок оплати після натискання
                 layoutPaymentCompleted.visibility = View.GONE
                 
-                // Викликаємо вікно оцінки або закриваємо замовлення
                 if (!order.isRatedByClient) {
-                    showRatingDialog(order.id, order.driver?.fullName ?: "водієм")
+                    // ИЗМЕНЕНО: "водієм" вынесено в ресурсы (если вдруг в этом месте драйвер null)
+                    val driverName = order.driver?.fullName ?: getString(R.string.default_driver_name)
+                    showRatingDialog(order.id, driverName)
                 } else {
                     viewModel.clearOrderState()
                     activeOrderId = null
@@ -3718,19 +3804,18 @@ private fun stopWaitingTimer() {
         
         "CANCELLED" -> {
             stopStatusBlinking()
-            orderStatusText.text = "Скасовано"
-            orderStatusText.setTextColor(Color.RED)
+            
+            orderStatusText.text = getString(R.string.status_cancelled)
+            orderStatusText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.taxi_red_cancel))
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.GONE
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.GONE
-            layoutPaymentCompleted.visibility = View.GONE // Ховаємо панель оплати
+            layoutPaymentCompleted.visibility = View.GONE
             
             stopDriverTracking()
-            
-            // Ховаємо табло
             stopWaitingTimer()
 
             updateMapPadding(activeOrderCard, 0f, 20f)
@@ -3895,8 +3980,8 @@ if (healthIssues.isNotEmpty()) {
     btnSchedule.clearColorFilter() 
 } catch (e: Exception){}
 
-        tvOrigin.text = "Звідки?"
-        tvDestination.text = "Куди?"
+        tvOrigin.text = getString(R.string.hint_where_from)
+        tvDestination.text = getString(R.string.hint_where_to)
         originPlace = null
         destinationPlace = null
 

@@ -10,7 +10,6 @@
     android:paddingEnd="24dp"
     android:paddingBottom="16dp">
 
-    <!-- Заголовок и крестик (как в смене цены) -->
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -20,7 +19,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerVertical="true"
-            android:text="Оберіть тип оплати"
+            android:text="@string/title_choose_payment_type"
             android:textColor="?attr/colorOnBackground"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -35,7 +34,6 @@
             app:tint="#9E9E9E" />
     </RelativeLayout>
 
-    <!-- Выбор типа оплаты (взято по смыслу из activity_payment) -->
     <RadioGroup
         android:id="@+id/radioGroupPayment"
         android:layout_width="match_parent"
@@ -43,28 +41,34 @@
         android:layout_marginBottom="32dp"
         android:orientation="vertical">
 
-        <!-- Готівка -->
         <RadioButton
             android:id="@+id/rb_cash"
             android:layout_width="match_parent"
             android:layout_height="56dp"
+            android:layout_marginBottom="12dp"
+
+
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:buttonTint="@color/taxi_yellow"
-            android:text="Готівка"
+            android:text="@string/payment_cash"
             android:textColor="?attr/colorOnBackground"
             android:textSize="16sp" />
 
-        <!-- Картка -->
         <RadioButton
             android:id="@+id/rb_card"
             android:layout_width="match_parent"
             android:layout_height="56dp"
+
+
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:buttonTint="@color/taxi_yellow"
-            android:text="Картка"
+            android:text="@string/payment_card"
             android:textColor="?attr/colorOnBackground"
             android:textSize="16sp" />
     </RadioGroup>
 
-    <!-- Кнопка Зберегти (как в смене цены) -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="60dp"

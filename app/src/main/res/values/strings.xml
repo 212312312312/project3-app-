@@ -23,6 +23,17 @@
     <string name="action_cancel">Скасувати</string>
     <string name="action_delete">Видалити</string>
 
+    <string name="label_departure_point">Точка відправлення</string>
+    <string name="btn_change_price">Змінити ціну</string>
+    <string name="btn_order">Замовити</string>
+    <string name="label_to_pay">До сплати</string>
+    <string name="label_payment_type">Тип оплати</string>
+    <string name="hint_message">Повідомлення</string>
+    <string name="status_order_accepted">Прийняли замовлення...</string>
+    <string name="btn_cancel_trip">Скасувати поїздку</string>
+    <string name="btn_cancel_order">Скасувати замовлення</string>
+    <string name="btn_understood">Зрозуміло</string>
+
 
     <string name="title_add_home">Додати дім</string>
     <string name="hint_add_home">Введіть адресу дому</string>
@@ -121,8 +132,7 @@
 
     <string name="payment_method_title">Спосіб оплати</string>
     <string name="payment_method_subtitle">Оплата замовлень за замовчуванням</string>
-    <string name="payment_cash">Готівка</string>
-    <string name="payment_card">Водію на картку</string>
+
 
 
     <string name="promo_tasks_title">Акційні завдання</string>
@@ -194,7 +204,20 @@
     <string name="dialog_schedule_tab_date">Дата</string>
     <string name="dialog_schedule_tab_time">Час</string>
 
-
+    <string name="point_on_map">Точка на карті</string>
+    <string name="hint_where_from">Звідки?</string>
+    <string name="status_cancelled">Скасовано</string>
+    <string name="status_searching_driver">Пошук водія...</string>
+    <string name="status_driver_coming">Водій їде до вас</string>
+    <string name="status_driver_arrived">Водій на місці</string>
+    <string name="status_in_progress">В дорозі</string>
+    <string name="status_completed">Поїздку завершено</string>
+    <string name="default_driver_name">водієм</string>
+    <string name="title_choose_payment_type">Оберіть тип оплати</string>
+    <string name="payment_cash">Готівка</string>
+    <string name="payment_card">Картка</string>
+    <string name="payment_card_format">Картка %s</string>
+    <string name="hint_where_to">Куди?</string>
     <string name="item_discount_default_percent">-10%</string>
     <string name="item_discount_default_title">Назва знижки</string>
     <string name="item_discount_default_date">до 20.12.2025</string>
@@ -208,7 +231,7 @@
     <string name="item_order_driver_assigned">Водій призначений</string>
     <string name="item_order_default_driver">Олександр</string>
     <string name="item_order_default_car">Toyota Prius</string>
-    <string name="btn_cancel_order">Скасувати</string>
+
 
 
     <string name="item_history_default_date">Дата</string>

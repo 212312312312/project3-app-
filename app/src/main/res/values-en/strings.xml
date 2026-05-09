@@ -27,6 +27,17 @@
     <string name="saved_card">Card: %1$s</string>
     <string name="unbind_card">Unbind card</string>
 
+    <string name="label_departure_point">Departure point</string>
+    <string name="btn_change_price">Change price</string>
+    <string name="btn_order">Order</string>
+    <string name="label_to_pay">To pay</string>
+    <string name="label_payment_type">Payment method</string>
+    <string name="hint_message">Message</string>
+    <string name="status_order_accepted">Order accepted...</string>
+    <string name="btn_cancel_trip">Cancel trip</string>
+
+    <string name="btn_understood">Understood</string>
+
 
     <!-- Unbind card dialog -->
     <string name="dialog_delete_card_title">Remove Card</string>
@@ -118,7 +129,8 @@
     <string name="payment_method_subtitle">Default order payment</string>
     <string name="payment_cash">Cash</string>
     <string name="payment_card">Transfer to driver\'s card</string>
-
+    <string name="payment_card_format">Card %s</string>
+    <string name="title_choose_payment_type">Choose payment method</string>
     <string name="promo_tasks_title">Promotional tasks</string>
     <string name="promo_tasks_empty_title">There are no tasks here yet</string>
     <string name="promo_tasks_empty_subtitle">but they will appear soon!</string>
@@ -215,7 +227,18 @@
     <string name="dialog_contact_title">Choose contact method</string>
     <string name="contact_telegram">Telegram</string>
     <string name="contact_call">Call</string>
+    <string name="point_on_map">Point on map</string>
 
+    <string name="status_cancelled">Cancelled</string>
+    <string name="hint_where_from">From where?</string>
+    <string name="status_searching_driver">Searching for a driver...</string>
+    <string name="status_driver_coming">Driver is on the way</string>
+    <string name="status_driver_arrived">Driver has arrived</string>
+    <string name="status_in_progress">En route</string>
+    <string name="status_completed">Trip completed</string>
+    <string name="default_driver_name">the driver</string>
+
+    <string name="hint_where_to">Where to?</string>
 
     <string name="default_avatar_letter">U</string>
     <string name="default_user_rating">5.0</string>

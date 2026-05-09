@@ -2,6 +2,7 @@ package com.taxiapp.client
 
 import android.app.Dialog
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
@@ -23,18 +24,37 @@ open class BaseActivity : AppCompatActivity() {
         super.attachBaseContext(LocaleHelper.setLocale(newBase, language))
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Подписываем текущий активный экран на события сервера
-        ServerStatusBus.setListener {
-            showMaintenanceDialog()
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // 1. Слушаем событие "Сессия истекла" (разлогин)
+        ServerStatusBus.sessionExpired.observe(this) { isExpired ->
+            if (isExpired) {
+                ServerStatusBus.resetSessionExpired() // Сбрасываем триггер!
+                handleSessionExpired()
+            }
+        }
+
+        // 2. Слушаем ошибки сервера (502/503)
+        ServerStatusBus.serverError.observe(this) { hasError ->
+            if (hasError) {
+                ServerStatusBus.resetServerError() // Сбрасываем триггер!
+                showMaintenanceDialog()
+            }
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        // Отписываемся при сворачивании, чтобы избежать утечек памяти
-        ServerStatusBus.setListener(null)
+    private fun handleSessionExpired() {
+        // Очищаем локальные данные пользователя
+        val sessionManager = SessionManager(this)
+        sessionManager.clearSession()
+
+        // Перебрасываем на MainActivity и очищаем весь стек экранов
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        startActivity(intent)
+        finish()
     }
 
     private fun showMaintenanceDialog() {
@@ -47,12 +67,10 @@ open class BaseActivity : AppCompatActivity() {
             setContentView(R.layout.dialog_maintenance)
             window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
-            // --- НОВОЕ: Заставляем диалог занять всю ширину экрана ---
             window?.setLayout(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT
             )
-            // -----------------------------------------------------------
 
             val btnClose = findViewById<Button>(R.id.btn_close_app)
             btnClose.setOnClickListener {

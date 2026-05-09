@@ -1,6 +1,5 @@
 package com.taxiapp.client.network
 
-// Убрали ошибочный импорт TokenRefreshRequestDto, так как он уже в этом же пакете
 import com.taxiapp.client.utils.SessionManager
 import okhttp3.Authenticator
 import okhttp3.Interceptor
@@ -18,10 +17,8 @@ object ApiClient {
 
     const val BASE_URL = "http://192.168.0.107:8080/api/v1/"
 
-    // Сюда передаем sessionManager из приложения
     var sessionManager: SessionManager? = null
 
-    // Перехватчик для глобального отлова ошибок сервера
     private val errorInterceptor = Interceptor { chain ->
         try {
             val response = chain.proceed(chain.request())
@@ -37,53 +34,79 @@ object ApiClient {
         }
     }
 
-    // Авторизатор: перехватывает 401 ошибку и автоматически обновляет токен
+    // =====================================================================
+    // НОВОЕ: Отдельный "чистый" клиент только для рефреша токенов!
+    // =====================================================================
+    private val cleanOkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    private val cleanRetrofit = Retrofit.Builder()
+        .baseUrl(BASE_URL)
+        .client(cleanOkHttpClient)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val authService = cleanRetrofit.create(ApiService::class.java)
+    // =====================================================================
+
     private val tokenAuthenticator = object : Authenticator {
         override fun authenticate(route: Route?, response: Response): Request? {
-            // Если предыдущий запрос тоже был за рефрешем и вернул 401 — сдаемся
             if (response.priorResponse?.code == 401) {
                 return null
             }
 
             val sm = sessionManager ?: return null
-            val refreshToken = sm.fetchRefreshToken() ?: return null
 
-            try {
-                // Делаем СИНХРОННЫЙ запрос на обновление токена
-                val refreshCall = instance.refreshToken(TokenRefreshRequestDto(refreshToken))
-                val refreshResponse = refreshCall.execute()
+            synchronized(this) {
+                val currentSavedToken = sm.fetchAuthToken()
+                val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
 
-                if (refreshResponse.isSuccessful && refreshResponse.body() != null) {
-                    val loginResponse = refreshResponse.body()!!
-
-                    // ИСПРАВЛЕНО: accessToken -> token
-                    sm.saveAuthToken(loginResponse.token)
-
-                    // Сохраняем свежий рефреш токен, если сервер его прислал
-                    if (!loginResponse.refreshToken.isNullOrEmpty()) {
-                        sm.saveRefreshToken(loginResponse.refreshToken)
-                    }
-
-                    // ИСПРАВЛЕНО: accessToken -> token
-                    // Повторяем оригинальный запрос с новым токеном!
+                if (currentSavedToken != null && currentSavedToken != requestToken) {
                     return response.request.newBuilder()
-                        .header("Authorization", "Bearer ${loginResponse.token}")
+                        .header("Authorization", "Bearer $currentSavedToken")
                         .build()
-                } else {
-                    // Если refresh token тоже протух - разлогиниваем юзера
-                    sm.clearSession()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
 
-            return null
+                val refreshToken = sm.fetchRefreshToken()
+                if (refreshToken.isNullOrEmpty()) {
+                    ServerStatusBus.triggerSessionExpired()
+                    return null
+                }
+
+                try {
+                    // ИСПОЛЬЗУЕМ authService ОТ ЧИСТОГО КЛИЕНТА
+                    val refreshCall = authService.refreshToken(TokenRefreshRequestDto(refreshToken))
+                    val refreshResponse = refreshCall.execute()
+
+                    if (refreshResponse.isSuccessful && refreshResponse.body() != null) {
+                        val loginResponse = refreshResponse.body()!!
+
+                        sm.saveAuthToken(loginResponse.token)
+                        if (!loginResponse.refreshToken.isNullOrEmpty()) {
+                            sm.saveRefreshToken(loginResponse.refreshToken)
+                        }
+
+                        return response.request.newBuilder()
+                            .header("Authorization", "Bearer ${loginResponse.token}")
+                            .build()
+                    } else {
+                        sm.clearSession()
+                        ServerStatusBus.triggerSessionExpired()
+                        return null
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    return null
+                }
+            }
         }
     }
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(errorInterceptor)
-        .authenticator(tokenAuthenticator) // <-- ПОДКЛЮЧАЕМ АВТОРИЗАТОР
+        .authenticator(tokenAuthenticator)
         .connectTimeout(3, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
