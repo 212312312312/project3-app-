@@ -222,6 +222,13 @@
     <string name="item_discount_default_title">Назва знижки</string>
     <string name="item_discount_default_date">до 20.12.2025</string>
 
+    <string name="dialog_cancel_reason_title">Оберіть причину</string>
+    <string name="dialog_cancel_reason_subtitle">Будь ласка, вкажіть чому ви хочете скасувати замовлення</string>
+    <string name="dialog_cancel_reason_confirm">Підтвердити</string>
+
+    <string name="btn_confirm_map_selection">Підтвердити</string>
+    <string name="determining_address">Визначення...</string>
+
     <string name="item_order_status_scheduled">Заплановано</string>
     <string name="item_order_default_time">12:30</string>
     <string name="item_order_default_price">145 ₴</string>

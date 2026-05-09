@@ -1679,6 +1679,7 @@
                                 app:layout_constraintHorizontal_bias="0.83"
                                 app:layout_constraintTop_toTopOf="parent"
                                 app:layout_constraintBottom_toBottomOf="parent" />
+                                
                         </androidx.constraintlayout.widget.ConstraintLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>

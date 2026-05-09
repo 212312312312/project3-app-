@@ -154,6 +154,13 @@
     <string name="btn_logout">Log out</string>
     <string name="btn_delete_account">Delete account</string>
 
+    <string name="dialog_cancel_reason_title">Choose a reason</string>
+    <string name="dialog_cancel_reason_subtitle">Please specify why you want to cancel the order</string>
+    <string name="dialog_cancel_reason_confirm">Confirm</string>
+
+    <string name="btn_confirm_map_selection">Confirm</string>
+    <string name="determining_address">Determining...</string>
+
     <string name="promo_dialog_title">Promo name</string>
     <string name="promo_dialog_desc">Task description</string>
     <string name="promo_your_discount">Your discount</string>

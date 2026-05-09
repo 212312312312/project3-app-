@@ -100,6 +100,21 @@ interface ApiService {
         @Query("method") method: String
     ): Call<MessageResponseDto>
 
+    // ОНОВЛЕНИЙ МЕТОД
+    @POST("client/orders/{id}/cancel")
+    fun cancelOrder(
+        @Header("Authorization") token: String,
+        @Path("id") orderId: Long,
+        @Query("reasonText") reasonText: String? = null // <-- ДОДАНО ПАРАМЕТР
+    ): Call<TaxiOrderDto>
+
+    // НОВИЙ МЕТОД
+    @GET("cancellation-reasons")
+    fun getCancellationReasons(
+        @Header("Authorization") token: String, // <-- ДОБАВИЛИ ТОКЕН
+        @Query("target") target: String
+    ): Call<List<CancellationReasonDto>>
+
     @DELETE("payments/unbind-card") // <-- ВОТ ТУТ УБРАЛИ api/v1/
     fun unbindCard(@Header("Authorization") token: String): Call<MessageResponseDto>
 

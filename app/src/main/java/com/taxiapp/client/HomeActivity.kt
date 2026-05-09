@@ -3352,9 +3352,85 @@ private fun stopWaitingTimer() {
 }
     
     private fun cancelCurrentOrder() {
-        btnCancelOrder.isEnabled = false
-        btnCancelOrder.text = "Скасування..."
-        viewModel.cancelOrder()
+        val token = sessionManager.fetchAuthToken() ?: return
+
+        ApiClient.instance.getCancellationReasons("Bearer $token", "CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
+            override fun onResponse(call: Call<List<CancellationReasonDto>>, response: Response<List<CancellationReasonDto>>) {
+                if (response.isSuccessful) {
+                    val reasons = response.body()?.filter { it.isActive } ?: emptyList()
+
+                    if (reasons.isNotEmpty()) {
+                        // Викликаємо наш новий красивий кастомний діалог!
+                        showCustomCancelDialog(reasons)
+                    } else {
+                        // Якщо список порожній — скасовуємо без причини
+                        viewModel.cancelOrder(null)
+                    }
+                } else {
+                    android.util.Log.e("CancelOrder", "Failed to load reasons: ${response.code()}")
+                    viewModel.cancelOrder(null)
+                }
+            }
+
+            override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
+                android.util.Log.e("CancelOrder", "Network error", t)
+                viewModel.cancelOrder(null)
+            }
+        })
+    }
+
+    // НОВИЙ МЕТОД: Малює красивий діалог
+    private fun showCustomCancelDialog(reasons: List<CancellationReasonDto>) {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_cancel_reason)
+        
+        // Робимо фон вікна прозорим, щоб спрацювали закруглення від CardView
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+        val rgReasons = dialog.findViewById<android.widget.RadioGroup>(R.id.rg_cancel_reasons)
+        val btnConfirm = dialog.findViewById<android.widget.Button>(R.id.btn_confirm_cancel)
+
+        // Динамічно створюємо кнопки (RadioButton) для кожної причини
+        for ((index, reason) in reasons.withIndex()) {
+            val rb = android.widget.RadioButton(this)
+            rb.id = index // Встановлюємо ID як індекс у списку
+            rb.text = reason.reasonText
+            rb.textSize = 16f
+            rb.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
+            
+            // Додаємо відступи між варіантами для краси
+            val params = android.widget.RadioGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            params.setMargins(0, 12, 0, 12)
+            rb.layoutParams = params
+            rb.setPadding(16, 0, 0, 0) // Відступ тексту від кружечка
+
+            rgReasons.addView(rb)
+        }
+
+        // За замовчуванням обираємо перший пункт (щоб кнопка підтвердити не відправляла null)
+        if (reasons.isNotEmpty()) {
+            rgReasons.check(0)
+        }
+
+        // Обробка натискання на кнопку "Підтвердити"
+        btnConfirm.setOnClickListener {
+            val checkedId = rgReasons.checkedRadioButtonId
+            if (checkedId != -1) {
+                // Оскільки ID дорівнює індексу масиву, легко дістаємо текст
+                val selectedReason = reasons[checkedId].reasonText
+                viewModel.cancelOrder(selectedReason)
+            } else {
+                viewModel.cancelOrder(null)
+            }
+            dialog.dismiss() // Закриваємо діалог
+        }
+
+        dialog.show()
     }
 
     private fun showActiveOrderPanel(order: TaxiOrderDto) {

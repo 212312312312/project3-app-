@@ -211,6 +211,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun cancelOrder(reasonText: String? = null) { // <-- ДОДАНО ПАРАМЕТР
+        val id = activeOrderId ?: return
+        val token = sessionManager.fetchAuthToken() ?: return
+        _isLoading.value = true
+
+        // Передаємо reasonText в ApiClient
+        ApiClient.instance.cancelOrder("Bearer $token", id, reasonText).enqueue(object : Callback<TaxiOrderDto> {
+            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+                _isLoading.value = false
+                if (response.isSuccessful && response.body() != null) {
+                    stopStatusPolling()
+                    _activeOrder.value = response.body()
+                } else {
+                    _errorMessage.value = "Не вдалося скасувати"
+                }
+            }
+            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
+                _isLoading.value = false
+                _errorMessage.value = "Помилка мережі"
+            }
+        })
+    }
+
     private fun stopOrderStatusService(orderId: Long) {
         val context = getApplication<Application>()
 
