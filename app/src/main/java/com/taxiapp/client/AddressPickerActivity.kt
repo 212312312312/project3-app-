@@ -42,6 +42,13 @@ import java.util.Locale
 class AddressPickerActivity : BaseActivity() {
 
     companion object {
+
+        const val RESULT_TARGET_TYPE = "result_target_type" // Тип поля (A, B или Waypoint)
+        const val RESULT_WAYPOINT_INDEX = "result_waypoint_index" // Индекс остановки
+
+        const val TARGET_ORIGIN = "target_origin"
+        const val TARGET_DESTINATION = "target_destination"
+        const val TARGET_WAYPOINT = "target_waypoint"
         const val MODE_STANDARD = 0
         const val MODE_SAVE_HOME = 1
         const val MODE_SAVE_WORK = 2
@@ -103,22 +110,7 @@ class AddressPickerActivity : BaseActivity() {
     private val searchHandler = Handler(Looper.getMainLooper())
     private var searchRunnable: Runnable? = null
 
-    private val mapPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            val data = result.data!!
-            val lat = data.getDoubleExtra("picked_lat", 0.0)
-            val lng = data.getDoubleExtra("picked_lng", 0.0)
-            val name = data.getStringExtra("picked_name") ?: "Точка на карті"
-            val formattedName = AddressUtils.formatAddress(name)
-
-            if (activeEditText != null) {
-                saveCoordinateForField(activeEditText!!, formattedName, LatLng(lat, lng))
-                if (isFinishConditionMet()) returnResultData()
-            }
-        }
-    }
+    // ЛАУНЧЕР ДЛЯ MAP PICKER ВИДАЛЕНО, ТЕПЕР МИ ПРОСТО ПОВЕРТАЄМОСЬ НАЗАД
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -202,11 +194,69 @@ class AddressPickerActivity : BaseActivity() {
         }
 
         btnMyLocation.setOnClickListener { detectMyLocation() }
+        
+        // НОВА ЛОГІКА ДЛЯ КНОПКИ "ВИБРАТИ НА КАРТІ"
         btnPickOnMap.setOnClickListener {
-            val intent = Intent(this, MapPickerActivity::class.java)
-            intent.putExtra("start_lat", cityLat)
-            intent.putExtra("start_lng", cityLng)
-            mapPickerLauncher.launch(intent)
+            val intent = Intent()
+            intent.putExtra(RESULT_ACTION, "map_click")
+
+            // 1. СОХРАНЯЕМ ОТКУДА
+            val originLatLng = fieldCoordinates[etOrigin]
+            if (originLatLng != null) {
+                intent.putExtra(RESULT_ORIGIN_NAME, etOrigin.text.toString())
+                intent.putExtra(RESULT_ORIGIN_LAT, originLatLng.latitude)
+                intent.putExtra(RESULT_ORIGIN_LNG, originLatLng.longitude)
+            }
+
+            // 2. СОХРАНЯЕМ КУДА
+            val destLatLng = fieldCoordinates[etDestination]
+            if (destLatLng != null) {
+                intent.putExtra(RESULT_NAME, etDestination.text.toString())
+                intent.putExtra(RESULT_LAT, destLatLng.latitude)
+                intent.putExtra(RESULT_LNG, destLatLng.longitude)
+            }
+
+            // 3. СОХРАНЯЕМ ЗУПИНКИ (ФИКС: Сохраняем всегда, даже если поля пустые!)
+            if (waypointViews.isNotEmpty()) {
+                val wLats = DoubleArray(waypointViews.size)
+                val wLngs = DoubleArray(waypointViews.size)
+                val wNames = ArrayList<String>()
+
+                for (i in waypointViews.indices) {
+                    val view = waypointViews[i]
+                    val etWaypoint = view.findViewById<EditText>(R.id.et_waypoint)
+                    val latLng = fieldCoordinates[etWaypoint]
+
+                    if (latLng != null) {
+                        wLats[i] = latLng.latitude
+                        wLngs[i] = latLng.longitude
+                    } else {
+                        wLats[i] = 0.0
+                        wLngs[i] = 0.0
+                    }
+                    wNames.add(etWaypoint.text.toString())
+                }
+
+                intent.putExtra(RESULT_WAYPOINTS_LATS, wLats)
+                intent.putExtra(RESULT_WAYPOINTS_LNGS, wLngs)
+                intent.putStringArrayListExtra(RESULT_WAYPOINTS_NAMES, wNames)
+            }
+
+            // Определяем цель
+            val targetType = when (activeEditText?.id) {
+                R.id.et_origin -> TARGET_ORIGIN
+                R.id.et_destination -> TARGET_DESTINATION
+                R.id.et_waypoint -> {
+                    val wpIndex = waypointViews.indexOfFirst { it.findViewById<EditText>(R.id.et_waypoint) == activeEditText }
+                    intent.putExtra(RESULT_WAYPOINT_INDEX, wpIndex)
+                    TARGET_WAYPOINT
+                }
+                else -> if (isOrigin) TARGET_ORIGIN else TARGET_DESTINATION
+            }
+
+            intent.putExtra(RESULT_TARGET_TYPE, targetType)
+            setResult(Activity.RESULT_OK, intent)
+            finish()
         }
 
         btnAddWaypoint.setOnClickListener {
@@ -238,27 +288,35 @@ class AddressPickerActivity : BaseActivity() {
 
     private fun configureStandardMode(isOriginMode: Boolean, currentAddressA: String?, latA: Double, lngA: Double) {
         if (isOriginMode) {
-            // --- РЕЖИМ ВИБОРУ ТОЧКИ А ---
+            // --- РЕЖИМ ВИБОРУ ТОЧКИ А (ЗВІДКИ) ---
             activeEditText = etOrigin
             etOrigin.requestFocus()
 
-            // ВАЖЛИВО: Очищаємо текст і координати, щоб не залишилось старого значення
-            etOrigin.setText("")
-            fieldCoordinates.remove(etOrigin)
+            // Відновлюємо адресу, якщо вона прийшла (з карти або при старті)
+            // Раніше тут було setText(""), що видаляло вибрану на карті адресу
+            val addressText = if (!currentAddressA.isNullOrEmpty()) {
+                AddressUtils.formatAddress(currentAddressA)
+            } else {
+                ""
+            }
+            etOrigin.setText(addressText)
+
+            if (latA != 0.0 && lngA != 0.0) {
+                fieldCoordinates[etOrigin] = LatLng(latA, lngA)
+            }
 
             lineOriginDown.visibility = View.GONE
             lineDestUp.visibility = View.GONE
             rowDestination.visibility = View.GONE
             containerWaypoints.visibility = View.GONE
         } else {
-            // --- РЕЖИМ ВИБОРУ ТОЧКИ Б ---
+            // --- РЕЖИМ ВИБОРУ ТОЧКИ Б АБО ЗУПИНОК ---
             activeEditText = etDestination
             etDestination.requestFocus()
 
-            val addressText = AddressUtils.formatAddress(currentAddressA ?: "Поточне місце")
-            etOrigin.setText(addressText)
-
-            // Тут ми навмисно зберігаємо поточну точку А, якщо вона передана
+            // 1. Встановлюємо точку А (вона завжди передається як база)
+            val originText = AddressUtils.formatAddress(currentAddressA ?: "Поточне місце")
+            etOrigin.setText(originText)
             if (latA != 0.0 && lngA != 0.0) {
                 fieldCoordinates[etOrigin] = LatLng(latA, lngA)
             }
@@ -271,9 +329,43 @@ class AddressPickerActivity : BaseActivity() {
             lineDestUp.visibility = View.VISIBLE
             rowDestination.visibility = View.VISIBLE
             containerWaypoints.visibility = View.VISIBLE
+
+            // 2. Відновлюємо точку Б (Куди)
+            val prefillDestName = intent.getStringExtra("prefill_dest_name")
+            if (!prefillDestName.isNullOrEmpty()) {
+                val lat = intent.getDoubleExtra("prefill_dest_lat", 0.0)
+                val lng = intent.getDoubleExtra("prefill_dest_lng", 0.0)
+                etDestination.setText(prefillDestName)
+                if (lat != 0.0 && lng != 0.0) {
+                    fieldCoordinates[etDestination] = LatLng(lat, lng)
+                }
+            }
+
+            // 3. Відновлюємо зупинки (Waypoints)
+            val wLats = intent.getDoubleArrayExtra("prefill_waypoints_lats")
+            val wLngs = intent.getDoubleArrayExtra("prefill_waypoints_lngs")
+            val wNames = intent.getStringArrayListExtra("prefill_waypoints_names")
+
+            if (wLats != null && wLngs != null && wNames != null) {
+                // Очищуємо контейнер перед додаванням, щоб уникнути дублів при поверненні з карти
+                containerWaypoints.removeAllViews()
+                waypointViews.clear()
+
+                for (i in wLats.indices) {
+                    addWaypointInput()
+                    val view = waypointViews.last()
+                    val etWaypoint = view.findViewById<EditText>(R.id.et_waypoint)
+
+                    if (i < wNames.size && wNames[i].isNotEmpty()) {
+                        etWaypoint.setText(wNames[i])
+                        if (wLats[i] != 0.0) {
+                            fieldCoordinates[etWaypoint] = LatLng(wLats[i], wLngs[i])
+                        }
+                    }
+                }
+            }
         }
     }
-
     private fun performSearch(query: String) {
         val searchBiasCenter = LatLng(cityLat, cityLng)
         val radiusKm = 50.0
@@ -321,34 +413,25 @@ class AddressPickerActivity : BaseActivity() {
     }
 
     private fun setupFocusListener(editText: EditText) {
-
-        // 1. ПЕРЕХВАТЫВАЕМ КАСАНИЕ
         editText.setOnTouchListener { v, event ->
             val et = v as EditText
-            // Если поле еще не активно, мы берем обработку клика на себя
             if (!et.hasFocus()) {
                 if (event.action == MotionEvent.ACTION_UP) {
                     et.requestFocus()
-                    et.setSelection(et.text.length) // Ставим курсор в конец мгновенно
+                    et.setSelection(et.text.length)
 
-                    // Так как мы перехватили клик, нужно вручную поднять клавиатуру
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                     imm.showSoftInput(et, InputMethodManager.SHOW_IMPLICIT)
                 }
-                // Возвращаем true — мы "съели" касание, система не будет ставить курсор по координатам пальца
                 return@setOnTouchListener true
             }
-            // Если поле УЖЕ в фокусе, возвращаем false.
-            // Это позволит тебе нормально кликать в середину текста, чтобы что-то исправить.
             false
         }
 
-        // 2. СЛУШАТЕЛЬ ФОКУСА (оставляем для программной смены фокуса)
         editText.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 activeEditText = editText
 
-                // Перенос через post больше не нужен, мы делаем это мгновенно в onTouch
                 if (editText.text.isNotEmpty()) {
                     editText.setSelection(editText.text.length)
                 }
@@ -359,15 +442,12 @@ class AddressPickerActivity : BaseActivity() {
             }
         }
 
-        // 3. СЛУШАТЕЛЬ ТЕКСТА
         editText.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {}
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 if (editText.hasFocus()) {
                     val query = s.toString()
-
-                    // При зміні тексту видаляємо старі координати, щоб не збереглось "старе" місце
                     fieldCoordinates.remove(editText)
 
                     if (query.isEmpty()) {
@@ -444,7 +524,6 @@ class AddressPickerActivity : BaseActivity() {
             }
             val finalName = AddressUtils.formatAddress(fullText)
 
-            // Зберігаємо координати ТІЛЬКИ якщо вони прийшли і є активне поле
             if (latLng != null && activeEditText != null) {
                 saveCoordinateForField(activeEditText!!, finalName, latLng)
                 sessionToken = AutocompleteSessionToken.newInstance()
@@ -458,7 +537,6 @@ class AddressPickerActivity : BaseActivity() {
     private fun saveCoordinateForField(editText: EditText, name: String, latLng: LatLng) {
         editText.setText(name)
         editText.clearFocus()
-        // Головне місце збереження координат
         fieldCoordinates[editText] = latLng
     }
 
@@ -505,8 +583,6 @@ class AddressPickerActivity : BaseActivity() {
     private fun returnResultData() {
         val intent = Intent()
         if (isOrigin) {
-            // --- ЛОГІКА ДЛЯ РЕЖИМУ "ЗВІДКИ" ---
-            // Беремо координати ТІЛЬКИ з мапи fieldCoordinates, куди вони потрапили після вибору (зі списку, карти або GPS)
             val originLatLng = fieldCoordinates[etOrigin]
 
             if (originLatLng != null) {
@@ -517,11 +593,9 @@ class AddressPickerActivity : BaseActivity() {
                 setResult(Activity.RESULT_OK, intent)
                 finish()
             } else {
-                // Якщо чомусь координати пусті (хоча текст є), не закриваємо, а просимо вибрати знову
                 Toast.makeText(this, "Оберіть адресу зі списку", Toast.LENGTH_SHORT).show()
             }
         } else {
-            // --- ЛОГІКА ДЛЯ РЕЖИМУ "КУДИ" ---
             val destLatLng = fieldCoordinates[etDestination]
             if (destLatLng != null) {
                 intent.putExtra(RESULT_ACTION, "place")

@@ -117,6 +117,9 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
 
     private var isChoosingDestination = false
 
+    // Хранилище для данных интента, чтобы вернуться в Picker без потери текста в полях
+private var lastAddressPickerIntentData: Intent? = null
+
     private val animHandler = Handler(Looper.getMainLooper())
     // statusHandler удален, так как поллинг теперь в ViewModel
 
@@ -171,6 +174,14 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     private lateinit var btnRecenter: CardView
     private lateinit var btnRecenterRoute: CardView
 
+    // --- НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ РЕЖИМА ВЫБОРА НА КАРТЕ ---
+private var isMapPickingMode = false
+private var mapPickerIsOrigin = true // true - если выбираем точку А, false - если Б
+private lateinit var layoutMapPickerPanel: View
+private lateinit var btnBackMapPicker: View
+private lateinit var tvMapPickerAddress: TextView
+private lateinit var btnConfirmMapPicker: Button
+
     private lateinit var containerOrigin: LinearLayout
     private lateinit var tvOrigin: TextView
     private lateinit var containerDestination: LinearLayout
@@ -180,6 +191,8 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     
     private lateinit var ivMarkerOrigin: ImageView
     private lateinit var ivMarkerDest: ImageView
+
+    private val waypointMarkers = mutableListOf<Marker>()
 
     private lateinit var btnFavHome: CardView
     private lateinit var ivIconHome: ImageView
@@ -216,6 +229,8 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     
     private lateinit var layoutDriverDetails: LinearLayout
     private lateinit var tvCarPlateLarge: TextView
+    private var mapPickerTarget = "target_origin"
+private var mapPickerWaypointIndex = -1
 
     private lateinit var btnChatDriver: ImageButton
     private lateinit var tvChatBadge: TextView
@@ -319,55 +334,116 @@ private lateinit var tvNewWaitingTimer: TextView
     }
 
     private val addressPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK && result.data != null) {
-            val data = result.data!!
-            val action = data.getStringExtra(AddressPickerActivity.RESULT_ACTION)
+    if (result.resultCode == RESULT_OK && result.data != null) {
+        val data = result.data!!
+        val action = data.getStringExtra(AddressPickerActivity.RESULT_ACTION)
 
-            if (action == "place") {
-                val name = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
-                val lat = data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0)
-                val lng = data.getDoubleExtra(AddressPickerActivity.RESULT_LNG, 0.0)
-                val place = Place.builder().setName(name).setLatLng(LatLng(lat, lng)).build()
+        if (action == "place") {
+            // --- Стандартний вибір адреси зі списку ---
+            val name = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
+            val lat = data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0)
+            val lng = data.getDoubleExtra(AddressPickerActivity.RESULT_LNG, 0.0)
+            val place = Place.builder().setName(name).setLatLng(LatLng(lat, lng)).build()
 
-                if (data.hasExtra(AddressPickerActivity.RESULT_ORIGIN_LAT)) {
-                    val originName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
-                    val originLat = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0)
-                    val originLng = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0)
-                    originPlace = Place.builder().setName(originName).setLatLng(LatLng(originLat, originLng)).build()
-                    tvOrigin.text = AddressUtils.formatAddress(originName ?: "")
-                }
+            if (data.hasExtra(AddressPickerActivity.RESULT_ORIGIN_LAT)) {
+                val originName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
+                val originLat = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0)
+                val originLng = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0)
+                originPlace = Place.builder().setName(originName).setLatLng(LatLng(originLat, originLng)).build()
+                tvOrigin.text = AddressUtils.formatAddress(originName ?: "")
+            }
 
-                val wLats = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
-                val wLngs = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS)
-                val wNames = data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES)
+            val wLats = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
+            val wLngs = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS)
+            val wNames = data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES)
 
-                currentWaypoints.clear()
-                if (wLats != null && wLngs != null) {
-                    for (i in wLats.indices) {
-                        if (wLats[i] != 0.0 && wLngs[i] != 0.0) {
-                            val wpName = if (wNames != null && i < wNames.size) wNames[i] else "Зупинка"
-                            currentWaypoints.add(Pair(LatLng(wLats[i], wLngs[i]), wpName))
-                        }
+            currentWaypoints.clear()
+            if (wLats != null && wLngs != null) {
+                for (i in wLats.indices) {
+                    if (wLats[i] != 0.0 && wLngs[i] != 0.0) {
+                        val wpName = if (wNames != null && i < wNames.size) wNames[i] else "Зупинка"
+                        currentWaypoints.add(Pair(LatLng(wLats[i], wLngs[i]), wpName))
                     }
                 }
-                handleAddressSelection(place, name)
             }
-            else if (action == "map_click") {
-                val intent = Intent(this, MapPickerActivity::class.java)
-                val startLatLng = if (pickerMode == MODE_ORIGIN) {
-                    originPlace?.latLng ?: mMap?.cameraPosition?.target
-                } else {
-                    destinationPlace?.latLng ?: mMap?.cameraPosition?.target
-                }
+            handleAddressSelection(place, name)
+        }
+        else if (action == "map_click") {
+            lastAddressPickerIntentData = data
+            mapPickerTarget = data.getStringExtra(AddressPickerActivity.RESULT_TARGET_TYPE) ?: AddressPickerActivity.TARGET_ORIGIN
+            mapPickerWaypointIndex = data.getIntExtra(AddressPickerActivity.RESULT_WAYPOINT_INDEX, -1)
 
-                if (startLatLng != null) {
-                    intent.putExtra("start_lat", startLatLng.latitude)
-                    intent.putExtra("start_lng", startLatLng.longitude)
+            // ФИКС: Сохраняем Точку А сразу, если юзер её изменил в пикере
+            if (data.hasExtra(AddressPickerActivity.RESULT_ORIGIN_LAT)) {
+                val oName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
+                val oLat = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0)
+                val oLng = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0)
+                if (oLat != 0.0 && oLng != 0.0) {
+                    originPlace = Place.builder().setName(oName).setLatLng(LatLng(oLat, oLng)).build()
+                    tvOrigin.text = AddressUtils.formatAddress(oName ?: "")
                 }
-                mapPickerLauncher.launch(intent)
+            }
+
+            // Відновлюємо проміжний стан для карти
+            val destName = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
+
+            val wLats = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
+            val wLngs = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS)
+            val wNames = data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES)
+
+            currentWaypoints.clear()
+            if (wLats != null && wLngs != null) {
+                for (i in wLats.indices) {
+                    if (wLats[i] != 0.0 && wLngs[i] != 0.0) {
+                        val wpName = if (wNames != null && i < wNames.size && wNames[i].isNotEmpty()) wNames[i] else "Зупинка"
+                        currentWaypoints.add(Pair(LatLng(wLats[i], wLngs[i]), wpName))
+                    }
+                }
+            }
+
+            // 3. Вмикаємо UI карти
+            val isOriginSelection = (mapPickerTarget == AddressPickerActivity.TARGET_ORIGIN)
+            showMapPickerMode(isOriginSelection)
+
+            // 4. Центруємо камеру на потрібній точці
+            val startLatLng = when (mapPickerTarget) {
+                AddressPickerActivity.TARGET_ORIGIN -> originPlace?.latLng
+                AddressPickerActivity.TARGET_DESTINATION -> destinationPlace?.latLng
+                AddressPickerActivity.TARGET_WAYPOINT -> {
+                    if (mapPickerWaypointIndex in currentWaypoints.indices) currentWaypoints[mapPickerWaypointIndex].first else null
+                }
+                else -> null
+            } ?: mMap?.cameraPosition?.target
+            
+            if (startLatLng != null) {
+                // Використовуємо moveCamera замість animateCamera для миттєвого переходу
+                mMap?.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(startLatLng, 17f))
+                
+                // 5. ФІКС ЗАВИСАННЯ: Примусово запускаємо геокодинг
+                tvMapPickerAddress.text = "Шукаємо адресу..."
+                getAddressFromLocation(startLatLng) { address ->
+                    tvMapPickerAddress.text = address ?: "Невідома адреса"
+                }
             }
         }
     }
+}
+
+private fun fetchAddressAtCurrentLocation() {
+    val target = mMap?.cameraPosition?.target ?: return
+    
+    // Блокируем кнопку "Подтвердить" во время поиска
+    tvMapPickerAddress.text = "Шукаємо адресу..."
+    btnConfirmMapPicker.isEnabled = false
+    btnConfirmMapPicker.alpha = 0.5f
+
+    getAddressFromLocation(target) { address ->
+        tvMapPickerAddress.text = address ?: "Невідома адреса"
+        // Разблокируем кнопку, когда адрес найден
+        btnConfirmMapPicker.isEnabled = true
+        btnConfirmMapPicker.alpha = 1.0f
+    }
+}
 
     private val paymentLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -526,23 +602,26 @@ private lateinit var tvNewWaitingTimer: TextView
         
         // ДОБАВЛЕНО: Обработка системной кнопки/жеста "Назад"
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (activeOrderCard.visibility == View.VISIBLE) {
-                    // Згортаємо замовлення: очищаємо UI та зупиняємо полінг, 
-                    // але НЕ скасовуємо саме замовлення на сервері!
-                    sessionManager.clearActiveOrderId()
-                    viewModel.clearOrderState()
-                    showAddressPanel()
-                } else if (tariffsPanel.visibility == View.VISIBLE) {
-                    // Если мы в тарифах — возвращаемся к полноэкранной карте с адресами
-                    showAddressPanel()
-                } else if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                    drawerLayout.closeDrawer(GravityCompat.START)
-                } else {
-                    finish()
-                }
-            }
-        })
+    override fun handleOnBackPressed() {
+        if (isMapPickingMode) {
+            // Якщо ми в режимі вибору на карті - просто виходимо з нього
+            hideMapPickerMode()
+        } else if (activeOrderCard.visibility == View.VISIBLE) {
+            // Згортаємо замовлення: очищаємо UI та зупиняємо полінг, 
+            // але НЕ скасовуємо саме замовлення на сервері!
+            sessionManager.clearActiveOrderId()
+            viewModel.clearOrderState()
+            showAddressPanel()
+        } else if (tariffsPanel.visibility == View.VISIBLE) {
+            // Если мы в тарифах — возвращаемся к полноэкранной карте с адресами
+            showAddressPanel()
+        } else if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START)
+        } else {
+            finish()
+        }
+    }
+})
         
         // Первичная загрузка тарифов (базовая)
         viewModel.loadTariffsAndCalculatePrice(null, 0)
@@ -831,6 +910,26 @@ statusIcon3 = findViewById(R.id.status_icon_3)
 
         cardWaitingTimer = findViewById(R.id.card_waiting_timer)
 tvNewWaitingTimer = findViewById(R.id.tv_new_waiting_timer)
+
+
+// Инициализация UI для карты
+layoutMapPickerPanel = findViewById(R.id.layout_map_picker_panel)
+btnBackMapPicker = findViewById(R.id.btn_back_map_picker)
+tvMapPickerAddress = findViewById(R.id.tv_map_picker_address)
+btnConfirmMapPicker = findViewById(R.id.btn_confirm_map_picker)
+
+// Слушатели для новых кнопок
+btnBackMapPicker.setOnClickListener {
+    hideMapPickerMode()
+}
+
+if (isMapPickingMode) {
+    returnToAddressPicker()
+}
+
+btnConfirmMapPicker.setOnClickListener {
+    confirmMapSelection()
+}
 
 
         profileCityText = findViewById(R.id.profile_current_city)
@@ -1335,7 +1434,7 @@ btnChangePrice.setOnClickListener {
 
     private fun handleAddressSelection(place: Place, name: String?) {
         val cleanName = AddressUtils.formatAddress(name ?: "")
-        
+
         when (pickerMode) {
             MODE_ORIGIN -> {
                 originPlace = place
@@ -1360,9 +1459,14 @@ btnChangePrice.setOnClickListener {
                 setDestination(place)
             }
         }
-        if (place.latLng != null) mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(place.latLng!!, 16f))
-    }
 
+        // ФИКС БАГА С ПРЫЖКОМ КАМЕРЫ:
+        // Двигаем камеру к одной точке ТОЛЬКО если мы НЕ строим маршрут (одна из точек еще пустая).
+        // Если есть обе точки - мы оставляем карту в покое, пока маршрут не нарисуется.
+        if (originPlace == null || destinationPlace == null) {
+            if (place.latLng != null) mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(place.latLng!!, 16f))
+        }
+    }
     private fun checkPermissionsAndAutoDetectCity() {
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -1663,21 +1767,15 @@ btnChangePrice.setOnClickListener {
 
         // 3. ИСПРАВЛЯЕМ ПАДЕНИЕ ПИНА (Очистка задержки при приземлении)
         mMap?.setOnCameraIdleListener {
-            if (viewModel.currentRoutePolyline != null) {
-                updateSmartLabels()
-            }
+            val target = mMap!!.cameraPosition.target
 
-            if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
-
-            val center = mMap!!.cameraPosition.target
-            getAddressForOrigin(center)
-
-            if (isInterfaceRevealed) {
+            // 1. АНИМАЦИЯ ПИНА: Должна срабатывать в обоих режимах (когда интерфейс открыт ИЛИ когда мы выбираем точку)
+            if (isInterfaceRevealed || isMapPickingMode) {
                 centerPin.animate().cancel()
                 centerPin.animate()
                     .translationY(convertDpToPixel(-32f))
-                    .setStartDelay(0) // <--- ОБЯЗАТЕЛЬНО сбрасываем задержку и тут!
-                    .setInterpolator(BounceInterpolator())
+                    .setStartDelay(0) // <--- ОБЯЗАТЕЛЬНО сбрасываем задержку
+                    .setInterpolator(android.view.animation.BounceInterpolator())
                     .setDuration(500)
                     .start()
 
@@ -1687,10 +1785,34 @@ btnChangePrice.setOnClickListener {
                         .scaleX(1.0f)
                         .scaleY(1.0f)
                         .alpha(0.5f)
-                        .setStartDelay(0) // <--- И тут
+                        .setStartDelay(0)
                         .setDuration(250)
                         .start()
                 } catch (e: Exception) {}
+            }
+
+            // 2. ЛОГИКА ГЕОКОДИНГА В ЗАВИСИМОСТИ ОТ РЕЖИМА
+            if (isMapPickingMode) {
+        // Блокируем кнопку "Подтвердить" во время поиска
+        tvMapPickerAddress.text = "Шукаємо адресу..."
+        btnConfirmMapPicker.isEnabled = false
+        btnConfirmMapPicker.alpha = 0.5f
+
+        getAddressFromLocation(target) { address ->
+            tvMapPickerAddress.text = address ?: "Невідома адреса"
+            // Разблокируем кнопку, когда адрес найден
+            btnConfirmMapPicker.isEnabled = true
+            btnConfirmMapPicker.alpha = 1.0f
+        }
+    } else {
+                // --- Стандартный режим главного экрана ---
+                if (viewModel.currentRoutePolyline != null) {
+                    updateSmartLabels()
+                }
+
+                if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
+
+                getAddressForOrigin(target)
             }
         }
 
@@ -1853,6 +1975,167 @@ btnChangePrice.setOnClickListener {
     }.start()
 }
 
+// --- НОВЫЕ ФУНКЦИИ ДЛЯ РЕЖИМА ВЫБОРА НА КАРТЕ ---
+
+private fun showMapPickerMode(isOrigin: Boolean) {
+    isMapPickingMode = true
+    mapPickerIsOrigin = isOrigin
+    
+    // Скрываем обычный интерфейс
+    findViewById<View>(R.id.bottom_sheet_card).visibility = View.GONE
+    findViewById<View>(R.id.btn_menu).visibility = View.GONE
+    findViewById<View>(R.id.btn_open_promo).visibility = View.GONE
+    findViewById<View>(R.id.btn_recenter_location).visibility = View.GONE
+    
+    // Показываем интерфейс выбора на карте
+    layoutMapPickerPanel.visibility = View.VISIBLE
+    btnBackMapPicker.visibility = View.VISIBLE
+    
+    tvMapPickerAddress.text = "Шукаємо адресу..."
+    
+    // Опционально: немного приблизить камеру для удобного выбора
+    // mMap.animateCamera(CameraUpdateFactory.zoomTo(17f))
+}
+
+private fun hideMapPickerMode() {
+    isMapPickingMode = false
+    
+    // Возвращаем обычный интерфейс
+    findViewById<View>(R.id.bottom_sheet_card).visibility = View.VISIBLE
+    findViewById<View>(R.id.btn_menu).visibility = View.VISIBLE
+    findViewById<View>(R.id.btn_open_promo).visibility = View.VISIBLE
+    findViewById<View>(R.id.btn_recenter_location).visibility = View.VISIBLE
+    
+    // Скрываем интерфейс выбора на карте
+    layoutMapPickerPanel.visibility = View.GONE
+    btnBackMapPicker.visibility = View.GONE
+}
+
+private fun confirmMapSelection() {
+    val target = mMap?.cameraPosition?.target ?: return
+    val addressName = tvMapPickerAddress.text.toString()
+
+    // Экстренная защита: если каким-то чудом клик прошел по "Шукаємо адресу"
+    if (addressName == "Шукаємо адресу..." || addressName.isEmpty()) return
+
+    val selectedPlace = com.google.android.libraries.places.api.model.Place.builder()
+        .setLatLng(target)
+        .setName(addressName)
+        .build()
+
+    val data = lastAddressPickerIntentData
+    val isOriginOnlyMode = data?.getBooleanExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, false) ?: false
+
+    when (mapPickerTarget) {
+        AddressPickerActivity.TARGET_ORIGIN -> {
+            if (isOriginOnlyMode) {
+                // Если мы зашли только изменить Точку А — сразу возвращаемся на главный экран
+                hideMapPickerMode()
+                pickerMode = MODE_ORIGIN
+                handleAddressSelection(selectedPlace, addressName)
+            } else {
+                // Если мы на экране Откуда-Куда, меняли Точку А — возвращаемся в список для ввода Точки Б
+                updateIntentDataForReturn(target, addressName)
+                returnToAddressPicker()
+            }
+        }
+        AddressPickerActivity.TARGET_DESTINATION -> {
+            // ФИКС БАГА: Если выбрали Точку Б, это конец! Строим маршрут, никуда не возвращаемся.
+            hideMapPickerMode()
+            pickerMode = MODE_DESTINATION 
+            // Точка А и зупинки уже сохранены в памяти HomeActivity благодаря фиксу из шага 2
+            handleAddressSelection(selectedPlace, addressName)
+        }
+        AddressPickerActivity.TARGET_WAYPOINT -> {
+            // Если выбрали зупинку — сохраняем её и возвращаем пользователя в список
+            updateIntentDataForReturn(target, addressName)
+            returnToAddressPicker()
+        }
+    }
+}
+
+// Вспомогательная функция для обновления данных перед возвратом в список
+private fun updateIntentDataForReturn(target: LatLng, addressName: String) {
+    lastAddressPickerIntentData?.apply {
+        when (mapPickerTarget) {
+            AddressPickerActivity.TARGET_ORIGIN -> {
+                putExtra(AddressPickerActivity.RESULT_ORIGIN_NAME, addressName)
+                putExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, target.latitude)
+                putExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, target.longitude)
+            }
+            AddressPickerActivity.TARGET_WAYPOINT -> {
+                var wLats = getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS) ?: DoubleArray(0)
+                var wLngs = getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS) ?: DoubleArray(0)
+                val wNames = getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES) ?: ArrayList<String>()
+
+                if (mapPickerWaypointIndex != -1) {
+                    if (mapPickerWaypointIndex >= wLats.size) {
+                        val newSize = mapPickerWaypointIndex + 1
+                        wLats = DoubleArray(newSize) { if (it < wLats.size) wLats[it] else 0.0 }
+                        wLngs = DoubleArray(newSize) { if (it < wLngs.size) wLngs[it] else 0.0 }
+                        while (wNames.size < newSize) wNames.add("")
+                    }
+                    wLats[mapPickerWaypointIndex] = target.latitude
+                    wLngs[mapPickerWaypointIndex] = target.longitude
+                    wNames[mapPickerWaypointIndex] = addressName
+                }
+                
+                putExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS, wLats)
+                putExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS, wLngs)
+                putStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES, wNames)
+            }
+        }
+    }
+}
+
+private fun returnToAddressPicker() {
+    val data = lastAddressPickerIntentData ?: return
+    hideMapPickerMode()
+    
+    val intent = Intent(this, AddressPickerActivity::class.java)
+    // Передаем все накопленные данные обратно
+    intent.putExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, mapPickerTarget == AddressPickerActivity.TARGET_ORIGIN)
+    
+    // Точка А
+    val oName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
+    intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_ADDRESS, oName)
+    intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LAT, data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0))
+    intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LNG, data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0))
+    
+    // Точка Б (Prefill)
+    intent.putExtra("prefill_dest_name", data.getStringExtra(AddressPickerActivity.RESULT_NAME))
+    intent.putExtra("prefill_dest_lat", data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0))
+    intent.putExtra("prefill_dest_lng", data.getDoubleExtra(AddressPickerActivity.RESULT_LNG, 0.0))
+    
+    // Зупинки (Prefill)
+    intent.putExtra("prefill_waypoints_lats", data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS))
+    intent.putExtra("prefill_waypoints_lngs", data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS))
+    intent.putStringArrayListExtra("prefill_waypoints_names", data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES))
+    
+    addressPickerLauncher.launch(intent)
+}
+
+// Перенесенная функция геокодинга (если у тебя ее еще нет в HomeActivity)
+private fun getAddressFromLocation(latLng: LatLng, callback: (String?) -> Unit) {
+    Thread {
+        try {
+            val geocoder = android.location.Geocoder(this, java.util.Locale("uk", "UA"))
+            val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+            var result: String? = null
+            
+            if (!addresses.isNullOrEmpty()) {
+                val addressLine = addresses[0].getAddressLine(0)
+                // Используем твой утилитный класс для очистки (индексы, страны)
+                result = com.taxiapp.client.utils.AddressUtils.formatAddress(addressLine) 
+            }
+            
+            runOnUiThread { callback(result) }
+        } catch (e: Exception) {
+            runOnUiThread { callback(null) }
+        }
+    }.start()
+}
+
 class RoundedBackgroundSpan(
     private val backgroundColor: Int,
     private val textColor: Int,
@@ -1909,44 +2192,40 @@ class RoundedBackgroundSpan(
 }
 
     private fun tryDrawRoute() {
-        if (originPlace == null || destinationPlace == null) return
+    if (originPlace == null || destinationPlace == null) return
 
-        isRouteMode = true 
-        centerPin.visibility = View.GONE
-        centerPin.animate().cancel() 
-        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
+    isRouteMode = true 
+    centerPin.visibility = View.GONE
+    centerPin.animate().cancel() 
+    try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
 
-        val originLatLng = originPlace!!.latLng!!
-        val destinationLatLng = destinationPlace!!.latLng!!
+    val originLatLng = originPlace!!.latLng!!
+    val destinationLatLng = destinationPlace!!.latLng!!
 
-        tvOverlayOrigin.text = cleanAddress(originPlace!!.name ?: "А")
-        tvOverlayDest.text = cleanAddress(destinationPlace!!.name ?: "Б")
+    tvOverlayOrigin.text = cleanAddress(originPlace!!.name ?: "А")
+    tvOverlayDest.text = cleanAddress(destinationPlace!!.name ?: "Б")
 
-        // Скрываем оверлеи до тех пор, пока маршрут не начнет плавно рисоваться
-        overlayOrigin.visibility = View.GONE
-        overlayDest.visibility = View.GONE
+    // Скрываем оверлеи до тех пор, пока маршрут не начнет плавно рисоваться
+    overlayOrigin.visibility = View.GONE
+    overlayDest.visibility = View.GONE
 
-        // Очищаем карту сразу, но маркеры пока НЕ ставим, чтобы они не мигали перед анимацией
-        mMap?.clear() 
+    // Очищаем карту сразу, но маркеры пока НЕ ставим, чтобы они не мигали
+    mMap?.clear() 
 
-        // Запускаем предварительный зум камеры, чтобы не было задержки
-        val builder = LatLngBounds.Builder()
-        builder.include(originLatLng)
-        builder.include(destinationLatLng)
-        currentWaypoints.forEach { builder.include(it.first) }
-        
-        try { mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100)) } catch (e: Exception){}
+    // ФИКС БАГА: Мы полностью удалили предварительный animateCamera(bounds).
+    // Теперь камера не будет резко "отлетать" назад к твоему местоположению.
+    // Она дождется ответа от сервера и плавно отрисует маршрут через drawStylishRoute.
 
-        // ДЕЛЕГИРУЕМ В VIEWMODEL
-        viewModel.fetchDirections(
-            originLatLng, 
-            destinationLatLng, 
-            currentWaypoints
-        )
-        
-        // Показываем панель тарифов (загрузка начнется, когда придет маршрут)
-        fetchTariffsAndShowPanel()
-    }
+    // ДЕЛЕГИРУЕМ В VIEWMODEL
+    viewModel.fetchDirections(
+        originLatLng, 
+        destinationLatLng, 
+        currentWaypoints
+    )
+    
+    // Показываем панель тарифов (загрузка начнется, когда придет маршрут)
+    fetchTariffsAndShowPanel()
+}
     
     private fun showTariffsPanel() {
        fetchTariffsAndShowPanel()
@@ -1960,6 +2239,9 @@ class RoundedBackgroundSpan(
         polylineBorder?.remove()
         originMarker?.remove()
         destinationMarker?.remove()
+        // --- ФІКС: Очищаємо старі маркери зупинок ---
+        waypointMarkers.forEach { it.remove() }
+        waypointMarkers.clear()
     } catch (e: Exception) {}
 
     centerPin.visibility = View.GONE
@@ -2016,14 +2298,25 @@ class RoundedBackgroundSpan(
         overlayDest.visibility = View.VISIBLE
     }
 
-    val waypointIcon = BitmapHelper.vectorToBitmap(this, R.drawable.ic_waypoint_dot)
+    // --- ФІКС: СТВОРЮЄМО ТА ЗБЕРІГАЄМО ЗУПИНКИ ---
+    val waypointIcon = BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_waypoint_dot)
     for (wpPair in currentWaypoints) {
-        mMap?.addMarker(MarkerOptions().position(wpPair.first).icon(waypointIcon).anchor(0.5f, 0.5f).alpha(0f).zIndex(500f))
+        val marker = mMap?.addMarker(MarkerOptions()
+            .position(wpPair.first)
+            .icon(waypointIcon)
+            .anchor(0.5f, 0.5f)
+            .alpha(0f) // Робимо їх поки невидимими, як і інші маркери
+            .zIndex(500f))
+        
+        if (marker != null) waypointMarkers.add(marker)
     }
 
     val boundsBuilder = LatLngBounds.Builder()
     if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
     if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
+    
+    // --- ФІКС: ДОДАЄМО ЗУПИНКИ У ВІДОБРАЖЕННЯ КАМЕРИ ---
+    currentWaypoints.forEach { boundsBuilder.include(it.first) }
     path.forEach { boundsBuilder.include(it) }
 
     val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
@@ -2033,25 +2326,22 @@ class RoundedBackgroundSpan(
             val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
             
             var marginBottom = 0
-            var sideMargin = 0 // <--- ДОБАВЛЯЕМ СЮДА
+            var sideMargin = 0 
             val params = visibleBottomPanel.layoutParams
             if (params is ViewGroup.MarginLayoutParams) {
                 marginBottom = params.bottomMargin
-                sideMargin = params.leftMargin // <--- И СЮДА
+                sideMargin = params.leftMargin 
             }
             
             val paddingBottom = panelHeight + marginBottom
             val paddingTop = convertDpToPixel(10f).toInt() 
             val paddingSide = convertDpToPixel(80f).toInt() 
 
-            // ВМЕСТО: mMap?.setPadding(0, paddingTop, 0, paddingBottom)
-            // ПИШЕМ:
             mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom) 
 
             val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
 
             mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
-                // ... остальной код (onFinish / onCancel) ...
                 override fun onFinish() {
                     runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
                 }
@@ -2070,45 +2360,45 @@ class RoundedBackgroundSpan(
 }
 
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
-        if (polylineMain == null || polylineBorder == null) return
+    if (polylineMain == null || polylineBorder == null) return
 
-        val polylineAnimator = ValueAnimator.ofInt(0, 255)
-        polylineAnimator.duration = 1000 
-        polylineAnimator.addUpdateListener { animator ->
-            val alpha = animator.animatedValue as Int
-            try {
-                val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
-                val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
-                
-                polylineMain?.color = newMainColor
-                polylineBorder?.color = newBorderColor
-            } catch (e: Exception) {}
-        }
-
-        val markerAnimator = ValueAnimator.ofFloat(0f, 1f)
-        markerAnimator.duration = 1000
-        markerAnimator.addUpdateListener { animator ->
-            val alpha = animator.animatedValue as Float
-            try {
-                originMarker?.alpha = alpha
-                destinationMarker?.alpha = alpha
-            } catch (e: Exception) {}
-        }
-
-        overlayOrigin.animate().alpha(1f).setDuration(1000).start()
-        overlayDest.animate().alpha(1f).setDuration(1000).start()
-
-        polylineAnimator.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                animateRoute(path) // Запускаем наше сияние!
-            }
-        })
-
-        polylineAnimator.start()
-        markerAnimator.start()
-
-        
+    val polylineAnimator = ValueAnimator.ofInt(0, 255)
+    polylineAnimator.duration = 1000 
+    polylineAnimator.addUpdateListener { animator ->
+        val alpha = animator.animatedValue as Int
+        try {
+            val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+            val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
+            
+            polylineMain?.color = newMainColor
+            polylineBorder?.color = newBorderColor
+        } catch (e: Exception) {}
     }
+
+    val markerAnimator = ValueAnimator.ofFloat(0f, 1f)
+    markerAnimator.duration = 1000
+    markerAnimator.addUpdateListener { animator ->
+        val alpha = animator.animatedValue as Float
+        try {
+            originMarker?.alpha = alpha
+            destinationMarker?.alpha = alpha
+            // --- ФІКС: ПРОЯВЛЯЄМО ЗУПИНКИ РАЗОМ З ІНШИМИ МАРКЕРАМИ ---
+            waypointMarkers.forEach { it.alpha = alpha }
+        } catch (e: Exception) {}
+    }
+
+    overlayOrigin.animate().alpha(1f).setDuration(1000).start()
+    overlayDest.animate().alpha(1f).setDuration(1000).start()
+
+    polylineAnimator.addListener(object : AnimatorListenerAdapter() {
+        override fun onAnimationEnd(animation: Animator) {
+            animateRoute(path) // Запускаем наше сияние!
+        }
+    })
+
+    polylineAnimator.start()
+    markerAnimator.start()
+}
     
     
 
@@ -2140,6 +2430,7 @@ class RoundedBackgroundSpan(
 
         originMarker = null 
         destinationMarker = null
+        waypointMarkers.clear()
         mMap?.setPadding(0, 0, 0, 0)
         animHandler.removeCallbacksAndMessages(null)
         btnRecenterRoute.visibility = View.GONE
@@ -2187,27 +2478,31 @@ class RoundedBackgroundSpan(
 }
 
     private fun fetchTariffsAndShowPanel() {
-        addressPanel.visibility = View.GONE
-        tariffsPanel.visibility = View.VISIBLE
-        tariffsProgressBar.visibility = View.VISIBLE
-        btnRecenter.visibility = View.GONE
-        setLocationButtonAnchor(R.id.tariffs_panel)
+    addressPanel.visibility = View.GONE
+    tariffsPanel.visibility = View.VISIBLE
+    tariffsProgressBar.visibility = View.VISIBLE
+    btnRecenter.visibility = View.GONE
+    setLocationButtonAnchor(R.id.tariffs_panel)
 
-        try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
+    try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
-        tariffAdapter.submitList(emptyList(), 0)
-        
-        ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
-        val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
-        ivMenuIcon.setColorFilter(adaptiveColor)
+    tariffAdapter.submitList(emptyList(), 0)
+    
+    ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
+    val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
+    ivMenuIcon.setColorFilter(adaptiveColor)
 
-        // Логику тарифов делегируем в ViewModel
-        // Маршрут уже лежит в ViewModel (currentRoutePolyline), расстояние тоже
-        val route = viewModel.currentRoutePolyline
-        val dist = viewModel.routeInfo.value?.first ?: 0
-        
+    val route = viewModel.currentRoutePolyline
+    val dist = viewModel.routeInfo.value?.first ?: 0
+    
+    // ФІКС РЕЙС-КОНДИШЕНА:
+    // Запитуємо ціни ТУТ тільки якщо маршрут ВЖЕ готовий (наприклад, повернулися з налаштувань оплати).
+    // Якщо маршруту ще немає (ми тільки-но обрали адресу), 
+    // ми НІЧОГО НЕ РОБИМО! ViewModel сама викличе сервер, коли Google поверне точну лінію маршруту.
+    if (route != null) {
         viewModel.loadTariffsAndCalculatePrice(route, dist)
     }
+}
 
     private fun showCustomScheduleDialog() {
     val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
@@ -3381,57 +3676,73 @@ private fun stopWaitingTimer() {
 
     // НОВИЙ МЕТОД: Малює красивий діалог
     private fun showCustomCancelDialog(reasons: List<CancellationReasonDto>) {
-        val dialog = Dialog(this)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        dialog.setContentView(R.layout.dialog_cancel_reason)
+    val dialog = Dialog(this)
+    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+    dialog.setContentView(R.layout.dialog_cancel_reason)
+    
+    // Робимо фон вікна прозорим, щоб спрацювали закруглення від CardView
+    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+    val rgReasons = dialog.findViewById<android.widget.RadioGroup>(R.id.rg_cancel_reasons)
+    val btnConfirm = dialog.findViewById<android.widget.Button>(R.id.btn_confirm_cancel)
+
+    // --- НАЛАШТУВАННЯ КОЛЬОРУ ДЛЯ КРУЖЕЧКІВ ---
+    val yellowColor = androidx.core.content.ContextCompat.getColor(this, R.color.taxi_yellow)
+    val colorStateList = android.content.res.ColorStateList(
+        arrayOf(
+            intArrayOf(-android.R.attr.state_checked), // Стан: не обрано
+            intArrayOf(android.R.attr.state_checked)    // Стан: обрано
+        ),
+        intArrayOf(
+            android.graphics.Color.GRAY, // Сірий контур для неактивного стану
+            yellowColor                  // Ваш жовтий для активного стану
+        )
+    )
+
+    // Динамічно створюємо кнопки (RadioButton) для кожної причини
+    for ((index, reason) in reasons.withIndex()) {
+        val rb = android.widget.RadioButton(this)
+        rb.id = index // Встановлюємо ID як індекс у списку
+        rb.text = reason.reasonText
+        rb.textSize = 16f
+        rb.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
         
-        // Робимо фон вікна прозорим, щоб спрацювали закруглення від CardView
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        // ЗАСТОСОВУЄМО КОЛІР ТІНТУ
+        rb.buttonTintList = colorStateList
+        
+        // Додаємо відступи між варіантами для краси
+        val params = android.widget.RadioGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        params.setMargins(0, 12, 0, 12)
+        rb.layoutParams = params
+        rb.setPadding(16, 0, 0, 0) // Відступ тексту від кружечка
 
-        val rgReasons = dialog.findViewById<android.widget.RadioGroup>(R.id.rg_cancel_reasons)
-        val btnConfirm = dialog.findViewById<android.widget.Button>(R.id.btn_confirm_cancel)
-
-        // Динамічно створюємо кнопки (RadioButton) для кожної причини
-        for ((index, reason) in reasons.withIndex()) {
-            val rb = android.widget.RadioButton(this)
-            rb.id = index // Встановлюємо ID як індекс у списку
-            rb.text = reason.reasonText
-            rb.textSize = 16f
-            rb.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
-            
-            // Додаємо відступи між варіантами для краси
-            val params = android.widget.RadioGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            params.setMargins(0, 12, 0, 12)
-            rb.layoutParams = params
-            rb.setPadding(16, 0, 0, 0) // Відступ тексту від кружечка
-
-            rgReasons.addView(rb)
-        }
-
-        // За замовчуванням обираємо перший пункт (щоб кнопка підтвердити не відправляла null)
-        if (reasons.isNotEmpty()) {
-            rgReasons.check(0)
-        }
-
-        // Обробка натискання на кнопку "Підтвердити"
-        btnConfirm.setOnClickListener {
-            val checkedId = rgReasons.checkedRadioButtonId
-            if (checkedId != -1) {
-                // Оскільки ID дорівнює індексу масиву, легко дістаємо текст
-                val selectedReason = reasons[checkedId].reasonText
-                viewModel.cancelOrder(selectedReason)
-            } else {
-                viewModel.cancelOrder(null)
-            }
-            dialog.dismiss() // Закриваємо діалог
-        }
-
-        dialog.show()
+        rgReasons.addView(rb)
     }
+
+    // За замовчуванням обираємо перший пункт (щоб кнопка підтвердити не відправляла null)
+    if (reasons.isNotEmpty()) {
+        rgReasons.check(0)
+    }
+
+    // Обробка натискання на кнопку "Підтвердити"
+    btnConfirm.setOnClickListener {
+        val checkedId = rgReasons.checkedRadioButtonId
+        if (checkedId != -1) {
+            // Оскільки ID дорівнює індексу масиву, легко дістаємо текст
+            val selectedReason = reasons[checkedId].reasonText
+            viewModel.cancelOrder(selectedReason)
+        } else {
+            viewModel.cancelOrder(null)
+        }
+        dialog.dismiss() // Закриваємо діалог
+    }
+
+    dialog.show()
+}
 
     private fun showActiveOrderPanel(order: TaxiOrderDto) {
     // 1. Проверяем, была ли панель скрыта до этого

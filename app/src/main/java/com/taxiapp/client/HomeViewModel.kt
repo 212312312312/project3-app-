@@ -158,43 +158,51 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- API: Маршрут ---
     fun fetchDirections(origin: LatLng, dest: LatLng, waypoints: List<Pair<LatLng, String>>) {
-        val originStr = "${origin.latitude},${origin.longitude}"
-        val destStr = "${dest.latitude},${dest.longitude}"
-        val wpStr = if (waypoints.isNotEmpty()) {
-            "optimize:false|" + waypoints.joinToString("|") { "${it.first.latitude},${it.first.longitude}" }
-        } else null
+    // 1. ФІКС: Очищаємо старий маршрут, щоб гарантовано не відправити серверу старі кілометри!
+    currentRoutePolyline = null 
+    
+    val originStr = "${origin.latitude},${origin.longitude}"
+    val destStr = "${dest.latitude},${dest.longitude}"
+    val wpStr = if (waypoints.isNotEmpty()) {
+        "optimize:false|" + waypoints.joinToString("|") { "${it.first.latitude},${it.first.longitude}" }
+    } else null
 
-        // В реальном проекте ключ лучше хранить в secure storage или buildConfig
-        val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI"
+    val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI"
 
-        DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
-            .enqueue(object : Callback<DirectionsResponse> {
-                override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                    if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
-                        val route = response.body()!!.routes[0]
-                        currentRoutePolyline = route.overviewPolyline.points
+    DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
+        .enqueue(object : Callback<DirectionsResponse> {
+            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
+                if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
+                    val route = response.body()!!.routes[0]
+                    currentRoutePolyline = route.overviewPolyline.points
 
-                        var dist = 0L
-                        var dur = 0L
-                        route.legs.forEach {
-                            dist += it.distance.meters
-                            dur += it.duration.seconds
-                        }
-
-                        _routeInfo.value = Pair(dist.toInt(), dur.toInt())
-
-                        val decoded = com.google.maps.android.PolyUtil.decode(currentRoutePolyline)
-                        _decodedRoute.value = decoded
-                    } else {
-                        _errorMessage.value = "Маршрут не знайдено"
+                    var dist = 0L
+                    var dur = 0L
+                    route.legs.forEach {
+                        dist += it.distance.meters
+                        dur += it.duration.seconds
                     }
-                }
 
-                override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
-                    _errorMessage.value = "Не вдалося побудувати маршрут"
+                    val finalDist = dist.toInt()
+                    val finalDur = dur.toInt()
+
+                    // 2. СНАЧАЛА оновлюємо дистанцію в UI (щоб локальний бекап-розрахунок знав точні км)
+                    _routeInfo.value = Pair(finalDist, finalDur)
+                    val decoded = com.google.maps.android.PolyUtil.decode(currentRoutePolyline)
+                    _decodedRoute.value = decoded
+
+                    // 3. І ТІЛЬКИ ПОТІМ автоматично запитуємо точну ціну у нашого сервера!
+                    loadTariffsAndCalculatePrice(currentRoutePolyline, finalDist)
+                } else {
+                    _errorMessage.value = "Маршрут не знайдено"
                 }
-            })
-    }
+            }
+
+            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
+                _errorMessage.value = "Не вдалося побудувати маршрут"
+            }
+        })
+}
 
     // --- УПРАВЛЕНИЕ ВИДЖЕТОМ (СЕРВИСОМ) ---
     private fun updateOrderStatusService(order: TaxiOrderDto) {

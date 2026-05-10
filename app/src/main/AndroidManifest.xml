@@ -73,9 +73,7 @@
             android:screenOrientation="portrait"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 
-        <activity
-            android:name=".MapPickerActivity"
-            android:screenOrientation="portrait" />
+
 
         <activity
             android:name=".CityPickerActivity"
