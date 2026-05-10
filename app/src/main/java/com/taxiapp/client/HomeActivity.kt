@@ -3,6 +3,7 @@ package com.taxiapp.client
 import android.Manifest
 import android.view.Window
 import android.text.Spannable
+import com.facebook.shimmer.ShimmerFrameLayout
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
 import android.graphics.Paint
@@ -204,7 +205,7 @@ private lateinit var btnConfirmMapPicker: Button
     private lateinit var creationPanelCard: View
     private lateinit var addressPanel: View
     private lateinit var tariffsPanel: View
-    private lateinit var tariffsProgressBar: ProgressBar
+    private lateinit var tariffsShimmer: ShimmerFrameLayout
     private lateinit var btnOrderTaxi: Button
     private lateinit var tariffsRecyclerView: RecyclerView
     private lateinit var tariffAdapter: TariffAdapter
@@ -256,6 +257,7 @@ private var mapPickerWaypointIndex = -1
     private lateinit var mapLoadingCurtain: ImageView
     private lateinit var contentBottomSheet: View
 
+    
     private var currentActiveLanguage: String = ""       
     
     private var loadedSectors: List<SectorDto> = emptyList()
@@ -294,6 +296,8 @@ private lateinit var statusIcon3: ImageView
 
 private lateinit var cardWaitingTimer: View
 private lateinit var tvNewWaitingTimer: TextView
+
+private lateinit var buttonsShimmer: ShimmerFrameLayout
 
     private lateinit var btnSchedule: ImageButton 
     private var scheduledDate: Calendar? = null
@@ -432,16 +436,11 @@ private lateinit var tvNewWaitingTimer: TextView
 private fun fetchAddressAtCurrentLocation() {
     val target = mMap?.cameraPosition?.target ?: return
     
-    // Блокируем кнопку "Подтвердить" во время поиска
+    // Просто меняем текст, кнопку визуально не трогаем
     tvMapPickerAddress.text = "Шукаємо адресу..."
-    btnConfirmMapPicker.isEnabled = false
-    btnConfirmMapPicker.alpha = 0.5f
 
     getAddressFromLocation(target) { address ->
         tvMapPickerAddress.text = address ?: "Невідома адреса"
-        // Разблокируем кнопку, когда адрес найден
-        btnConfirmMapPicker.isEnabled = true
-        btnConfirmMapPicker.alpha = 1.0f
     }
 }
 
@@ -602,26 +601,26 @@ private fun fetchAddressAtCurrentLocation() {
         
         // ДОБАВЛЕНО: Обработка системной кнопки/жеста "Назад"
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-    override fun handleOnBackPressed() {
-        if (isMapPickingMode) {
-            // Якщо ми в режимі вибору на карті - просто виходимо з нього
-            hideMapPickerMode()
-        } else if (activeOrderCard.visibility == View.VISIBLE) {
-            // Згортаємо замовлення: очищаємо UI та зупиняємо полінг, 
-            // але НЕ скасовуємо саме замовлення на сервері!
-            sessionManager.clearActiveOrderId()
-            viewModel.clearOrderState()
-            showAddressPanel()
-        } else if (tariffsPanel.visibility == View.VISIBLE) {
-            // Если мы в тарифах — возвращаемся к полноэкранной карте с адресами
-            showAddressPanel()
-        } else if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START)
-        } else {
-            finish()
-        }
-    }
-})
+            override fun handleOnBackPressed() {
+                if (isMapPickingMode) {
+                    // Повертаємося до AddressPicker зі збереженням введених даних
+                    returnToAddressPicker()
+                } else if (activeOrderCard.visibility == View.VISIBLE) {
+                    // Згортаємо замовлення: очищаємо UI та зупиняємо полінг, 
+                    // але НЕ скасовуємо саме замовлення на сервері!
+                    sessionManager.clearActiveOrderId()
+                    viewModel.clearOrderState()
+                    showAddressPanel()
+                } else if (tariffsPanel.visibility == View.VISIBLE) {
+                    // Если мы в тарифах — возвращаемся к полноэкранной карте с адресами
+                    showAddressPanel()
+                } else if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    drawerLayout.closeDrawer(GravityCompat.START)
+                } else {
+                    finish()
+                }
+            }
+        })
         
         // Первичная загрузка тарифов (базовая)
         viewModel.loadTariffsAndCalculatePrice(null, 0)
@@ -662,10 +661,14 @@ private fun fetchAddressAtCurrentLocation() {
         
         // 2. Тарифы
         viewModel.availableTariffs.observe(this) { tariffs ->
-            tariffsProgressBar.visibility = View.GONE
-            availableTariffs = tariffs
-            displayTariffs() 
-        }
+        // Когда пришли данные: выключаем шиммер и показываем список
+        tariffsShimmer.stopShimmer()
+        tariffsShimmer.visibility = View.GONE
+        tariffsRecyclerView.visibility = View.VISIBLE
+        setButtonsLoadingState(false)
+        availableTariffs = tariffs
+        displayTariffs() 
+    }
 
         viewModel.cardBoundEvent.observe(this) { isBound ->
             if (isBound) {
@@ -703,17 +706,23 @@ private fun fetchAddressAtCurrentLocation() {
 
         // 4. Ошибки и загрузка
         viewModel.isLoading.observe(this) { loading ->
-            if (loading) {
-               // Можно показать общий лоадер, если нужно
-            }
+        setButtonsLoadingState(loading)
+        if (loading) {
+            // Если началась загрузка (например, при смене маршрута)
+            tariffsRecyclerView.visibility = View.GONE
+            tariffsShimmer.visibility = View.VISIBLE
+            tariffsShimmer.startShimmer()
+        } else {
+            // Сами данные выключат шиммер в обсервере availableTariffs
         }
+    }
         viewModel.errorMessage.observe(this) { msg ->
             showToast(msg)
             btnOrderTaxi.isEnabled = true
             btnOrderTaxi.text = getString(R.string.btn_order) // Сброс текста кнопки
             btnCancelOrder.isEnabled = true
             btnCancelOrder.text = "Скасувати замовлення"
-            tariffsProgressBar.visibility = View.GONE
+
         }
     }
 
@@ -895,6 +904,9 @@ statusIcon3 = findViewById(R.id.status_icon_3)
         mapLoadingCurtain = findViewById(R.id.map_loading_curtain)
         contentBottomSheet = findViewById(R.id.content_bottom_sheet)
         
+
+        tariffsShimmer = findViewById(R.id.tariffs_shimmer_container)
+
         btnRecenter = findViewById(R.id.btn_recenter_location)
         btnRecenterRoute = findViewById(R.id.btn_recenter_route)
 
@@ -920,7 +932,7 @@ btnConfirmMapPicker = findViewById(R.id.btn_confirm_map_picker)
 
 // Слушатели для новых кнопок
 btnBackMapPicker.setOnClickListener {
-    hideMapPickerMode()
+    returnToAddressPicker() // Повертаємося до списку зі збереженням адрес
 }
 
 if (isMapPickingMode) {
@@ -978,7 +990,7 @@ btnConfirmMapPicker.setOnClickListener {
                 return true
             }
         })
-        tariffsProgressBar = findViewById(R.id.tariffs_progress_bar)
+        tariffsShimmer = findViewById<ShimmerFrameLayout>(R.id.tariffs_shimmer_container)
         btnOrderTaxi = findViewById(R.id.btn_order_taxi)
         btnOrderTaxi.setOnClickListener {
             if (selectedTariffItem != null) {
@@ -1028,6 +1040,8 @@ btnConfirmMapPicker.setOnClickListener {
         tvOrigin = findViewById(R.id.text_view_origin)
         containerDestination = findViewById(R.id.container_destination)
         tvDestination = findViewById(R.id.text_view_destination)
+
+        buttonsShimmer = findViewById(R.id.buttons_shimmer_container)
 
 
         layoutPaymentCompleted = findViewById(R.id.layout_payment_completed)
@@ -1769,12 +1783,12 @@ btnChangePrice.setOnClickListener {
         mMap?.setOnCameraIdleListener {
             val target = mMap!!.cameraPosition.target
 
-            // 1. АНИМАЦИЯ ПИНА: Должна срабатывать в обоих режимах (когда интерфейс открыт ИЛИ когда мы выбираем точку)
+            // 1. АНИМАЦИЯ ПИНА: Должна срабатывать в обоих режимах
             if (isInterfaceRevealed || isMapPickingMode) {
                 centerPin.animate().cancel()
                 centerPin.animate()
                     .translationY(convertDpToPixel(-32f))
-                    .setStartDelay(0) // <--- ОБЯЗАТЕЛЬНО сбрасываем задержку
+                    .setStartDelay(0) 
                     .setInterpolator(android.view.animation.BounceInterpolator())
                     .setDuration(500)
                     .start()
@@ -1791,20 +1805,18 @@ btnChangePrice.setOnClickListener {
                 } catch (e: Exception) {}
             }
 
+            // ==========================================
+            // ОСЬ ЦЕЙ БЛОК - ЦЕ ТОЙ САМИЙ "КРОК 2"
+            // ==========================================
             // 2. ЛОГИКА ГЕОКОДИНГА В ЗАВИСИМОСТИ ОТ РЕЖИМА
             if (isMapPickingMode) {
-        // Блокируем кнопку "Подтвердить" во время поиска
-        tvMapPickerAddress.text = "Шукаємо адресу..."
-        btnConfirmMapPicker.isEnabled = false
-        btnConfirmMapPicker.alpha = 0.5f
+                // Залишаємо кнопку яскравою, міняємо тільки текст
+                tvMapPickerAddress.text = "Шукаємо адресу..."
 
-        getAddressFromLocation(target) { address ->
-            tvMapPickerAddress.text = address ?: "Невідома адреса"
-            // Разблокируем кнопку, когда адрес найден
-            btnConfirmMapPicker.isEnabled = true
-            btnConfirmMapPicker.alpha = 1.0f
-        }
-    } else {
+                getAddressFromLocation(target) { address ->
+                    tvMapPickerAddress.text = address ?: "Невідома адреса"
+                }
+            } else {
                 // --- Стандартный режим главного экрана ---
                 if (viewModel.currentRoutePolyline != null) {
                     updateSmartLabels()
@@ -2089,10 +2101,18 @@ private fun updateIntentDataForReturn(target: LatLng, addressName: String) {
 }
 
 private fun returnToAddressPicker() {
-    val data = lastAddressPickerIntentData ?: return
-    hideMapPickerMode()
+    val data = lastAddressPickerIntentData
     
+    // ЗАХИСТ: Якщо даних чомусь немає, просто виходимо на головний екран
+    if (data == null) {
+        hideMapPickerMode()
+        return
+    }
+    
+    hideMapPickerMode()
+
     val intent = Intent(this, AddressPickerActivity::class.java)
+    
     // Передаем все накопленные данные обратно
     intent.putExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, mapPickerTarget == AddressPickerActivity.TARGET_ORIGIN)
     
@@ -2479,8 +2499,15 @@ class RoundedBackgroundSpan(
 
     private fun fetchTariffsAndShowPanel() {
     addressPanel.visibility = View.GONE
+
+    setButtonsLoadingState(true)
     tariffsPanel.visibility = View.VISIBLE
-    tariffsProgressBar.visibility = View.VISIBLE
+    
+    // ВМЕСТО ProgressBar используем Shimmer
+    tariffsRecyclerView.visibility = View.GONE
+    tariffsShimmer.visibility = View.VISIBLE
+    tariffsShimmer.startShimmer()
+    
     btnRecenter.visibility = View.GONE
     setLocationButtonAnchor(R.id.tariffs_panel)
 
@@ -2495,10 +2522,6 @@ class RoundedBackgroundSpan(
     val route = viewModel.currentRoutePolyline
     val dist = viewModel.routeInfo.value?.first ?: 0
     
-    // ФІКС РЕЙС-КОНДИШЕНА:
-    // Запитуємо ціни ТУТ тільки якщо маршрут ВЖЕ готовий (наприклад, повернулися з налаштувань оплати).
-    // Якщо маршруту ще немає (ми тільки-но обрали адресу), 
-    // ми НІЧОГО НЕ РОБИМО! ViewModel сама викличе сервер, коли Google поверне точну лінію маршруту.
     if (route != null) {
         viewModel.loadTariffsAndCalculatePrice(route, dist)
     }
@@ -3834,6 +3857,51 @@ private fun stopWaitingTimer() {
         // Оставлен как заглушка, если вдруг где-то вызывается,
         // но основная логика теперь в ViewModel
     }
+
+    private fun setButtonsLoadingState(isLoading: Boolean) {
+    // 1. Управляем мерцанием самих кнопок
+    if (isLoading) {
+        buttonsShimmer.startShimmer()
+    } else {
+        buttonsShimmer.stopShimmer()
+    }
+
+    // 2. Прячем или показываем иконки
+    val iconVisibility = if (isLoading) View.INVISIBLE else View.VISIBLE
+    
+    findViewById<View>(R.id.iv_comment_icon).visibility = iconVisibility
+    findViewById<View>(R.id.iv_payment_icon).visibility = iconVisibility
+    findViewById<View>(R.id.iv_services_icon).visibility = iconVisibility
+    findViewById<View>(R.id.iv_price_icon).visibility = iconVisibility
+
+    // 3. БРОНЕБОЙНАЯ логика для текста оплаты
+    val paymentText = findViewById<TextView>(R.id.tv_payment_method_text)
+    if (isLoading) {
+        // Если текст сейчас видим, прячем и запоминаем
+        if (paymentText.visibility == View.VISIBLE) {
+            paymentText.tag = "was_visible"
+            paymentText.visibility = View.INVISIBLE
+        }
+    } else {
+        // Загрузка закончилась. 
+        // Показываем текст ТОЛЬКО если мы его прятали (есть тег) 
+        // ИЛИ если внутри текста есть реальные данные (не пустая строка)
+        val hasActualText = paymentText.text?.toString()?.isNotBlank() == true
+        
+        if (paymentText.tag == "was_visible" || hasActualText) {
+            paymentText.visibility = View.VISIBLE
+            paymentText.tag = null // очищаем память
+        } else {
+            paymentText.visibility = View.GONE
+        }
+    }
+    
+    // 4. Отключаем кликабельность
+    findViewById<View>(R.id.btn_open_comment).isEnabled = !isLoading
+    findViewById<View>(R.id.btn_open_payment).isEnabled = !isLoading
+    findViewById<View>(R.id.btn_open_services).isEnabled = !isLoading
+    findViewById<View>(R.id.btn_change_price).isEnabled = !isLoading
+}
 
     private fun getSnapPointAndDistance(rawLocation: LatLng, route: List<LatLng>): Pair<LatLng, Double> {
         if (route.size < 2) return Pair(rawLocation, 0.0)

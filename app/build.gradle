@@ -56,6 +56,7 @@ dependencies {
     implementation libs.google.glide
     implementation 'com.google.android.gms:play-services-location:21.1.0'
     annotationProcessor libs.google.glide.compiler
+    implementation libs.facebook.shimmer
 
     // <--- 2. ДОБАВЛЕНА БИБЛИОТЕКА FIREBASE MESSAGING
     implementation 'com.google.firebase:firebase-messaging:23.4.1'
