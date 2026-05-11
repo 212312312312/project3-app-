@@ -9,10 +9,12 @@ data class CarTariffDto(
     @SerializedName("basePrice") val basePrice: Double,
     @SerializedName("pricePerKm") val pricePerKm: Double,
 
-    // --- НОВЫЕ ПОЛЯ ---
+    // --- НОВЕ ПОЛЕ: Ціна за додаткову точку ---
+    @SerializedName("extraWaypointPrice") val extraWaypointPrice: Double = 0.0,
+    // ------------------------------------------
+
     @SerializedName("isBeta") val isBeta: Boolean = false,
     @SerializedName("isUnavailable") val isUnavailable: Boolean = false,
-    // ------------------
 
     @SerializedName("pricePerWaitingMinute") val pricePerWaitingMinute: Double = 0.0,
     @SerializedName("imageUrl") val imageUrl: String?,

@@ -75,7 +75,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- API: Тарифы и Цена ---
-    fun loadTariffsAndCalculatePrice(routePolyline: String?, distanceMeters: Int) {
+    // ДОДАНО параметр waypointsCount: Int = 0
+    fun loadTariffsAndCalculatePrice(routePolyline: String?, distanceMeters: Int, waypointsCount: Int = 0) {
         _isLoading.value = true
 
         // 1. Проверяем промокод (логику можно расширить)
@@ -83,7 +84,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         // 2. Если есть маршрут - считаем цену на сервере
         if (routePolyline != null && distanceMeters > 0) {
-            val request = CalculatePriceRequestDto(routePolyline, distanceMeters)
+            
+            // --- НОВЕ: Формуємо фейковий список точок потрібного розміру ---
+            // Це гарантує, що сервер зможе отримати кількість через request.waypoints?.size
+            val fakeWaypointsList = if (waypointsCount > 0) List(waypointsCount) { "wp" } else emptyList()
+            
+            val request = CalculatePriceRequestDto(
+                googleRoutePolyline = routePolyline, 
+                distanceMeters = distanceMeters,
+                waypointsCount = waypointsCount,
+                waypoints = fakeWaypointsList
+            )
+            // ----------------------------------------------------------------
+
             ApiClient.instance.calculatePrice(request).enqueue(object : Callback<List<CarTariffDto>> {
                 override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
                     _isLoading.value = false
@@ -158,51 +171,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- API: Маршрут ---
     fun fetchDirections(origin: LatLng, dest: LatLng, waypoints: List<Pair<LatLng, String>>) {
-    // 1. ФІКС: Очищаємо старий маршрут, щоб гарантовано не відправити серверу старі кілометри!
-    currentRoutePolyline = null 
-    
-    val originStr = "${origin.latitude},${origin.longitude}"
-    val destStr = "${dest.latitude},${dest.longitude}"
-    val wpStr = if (waypoints.isNotEmpty()) {
-        "optimize:false|" + waypoints.joinToString("|") { "${it.first.latitude},${it.first.longitude}" }
-    } else null
+        // 1. ФІКС: Очищаємо старий маршрут, щоб гарантовано не відправити серверу старі кілометри!
+        currentRoutePolyline = null 
+        
+        val originStr = "${origin.latitude},${origin.longitude}"
+        val destStr = "${dest.latitude},${dest.longitude}"
+        val wpStr = if (waypoints.isNotEmpty()) {
+            "optimize:false|" + waypoints.joinToString("|") { "${it.first.latitude},${it.first.longitude}" }
+        } else null
 
-    val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI"
+        val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI"
 
-    DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
-        .enqueue(object : Callback<DirectionsResponse> {
-            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
-                    val route = response.body()!!.routes[0]
-                    currentRoutePolyline = route.overviewPolyline.points
+        DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
+            .enqueue(object : Callback<DirectionsResponse> {
+                override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
+                    if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
+                        val route = response.body()!!.routes[0]
+                        currentRoutePolyline = route.overviewPolyline.points
 
-                    var dist = 0L
-                    var dur = 0L
-                    route.legs.forEach {
-                        dist += it.distance.meters
-                        dur += it.duration.seconds
+                        var dist = 0L
+                        var dur = 0L
+                        route.legs.forEach {
+                            dist += it.distance.meters
+                            dur += it.duration.seconds
+                        }
+
+                        val finalDist = dist.toInt()
+                        val finalDur = dur.toInt()
+
+                        // 2. СНАЧАЛА оновлюємо дистанцію в UI (щоб локальний бекап-розрахунок знав точні км)
+                        _routeInfo.value = Pair(finalDist, finalDur)
+                        val decoded = com.google.maps.android.PolyUtil.decode(currentRoutePolyline)
+                        _decodedRoute.value = decoded
+
+                        // --- НОВЕ: Передаємо кількість проміжних точок (waypoints.size) ---
+                        // 3. І ТІЛЬКИ ПОТІМ автоматично запитуємо точну ціну у нашого сервера!
+                        loadTariffsAndCalculatePrice(currentRoutePolyline, finalDist, waypoints.size)
+                        // ------------------------------------------------------------------
+                    } else {
+                        _errorMessage.value = "Маршрут не знайдено"
                     }
-
-                    val finalDist = dist.toInt()
-                    val finalDur = dur.toInt()
-
-                    // 2. СНАЧАЛА оновлюємо дистанцію в UI (щоб локальний бекап-розрахунок знав точні км)
-                    _routeInfo.value = Pair(finalDist, finalDur)
-                    val decoded = com.google.maps.android.PolyUtil.decode(currentRoutePolyline)
-                    _decodedRoute.value = decoded
-
-                    // 3. І ТІЛЬКИ ПОТІМ автоматично запитуємо точну ціну у нашого сервера!
-                    loadTariffsAndCalculatePrice(currentRoutePolyline, finalDist)
-                } else {
-                    _errorMessage.value = "Маршрут не знайдено"
                 }
-            }
 
-            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
-                _errorMessage.value = "Не вдалося побудувати маршрут"
-            }
-        })
-}
+                override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
+                    _errorMessage.value = "Не вдалося побудувати маршрут"
+                }
+            })
+    }
 
     // --- УПРАВЛЕНИЕ ВИДЖЕТОМ (СЕРВИСОМ) ---
     private fun updateOrderStatusService(order: TaxiOrderDto) {
