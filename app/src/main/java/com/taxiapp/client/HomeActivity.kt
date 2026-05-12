@@ -706,16 +706,20 @@ private fun fetchAddressAtCurrentLocation() {
 
         // 4. Ошибки и загрузка
         viewModel.isLoading.observe(this) { loading ->
-        setButtonsLoadingState(loading)
-        if (loading) {
-            // Если началась загрузка (например, при смене маршрута)
+    setButtonsLoadingState(loading)
+    if (loading) {
+        // НОВАЯ ЛОГИКА (ИСПРАВЛЕНИЕ БАГА):
+        // Проверяем: если мы прямо сейчас отправляем заказ (кнопка пишет "Обробка..."), 
+        // то скелет тарифов показывать НЕ нужно, оставляем выбранный тариф на экране.
+        if (btnOrderTaxi.text.toString() != "Обробка...") {
             tariffsRecyclerView.visibility = View.GONE
             tariffsShimmer.visibility = View.VISIBLE
             tariffsShimmer.startShimmer()
-        } else {
-            // Сами данные выключат шиммер в обсервере availableTariffs
         }
+    } else {
+        // Сами данные выключат шиммер в обсервере availableTariffs
     }
+}
         viewModel.errorMessage.observe(this) { msg ->
             showToast(msg)
             btnOrderTaxi.isEnabled = true
@@ -2052,12 +2056,35 @@ private fun confirmMapSelection() {
             }
         }
         AddressPickerActivity.TARGET_DESTINATION -> {
-            // ФИКС БАГА: Если выбрали Точку Б, это конец! Строим маршрут, никуда не возвращаемся.
-            hideMapPickerMode()
-            pickerMode = MODE_DESTINATION 
-            // Точка А и зупинки уже сохранены в памяти HomeActivity благодаря фиксу из шага 2
-            handleAddressSelection(selectedPlace, addressName)
+    // 1. Проверяем, есть ли пустые зупинки в сохраненных данных от AddressPicker
+    val wLats = data?.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
+    var hasEmptyWaypoint = false
+    
+    if (wLats != null) {
+        for (lat in wLats) {
+            if (lat == 0.0) { // Координата 0.0 означает, что поле пустое
+                hasEmptyWaypoint = true
+                break
+            }
         }
+    }
+
+    if (hasEmptyWaypoint) {
+        // 2. У нас есть пустое поле зупинки!
+        // Обновляем сохраненный интент свежими координатами Точки Б, которую мы только что выбрали
+        data?.putExtra(AddressPickerActivity.RESULT_NAME, addressName)
+        data?.putExtra(AddressPickerActivity.RESULT_LAT, target.latitude)
+        data?.putExtra(AddressPickerActivity.RESULT_LNG, target.longitude)
+        
+        // 3. Возвращаем пользователя обратно в экран выбора адресов (AddressPickerActivity)
+        returnToAddressPicker()
+    } else {
+        // 4. Пустых зупинок нет. Все поля заполнены, смело строим маршрут!
+        hideMapPickerMode()
+        pickerMode = MODE_DESTINATION 
+        handleAddressSelection(selectedPlace, addressName)
+    }
+}
         AddressPickerActivity.TARGET_WAYPOINT -> {
             // Если выбрали зупинку — сохраняем её и возвращаем пользователя в список
             updateIntentDataForReturn(target, addressName)
@@ -3861,9 +3888,11 @@ private fun stopWaitingTimer() {
     private fun setButtonsLoadingState(isLoading: Boolean) {
     // 1. Управляем мерцанием самих кнопок
     if (isLoading) {
-        buttonsShimmer.startShimmer()
+        buttonsShimmer.showShimmer(true) // Возвращаем маску, если она была скрыта
+        buttonsShimmer.startShimmer()    // Запускаем анимацию
     } else {
-        buttonsShimmer.stopShimmer()
+        buttonsShimmer.stopShimmer()     // Останавливаем анимацию
+        buttonsShimmer.hideShimmer()     // ВОТ ОНО: Полностью удаляем застрявший градиент!
     }
 
     // 2. Прячем или показываем иконки

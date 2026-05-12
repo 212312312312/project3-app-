@@ -360,6 +360,13 @@ class AddressPickerActivity : BaseActivity() {
                         etWaypoint.setText(wNames[i])
                         if (wLats[i] != 0.0) {
                             fieldCoordinates[etWaypoint] = LatLng(wLats[i], wLngs[i])
+                            if (!isOriginMode) {
+                                containerWaypoints.post {
+                                    if (fieldCoordinates.containsKey(etDestination) && isFinishConditionMet()) {
+                                        returnResultData()
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -485,12 +492,20 @@ class AddressPickerActivity : BaseActivity() {
         val etWaypoint = view.findViewById<EditText>(R.id.et_waypoint)
         val btnRemove = view.findViewById<ImageView>(R.id.btn_remove_waypoint)
         setupFocusListener(etWaypoint)
+
         btnRemove.setOnClickListener {
             fieldCoordinates.remove(etWaypoint)
             containerWaypoints.removeView(view)
             waypointViews.remove(view)
             checkAddButtonState()
+
+            // НОВАЯ ЛОГИКА: Если мы удалили пустую остановку, а конечный адрес
+            // и другие остановки уже заполнены -> завершаем экран и строим маршрут
+            if (!isOrigin && isFinishConditionMet()) {
+                returnResultData()
+            }
         }
+
         containerWaypoints.addView(view)
         waypointViews.add(view)
         activeEditText = etWaypoint
@@ -541,9 +556,29 @@ class AddressPickerActivity : BaseActivity() {
     }
 
     private fun isFinishConditionMet(): Boolean {
-        if (isOrigin && activeEditText == etOrigin) return true
-        if (!isOrigin && activeEditText == etDestination) return true
-        return false
+        if (isOrigin) {
+            // Если выбираем откуда, достаточно проверить, что введено это поле
+            return fieldCoordinates.containsKey(etOrigin)
+        } else {
+            // Если выбираем куда/остановки:
+
+            // 1. Конечный адрес обязателен
+            if (!fieldCoordinates.containsKey(etDestination)) {
+                return false
+            }
+
+            // 2. Проверяем все добавленные поля остановок
+            for (view in waypointViews) {
+                val etWaypoint = view.findViewById<EditText>(R.id.et_waypoint)
+                if (!fieldCoordinates.containsKey(etWaypoint)) {
+                    // Нашли пустую остановку (без координат) — остаемся на экране!
+                    return false
+                }
+            }
+
+            // Если есть конечный адрес и все добавленные остановки заполнены:
+            return true
+        }
     }
 
     private fun detectMyLocation() {
