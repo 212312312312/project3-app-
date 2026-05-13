@@ -222,7 +222,7 @@ private lateinit var btnConfirmMapPicker: Button
     private lateinit var tariffsRecyclerView: RecyclerView
     private lateinit var tariffAdapter: TariffAdapter
 
-    private lateinit var layoutSearchDetails: LinearLayout
+    private lateinit var layoutSearchDetails: View
     private lateinit var tvOrderTariffName: TextView
     private lateinit var tvOrderServices: TextView
     private lateinit var tvOrderComment: TextView
@@ -4000,51 +4000,98 @@ private fun stopWaitingTimer() {
 
         // Далі йде твій код без змін...
         tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
-
-        if (order.paymentMethod == "CARD") {
-            ivActiveOrderPayment.setImageResource(R.drawable.ic_card)
-        } else {
-            ivActiveOrderPayment.setImageResource(R.drawable.ic_cash)
-        }
-
-        tvOrderTariffName.text = order.tariffName
-
-        val ivOrderTariffIcon = findViewById<ImageView>(R.id.iv_order_tariff_icon)
-
-        val matchingTariff = availableTariffs.find { it.name == order.tariffName }
-        val imageFileName = matchingTariff?.imageUrl
-
-        if (!imageFileName.isNullOrEmpty()) {
-            ivOrderTariffIcon.imageTintList = null
-            val fullUrl = "http://192.168.0.104:8080/uploads/$imageFileName"
-
-            Glide.with(this)
-                .load(fullUrl)
-                .placeholder(R.drawable.ic_taxi_model_standard)
-                .error(R.drawable.ic_taxi_model_standard)
-                .into(ivOrderTariffIcon)
-        } else {
-            ivOrderTariffIcon.setImageResource(R.drawable.ic_taxi_model_standard)
-            ivOrderTariffIcon.setColorFilter(ContextCompat.getColor(this, R.color.text_secondary))
-        }
-
-        if (order.services.isNotEmpty()) {
-            tvOrderServices.visibility = View.VISIBLE
-            val servicesText = order.services.joinToString(separator = ", ") { it.name }
-            tvOrderServices.text = "+ $servicesText"
-        } else {
-            tvOrderServices.visibility = View.GONE
-        }
-
-        if (order.comment != null && order.comment.isNotEmpty()) {
-            tvOrderComment.visibility = View.VISIBLE
-            tvOrderComment.text = "Коментар: ${order.comment}"
-        } else {
-            tvOrderComment.visibility = View.GONE
-        }
-
-        updateStatusUI(order)
+    val tvPaymentText = findViewById<TextView>(R.id.tv_active_order_payment_text)
+    if (order.paymentMethod == "CARD") {
+        ivActiveOrderPayment.setImageResource(R.drawable.ic_card)
+        tvPaymentText.text = "Картка"
+    } else {
+        ivActiveOrderPayment.setImageResource(R.drawable.ic_cash)
+        tvPaymentText.text = "Готівка"
     }
+
+    // 2. Маршрут
+    findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
+    findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
+
+    val llRouteWaypoints = findViewById<View>(R.id.ll_route_waypoints)
+    val ivRouteWaypointsIcon = findViewById<View>(R.id.iv_order_route_waypoints_icon)
+    val tvRouteWaypoints = findViewById<TextView>(R.id.tv_order_route_waypoints)
+
+    if (!order.formattedWaypoints.isNullOrBlank()) {
+        llRouteWaypoints.visibility = View.VISIBLE
+        ivRouteWaypointsIcon.visibility = View.VISIBLE
+        tvRouteWaypoints.text = cleanAddress(order.formattedWaypoints)
+    } else {
+        llRouteWaypoints.visibility = View.GONE
+        ivRouteWaypointsIcon.visibility = View.GONE
+    }
+
+    // 3. Тариф и Иконка (Загрузка из диспетчерской)
+    val expandableDetails = findViewById<View>(R.id.layout_expandable_details)
+    val ivOrderTariffIcon = expandableDetails.findViewById<ImageView>(R.id.iv_order_tariff_icon)
+    val tvOrderTariffName = expandableDetails.findViewById<TextView>(R.id.tv_order_tariff_name)
+
+    tvOrderTariffName.text = order.tariffName
+
+    val matchingTariff = availableTariffs.find { it.name == order.tariffName }
+    val rawUrl = matchingTariff?.imageUrl
+
+    // Очищаем фильтры, чтобы Glide нарисовал цветную иконку, а не серую тень
+    ivOrderTariffIcon.imageTintList = null
+    ivOrderTariffIcon.clearColorFilter()
+
+    if (!rawUrl.isNullOrEmpty()) {
+        // Твоя идеальная логика парсинга URL из TariffAdapter:
+        val SERVER_IP = "192.168.0.107" // Правильный IP сервера!
+        val SERVER_PORT = "8080"
+
+        val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+            rawUrl
+        } else {
+            var cleanPath = rawUrl.replace("\\", "/")
+                .replace(Regex("/{2,}"), "/")
+                .trimStart('/')
+
+            if (!cleanPath.startsWith("uploads/")) {
+                cleanPath = "uploads/$cleanPath"
+            }
+            "http://$SERVER_IP:$SERVER_PORT/$cleanPath"
+        }
+
+        Glide.with(this)
+            .load(fullUrl)
+            .placeholder(R.drawable.ic_taxi_model_standard)
+            .error(R.drawable.ic_taxi_model_standard)
+            .into(ivOrderTariffIcon)
+    } else {
+        ivOrderTariffIcon.setImageResource(R.drawable.ic_taxi_model_standard)
+    }
+
+    // Доп. услуги
+    if (order.services.isNotEmpty()) {
+        tvOrderServices.visibility = View.VISIBLE
+        tvOrderServices.text = "+ " + order.services.joinToString(", ") { it.name }
+    } else {
+        tvOrderServices.visibility = View.GONE
+    }
+
+    // Комментарий
+    val tvCommentTitle = findViewById<View>(R.id.tv_comment_title)
+    val layoutOrderCommentCard = findViewById<View>(R.id.layout_order_comment_card)
+    val tvOrderCommentText = findViewById<TextView>(R.id.tv_order_comment)
+
+    if (!order.comment.isNullOrBlank()) {
+        tvCommentTitle.visibility = View.VISIBLE
+        layoutOrderCommentCard.visibility = View.VISIBLE
+        // Теперь комментарий просто выводится чистым текстом внутри красивой карточки
+        tvOrderCommentText.text = order.comment 
+    } else {
+        tvCommentTitle.visibility = View.GONE
+        layoutOrderCommentCard.visibility = View.GONE
+    }
+
+    updateStatusUI(order)
+}
     
     private fun checkOrderStatus() {
         // Оставлен как заглушка, если вдруг где-то вызывается,

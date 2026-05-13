@@ -757,6 +757,11 @@
     android:layout_alignParentBottom="true"
     android:layout_marginHorizontal="8dp"
     android:layout_marginBottom="8dp"
+    android:layout_marginTop="8dp" 
+    app:layout_constraintTop_toTopOf="parent"
+    app:layout_constraintBottom_toBottomOf="parent"
+    app:layout_constrainedHeight="true"
+    app:layout_constraintVertical_bias="1.0"
     app:cardCornerRadius="24dp"
     app:cardBackgroundColor="@color/card_background"
     app:cardElevation="16dp"
@@ -916,7 +921,7 @@
                             android:layout_height="wrap_content"
                             android:orientation="vertical"
                             android:gravity="center_horizontal"
-                            android:layout_marginTop="10dp"     
+                            android:layout_marginTop="10dp"    
                             android:layout_marginBottom="10dp"> 
                             <TextView
                                 android:id="@+id/tv_car_plate_large"
@@ -1101,70 +1106,304 @@
                     android:visibility="gone"
                     android:layout_marginHorizontal="16dp"
                     android:layout_marginTop="8dp">
-                    
-                    <LinearLayout
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Метод оплати"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <com.google.android.material.card.MaterialCardView
                         android:id="@+id/layout_active_order_price"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="16dp"> 
-                        
-                        <TextView
-                            android:id="@+id/tv_active_order_price"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            tools:text="92 ₴"
-                            android:textSize="28sp"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary" />
-                            
-                        <ImageView
-                            android:id="@+id/iv_active_order_payment"
-                            android:layout_width="40dp"
-                            android:layout_height="24dp"
-                            android:layout_marginStart="12dp"
-                            android:src="@drawable/ic_cash" />
-                    </LinearLayout>
+                        app:cardCornerRadius="16dp"
+                        app:cardElevation="0dp"
+                        app:cardBackgroundColor="@color/input_background"
+                        android:layout_marginBottom="12dp">
 
-                    <LinearLayout
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:padding="12dp"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:id="@+id/iv_active_order_payment"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:src="@drawable/ic_cash"
+                                app:tint="@color/text_primary" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:layout_marginStart="12dp">
+
+                                <TextView
+                                    android:id="@+id/tv_active_order_price"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    tools:text="92 ₴"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold"
+                                    android:textColor="@color/text_primary" />
+
+                                <TextView
+                                    android:id="@+id/tv_active_order_payment_text"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    tools:text="Готівка"
+                                    android:textSize="13sp"
+                                    android:textColor="@color/text_secondary" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Маршрут"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <com.google.android.material.card.MaterialCardView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:layout_marginBottom="16dp"> 
-                        <TextView
-                            android:id="@+id/tv_order_route_origin"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            tools:text="Миколи Бажана проспект, 10" />
-                        <TextView
-                            android:id="@+id/tv_order_route_dest"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            tools:text="Миколи Амосова, 12" />
-                    </LinearLayout>
+                        app:cardCornerRadius="16dp"
+                        app:cardElevation="0dp"
+                        app:cardBackgroundColor="@color/input_background"
+                        android:layout_marginBottom="12dp">
 
-                    <LinearLayout
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="12dp">
+
+                            <View
+                                android:id="@+id/line_route"
+                                android:layout_width="2dp"
+                                android:layout_height="0dp"
+                                android:background="@drawable/bg_dotted_line"
+                                android:layout_marginTop="4dp"
+                                android:layout_marginBottom="4dp"
+                                app:layout_constraintTop_toBottomOf="@+id/iv_order_route_origin_icon"
+                                app:layout_constraintBottom_toTopOf="@+id/iv_order_route_dest_icon"
+                                app:layout_constraintStart_toStartOf="@+id/iv_order_route_origin_icon"
+                                app:layout_constraintEnd_toEndOf="@+id/iv_order_route_origin_icon" />
+
+                            <ImageView
+                                android:id="@+id/iv_order_route_origin_icon"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_marker_base_yellow"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="@+id/ll_route_origin"
+                                app:layout_constraintBottom_toBottomOf="@+id/ll_route_origin"/>
+
+                            <LinearLayout
+                                android:id="@+id/ll_route_origin"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginStart="12dp"
+                                app:layout_constraintStart_toEndOf="@+id/iv_order_route_origin_icon"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Звідки"
+                                    android:textSize="12sp"
+                                    android:textColor="@color/text_secondary" />
+                                <TextView
+                                    android:id="@+id/tv_order_route_origin"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    tools:text="Вул. Хрещатик, 1"
+                                    android:textSize="15sp"
+                                    android:textColor="@color/text_primary"
+                                    android:layout_marginTop="2dp"/>
+                            </LinearLayout>
+
+                            <ImageView
+                                android:id="@+id/iv_order_route_waypoints_icon"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@drawable/ic_marker_waypoint"
+                                android:visibility="gone"
+                                tools:visibility="visible"
+                                app:layout_constraintStart_toStartOf="@+id/iv_order_route_origin_icon"
+                                app:layout_constraintEnd_toEndOf="@+id/iv_order_route_origin_icon"
+                                app:layout_constraintTop_toTopOf="@+id/ll_route_waypoints"
+                                app:layout_constraintBottom_toBottomOf="@+id/ll_route_waypoints"/>
+
+                            <LinearLayout
+                                android:id="@+id/ll_route_waypoints"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginStart="12dp"
+                                android:layout_marginTop="12dp"
+                                android:visibility="gone"
+                                tools:visibility="visible"
+                                app:layout_constraintStart_toEndOf="@+id/iv_order_route_waypoints_icon"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toBottomOf="@+id/ll_route_origin">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Проміжні точки"
+                                    android:textSize="12sp"
+                                    android:textColor="@color/text_secondary" />
+                                <TextView
+                                    android:id="@+id/tv_order_route_waypoints"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    tools:text="Вул. Басейна, 4"
+                                    android:textSize="15sp"
+                                    android:textColor="@color/text_primary"
+                                    android:layout_marginTop="2dp"/>
+                            </LinearLayout>
+
+                            <ImageView
+                                android:id="@+id/iv_order_route_dest_icon"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_marker_to"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="@+id/ll_route_dest"
+                                app:layout_constraintBottom_toBottomOf="@+id/ll_route_dest" />
+
+                            <LinearLayout
+                                android:id="@+id/ll_route_dest"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginStart="12dp"
+                                android:layout_marginTop="12dp"
+                                app:layout_constraintStart_toEndOf="@+id/iv_order_route_dest_icon"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toBottomOf="@+id/ll_route_waypoints">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Куди"
+                                    android:textSize="12sp"
+                                    android:textColor="@color/text_secondary" />
+                                <TextView
+                                    android:id="@+id/tv_order_route_dest"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    tools:text="Вул. Амосова, 12"
+                                    android:textSize="15sp"
+                                    android:textColor="@color/text_primary"
+                                    android:layout_marginTop="2dp"/>
+                            </LinearLayout>
+                        </androidx.constraintlayout.widget.ConstraintLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Тариф"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <com.google.android.material.card.MaterialCardView
                         android:id="@+id/layout_search_details"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-                        <ImageView
-                            android:id="@+id/iv_order_tariff_icon"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:src="@drawable/ic_taxi_model_standard" />
+                        app:cardCornerRadius="16dp"
+                        app:cardElevation="0dp"
+                        app:cardBackgroundColor="@color/input_background"
+                        android:layout_marginBottom="12dp">
+
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:layout_marginStart="8dp">
-                            <TextView android:id="@+id/tv_order_tariff_name" android:layout_width="wrap_content" android:layout_height="wrap_content" />
-                            <TextView android:id="@+id/tv_order_services" android:layout_width="wrap_content" android:layout_height="wrap_content" />
-                            <TextView android:id="@+id/tv_order_comment" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                            android:orientation="horizontal"
+                            android:padding="12dp"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:id="@+id/iv_order_tariff_icon"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:src="@drawable/ic_taxi_model_standard" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:layout_marginStart="12dp">
+
+                                <TextView
+                                    android:id="@+id/tv_order_tariff_name"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    tools:text="Стандарт"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold"
+                                    android:textColor="@color/text_primary" />
+
+                                <TextView
+                                    android:id="@+id/tv_order_services"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="12sp"
+                                    android:textColor="@color/text_secondary"
+                                    android:visibility="gone"
+                                    tools:visibility="visible"
+                                    tools:text="+ Кондиціонер" />
+                            </LinearLayout>
                         </LinearLayout>
-                    </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <TextView
+                        android:id="@+id/tv_comment_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Коментар"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/layout_order_comment_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:cardCornerRadius="16dp"
+                        app:cardElevation="0dp"
+                        app:cardBackgroundColor="@color/input_background"
+                        android:layout_marginBottom="8dp"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <TextView
+                            android:id="@+id/tv_order_comment"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="12dp"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:maxLines="2"               android:ellipsize="end"            tools:text="Чекаю біля 3 під'їзду" />
+                    </com.google.android.material.card.MaterialCardView>
+
                 </LinearLayout>
 
                 <LinearLayout
@@ -1358,7 +1597,6 @@
         </FrameLayout>
     </androidx.core.widget.NestedScrollView>
 </com.google.android.material.card.MaterialCardView>
-
         <LinearLayout
             android:id="@+id/layout_map_picker_panel"
             android:layout_width="match_parent"
