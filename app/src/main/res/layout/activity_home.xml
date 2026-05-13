@@ -751,51 +751,161 @@
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/active_order_card"
+    android:id="@+id/active_order_card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_alignParentBottom="true"
+    android:layout_marginHorizontal="8dp"
+    android:layout_marginBottom="8dp"
+    app:cardCornerRadius="24dp"
+    app:cardBackgroundColor="@color/card_background"
+    app:cardElevation="16dp"
+    app:cardPreventCornerOverlap="false"
+    app:cardUseCompatPadding="false"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:overScrollMode="never">
+
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:layout_marginHorizontal="8dp"
-            android:layout_marginBottom="8dp"
-            app:cardCornerRadius="24dp"
-            app:cardBackgroundColor="@color/card_background"
-            app:cardElevation="16dp"
-            app:cardPreventCornerOverlap="false"
-            app:cardUseCompatPadding="false"
-            android:visibility="gone"
-            tools:visibility="visible">
+            android:animateLayoutChanges="true">
 
-            <androidx.core.widget.NestedScrollView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:overScrollMode="never">
+                android:orientation="vertical"
+                android:paddingTop="32dp"
+                android:paddingBottom="24dp">
+
+                <ImageButton
+                    android:id="@+id/btn_add_new_order"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:visibility="gone" />
 
                 <LinearLayout
+                    android:id="@+id/layout_search_state"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="24dp">
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:layout_width="40dp"
-                        android:layout_height="4dp"
-                        android:layout_gravity="center_horizontal"
-                        android:layout_marginBottom="16dp"
-                        app:cardCornerRadius="2dp"
-                        app:cardBackgroundColor="#E0E0E0"
-                        app:cardElevation="0dp"
-                        app:strokeWidth="0dp"/>
-
-                    <ImageButton
-                        android:id="@+id/btn_add_new_order"
-                        android:layout_width="0dp"
-                        android:layout_height="0dp"
-                        android:layout_marginHorizontal="16dp"
-                        android:visibility="gone" />
+                    android:visibility="visible">
 
                     <LinearLayout
-                        android:id="@+id/layout_search_state"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="24dp"
+                        android:layout_marginHorizontal="40dp">
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/status_circle_1"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            app:cardCornerRadius="16dp"
+                            app:cardBackgroundColor="?attr/colorOnSurface" 
+                            app:strokeWidth="0dp"
+                            app:cardElevation="0dp">
+                            <ImageView
+                                android:id="@+id/status_icon_1"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:src="@drawable/ic_check_blue"
+                                app:tint="@color/menu_background_color"
+                                android:padding="5dp"/>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/status_line_1"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="4dp"
+                            android:layout_marginHorizontal="12dp"
+                            app:cardBackgroundColor="@color/divider_color"
+                            app:cardCornerRadius="2dp"
+                            app:cardElevation="0dp"
+                            app:strokeWidth="0dp"/>
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/status_circle_2"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            app:cardCornerRadius="16dp"
+                            app:cardBackgroundColor="@color/card_background"
+                            app:strokeWidth="4dp"
+                            app:strokeColor="@color/divider_color"
+                            app:cardElevation="0dp">
+                            <ImageView
+                                android:id="@+id/status_icon_2"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:src="@drawable/ic_check_blue"
+                                app:tint="@color/menu_background_color"
+                                android:padding="5dp"
+                                android:visibility="gone"/>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/status_line_2"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="4dp"
+                            android:layout_marginHorizontal="12dp"
+                            app:cardBackgroundColor="@color/divider_color"
+                            app:cardCornerRadius="2dp"
+                            app:cardElevation="0dp"
+                            app:strokeWidth="0dp"/>
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/status_circle_3"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            app:cardCornerRadius="16dp"
+                            app:cardBackgroundColor="@color/card_background"
+                            app:strokeWidth="4dp"
+                            app:strokeColor="@color/divider_color"
+                            app:cardElevation="0dp">
+                            <ImageView
+                                android:id="@+id/status_icon_3"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:src="@drawable/ic_check_blue"
+                                app:tint="@color/menu_background_color"
+                                android:padding="5dp"
+                                android:visibility="gone"/>
+                        </com.google.android.material.card.MaterialCardView>
+                    </LinearLayout>
+                    
+                    <TextView
+                        android:id="@+id/order_status_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:textAlignment="center"
+                        android:text="@string/status_order_accepted"
+                        android:textSize="22sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:layout_marginHorizontal="16dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_driver_found_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginHorizontal="16dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/layout_driver_assigned_details"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
@@ -804,398 +914,128 @@
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:layout_marginTop="8dp"
-                            android:layout_marginBottom="24dp"
-                            android:layout_marginHorizontal="40dp">
-
-                            <com.google.android.material.card.MaterialCardView
-                                android:id="@+id/status_circle_1"
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                app:cardCornerRadius="16dp"
-                                app:cardBackgroundColor="?attr/colorOnSurface" 
-                                app:strokeWidth="0dp"
-                                app:cardElevation="0dp">
-                                <ImageView
-                                    android:id="@+id/status_icon_1"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:src="@drawable/ic_check_blue"
-                                    app:tint="@color/menu_background_color"
-                                    android:padding="5dp"/>
-                            </com.google.android.material.card.MaterialCardView>
-
-                            <com.google.android.material.card.MaterialCardView
-                                android:id="@+id/status_line_1"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
-                                android:layout_height="4dp"
-                                android:layout_marginHorizontal="12dp"
-                                app:cardBackgroundColor="@color/divider_color"
-                                app:cardCornerRadius="2dp"
-                                app:cardElevation="0dp"
-                                app:strokeWidth="0dp"/>
-
-                            <com.google.android.material.card.MaterialCardView
-                                android:id="@+id/status_circle_2"
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                app:cardCornerRadius="16dp"
-                                app:cardBackgroundColor="@color/card_background"
-                                app:strokeWidth="4dp"
-                                app:strokeColor="@color/divider_color"
-                                app:cardElevation="0dp">
-                                <ImageView
-                                    android:id="@+id/status_icon_2"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:src="@drawable/ic_check_blue"
-                                    app:tint="@color/menu_background_color"
-                                    android:padding="5dp"
-                                    android:visibility="gone"/>
-                            </com.google.android.material.card.MaterialCardView>
-
-                            <com.google.android.material.card.MaterialCardView
-                                android:id="@+id/status_line_2"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
-                                android:layout_height="4dp"
-                                android:layout_marginHorizontal="12dp"
-                                app:cardBackgroundColor="@color/divider_color"
-                                app:cardCornerRadius="2dp"
-                                app:cardElevation="0dp"
-                                app:strokeWidth="0dp"/>
-
-                            <com.google.android.material.card.MaterialCardView
-                                android:id="@+id/status_circle_3"
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                app:cardCornerRadius="16dp"
-                                app:cardBackgroundColor="@color/card_background"
-                                app:strokeWidth="4dp"
-                                app:strokeColor="@color/divider_color"
-                                app:cardElevation="0dp">
-                                <ImageView
-                                    android:id="@+id/status_icon_3"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:src="@drawable/ic_check_blue"
-                                    app:tint="@color/menu_background_color"
-                                    android:padding="5dp"
-                                    android:visibility="gone"/>
-                            </com.google.android.material.card.MaterialCardView>
-
-                        </LinearLayout>
-                        
-                        <TextView
-                            android:id="@+id/order_status_text"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:textAlignment="center"
-                            android:text="@string/status_order_accepted"
-                            android:textSize="22sp"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:layout_marginHorizontal="16dp" />
-
-                        <LinearLayout
-                            android:id="@+id/layout_search_controls"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-
+                            android:orientation="vertical"
+                            android:gravity="center_horizontal"
+                            android:layout_marginTop="10dp"     
+                            android:layout_marginBottom="10dp"> 
                             <TextView
-                                android:id="@+id/tv_search_tariff_subtitle"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center"
-                                android:textAlignment="center"
-                                tools:text="Стандарт"
-                                android:textSize="16sp"
-                                android:textColor="@color/text_secondary"
-                                android:layout_marginTop="4dp"
-                                android:layout_marginBottom="24dp"
-                                android:layout_marginHorizontal="16dp" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="@color/divider_color" 
-                                android:layout_marginBottom="16dp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal"
-                                android:baselineAligned="false"
-                                android:layout_marginBottom="8dp"
-                                android:layout_marginHorizontal="16dp">
-
-                                <com.google.android.material.card.MaterialCardView
-                                    android:id="@+id/btn_search_change_payment"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:layout_marginEnd="6dp"
-                                    app:cardBackgroundColor="@color/menu_background_color" 
-                                    app:cardCornerRadius="12dp"
-                                    app:cardElevation="0dp">
-                                    <TextView
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/label_payment_type"
-                                        android:textColor="@color/text_primary"
-                                        android:textStyle="bold"
-                                        android:textSize="16sp"
-                                        android:gravity="center"
-                                        android:paddingVertical="16dp"/>
-                                </com.google.android.material.card.MaterialCardView>
-
-                                <com.google.android.material.card.MaterialCardView
-                                    android:id="@+id/btn_search_change_price"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:layout_marginStart="6dp"
-                                    app:cardBackgroundColor="@color/menu_background_color"
-                                    app:cardCornerRadius="12dp"
-                                    app:cardElevation="0dp">
-                                    <TextView
-                                        android:layout_width="match_parent"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/btn_change_price"
-                                        android:textColor="@color/text_primary"
-                                        android:textStyle="bold"
-                                        android:textSize="16sp"
-                                        android:gravity="center"
-                                        android:paddingVertical="16dp"/>
-                                </com.google.android.material.card.MaterialCardView>
-                            </LinearLayout>
-
-                            <Button
-                                android:id="@+id/btn_cancel_order"
-                                android:layout_width="match_parent"
-                                android:layout_height="56dp"
-                                android:layout_marginTop="0dp"
-                                android:text="@string/btn_cancel_order"
-                                android:textColor="@color/taxi_red_cancel"  
-                                android:textSize="16sp"
-                                android:textStyle="normal"
-                                android:textAllCaps="false"
-                                app:backgroundTint="@color/menu_background_color"
-                                app:cornerRadius="12dp"
-                                android:insetTop="0dp"
-                                android:insetBottom="0dp"
-                                android:stateListAnimator="@null"
-                                android:elevation="0dp"
-                                android:layout_marginHorizontal="16dp" />
-
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/layout_driver_found_state"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:layout_marginHorizontal="16dp"
-                        android:visibility="gone">
-
-                        <LinearLayout
-                            android:id="@+id/layout_active_order_price"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="16dp"
-                            android:visibility="gone"> 
-                            
-                            <TextView
-                                android:id="@+id/tv_active_order_price"
+                                android:id="@+id/tv_car_plate_large"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                tools:text="92 ₴"
-                                android:textSize="28sp"
+                                tools:text="AA 0000 AA"
+                                android:textSize="18sp"
                                 android:textStyle="bold"
-                                android:textColor="@color/text_primary" />
-                                
-                            <ImageView
-                                android:id="@+id/iv_active_order_payment"
-                                android:layout_width="40dp"
-                                android:layout_height="24dp"
-                                android:layout_marginStart="12dp"
-                                android:src="@drawable/ic_cash" />
+                                android:textColor="@color/text_primary"
+                                android:background="@drawable/bg_car_number"
+                                android:paddingHorizontal="14dp"
+                                android:paddingVertical="6dp"
+                                android:letterSpacing="0.05" />
+                                        
+                            <TextView
+                                android:id="@+id/tv_car_details_subtitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                tools:text="Білий Skoda Octavia"
+                                android:textSize="15sp"
+                                android:textColor="@color/text_secondary"
+                                android:layout_marginTop="10dp" />  
                         </LinearLayout>
 
-                        <LinearLayout
-                            android:id="@+id/layout_driver_assigned_details"
+                        <RelativeLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:visibility="visible">
+                            android:layout_marginBottom="16dp">
+
+                            <androidx.cardview.widget.CardView
+                                android:id="@+id/cv_photo_container"
+                                android:layout_width="52dp"
+                                android:layout_height="52dp"
+                                app:cardCornerRadius="26dp"
+                                app:cardElevation="0dp"
+                                android:layout_centerVertical="true">
+                                
+                                <ImageView
+                                    android:id="@+id/iv_driver_photo"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:src="@drawable/ic_avatar_placeholder"
+                                    android:scaleType="centerCrop" />
+                            </androidx.cardview.widget.CardView>
 
                             <LinearLayout
-                                android:layout_width="match_parent"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:orientation="vertical"
-                                android:gravity="center_horizontal"
-                                android:layout_marginTop="10dp"     
-                                android:layout_marginBottom="10dp"> 
+                                android:layout_toEndOf="@id/cv_photo_container"
+                                android:layout_centerVertical="true"
+                                android:layout_marginStart="16dp">
+                                
                                 <TextView
-                                    android:id="@+id/tv_car_plate_large"
+                                    android:id="@+id/tv_driver_first_name"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    tools:text="AA 0000 AA"
+                                    tools:text="Костянтин"
                                     android:textSize="18sp"
                                     android:textStyle="bold"
-                                    android:textColor="@color/text_primary"
-                                    android:background="@drawable/bg_car_number"
-                                    android:paddingHorizontal="14dp"
-                                    android:paddingVertical="6dp"
-                                    android:letterSpacing="0.05" />
-                                            
-                                <TextView
-                                    android:id="@+id/tv_car_details_subtitle"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    tools:text="Білий Skoda Octavia"
-                                    android:textSize="15sp"
-                                    android:textColor="@color/text_secondary"
-                                    android:layout_marginTop="10dp" />  
-                            </LinearLayout>
-
-                            <RelativeLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginBottom="16dp">
-
-                                <androidx.cardview.widget.CardView
-                                    android:id="@+id/cv_photo_container"
-                                    android:layout_width="52dp"
-                                    android:layout_height="52dp"
-                                    app:cardCornerRadius="26dp"
-                                    app:cardElevation="0dp"
-                                    android:layout_centerVertical="true">
-                                    
-                                    <ImageView
-                                        android:id="@+id/iv_driver_photo"
-                                        android:layout_width="match_parent"
-                                        android:layout_height="match_parent"
-                                        android:src="@drawable/ic_avatar_placeholder"
-                                        android:scaleType="centerCrop" />
-                                </androidx.cardview.widget.CardView>
+                                    android:textColor="@color/text_primary" />
 
                                 <LinearLayout
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:orientation="vertical"
-                                    android:layout_toEndOf="@id/cv_photo_container"
-                                    android:layout_centerVertical="true"
-                                    android:layout_marginStart="16dp">
-                                    
+                                    android:layout_marginTop="4dp">
+
                                     <TextView
-                                        android:id="@+id/tv_driver_first_name"
+                                        android:id="@+id/tv_driver_experience"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        tools:text="Костянтин"
-                                        android:textSize="18sp"
-                                        android:textStyle="bold"
-                                        android:textColor="@color/text_primary" />
+                                        tools:text="★ 5.0 В службі"
+                                        android:textSize="14sp"
+                                        android:textColor="@color/text_secondary" />
 
-                                    <LinearLayout
+                                    <TextView
+                                        android:id="@+id/tv_driver_rides_count"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:orientation="vertical"
-                                        android:layout_marginTop="4dp">
-
-                                        <TextView
-                                            android:id="@+id/tv_driver_experience"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            tools:text="★ 5.0 В службі"
-                                            android:textSize="14sp"
-                                            android:textColor="@color/text_secondary" />
-
-                                        <TextView
-                                            android:id="@+id/tv_driver_rides_count"
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            tools:text="Поїздок: 753"
-                                            android:textSize="14sp"
-                                            android:textColor="@color/text_secondary"
-                                            android:layout_marginTop="2dp" />
-                                    </LinearLayout>
+                                        tools:text="Поїздок: 753"
+                                        android:textSize="14sp"
+                                        android:textColor="@color/text_secondary"
+                                        android:layout_marginTop="2dp" />
                                 </LinearLayout>
+                            </LinearLayout>
 
-                                <LinearLayout
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true">
+
+                                <androidx.cardview.widget.CardView
+                                    android:id="@+id/btn_driver_health_alert"
+                                    android:layout_width="44dp"
+                                    android:layout_height="44dp"
+                                    android:layout_marginEnd="10dp"
+                                    android:layout_gravity="center_vertical"
+                                    app:cardCornerRadius="22dp"
+                                    app:cardElevation="0dp"
+                                    app:cardBackgroundColor="@android:color/transparent" 
+                                    android:visibility="gone"
+                                    tools:visibility="visible">
+
+                                    <ImageView
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:src="@drawable/ic_alert_circle"
+                                        android:background="?attr/selectableItemBackgroundBorderless" 
+                                        android:padding="4dp" 
+                                        app:tint="@color/taxi_red_cancel" />
+                                </androidx.cardview.widget.CardView>
+
+                                <RelativeLayout
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:orientation="horizontal"
-                                    android:layout_alignParentEnd="true"
-                                    android:layout_centerVertical="true">
-
-                                    <androidx.cardview.widget.CardView
-                                        android:id="@+id/btn_driver_health_alert"
-                                        android:layout_width="44dp"
-                                        android:layout_height="44dp"
-                                        android:layout_marginEnd="10dp"
-                                        android:layout_gravity="center_vertical"
-                                        app:cardCornerRadius="22dp"
-                                        app:cardElevation="0dp"
-                                        app:cardBackgroundColor="@android:color/transparent" 
-                                        android:visibility="gone"
-                                        tools:visibility="visible">
-
-                                        <ImageView
-                                            android:layout_width="match_parent"
-                                            android:layout_height="match_parent"
-                                            android:src="@drawable/ic_alert_circle"
-                                            android:background="?attr/selectableItemBackgroundBorderless" 
-                                            android:padding="4dp" 
-                                            app:tint="@color/taxi_red_cancel" />
-                                    </androidx.cardview.widget.CardView>
-
-                                    <RelativeLayout
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginEnd="10dp">
-
-                                        <androidx.cardview.widget.CardView
-                                            android:layout_width="52dp"
-                                            android:layout_height="52dp"
-                                            app:cardCornerRadius="12dp"
-                                            app:cardElevation="0dp"
-                                            app:cardBackgroundColor="@color/input_background">
-
-                                            <ImageButton
-                                                android:id="@+id/btn_chat_driver"
-                                                android:layout_width="match_parent"
-                                                android:layout_height="match_parent"
-                                                android:src="@drawable/ic_comment"
-                                                android:background="?attr/selectableItemBackground"
-                                                android:padding="14dp"
-                                                app:tint="@color/text_primary" />
-                                        </androidx.cardview.widget.CardView>
-
-                                        <TextView
-                                            android:id="@+id/tv_chat_badge"
-                                            android:layout_width="18dp"
-                                            android:layout_height="18dp"
-                                            android:layout_alignParentTop="true"
-                                            android:layout_alignParentEnd="true"
-                                            android:background="@drawable/bg_status_pill"
-                                            android:backgroundTint="#FF3B30"
-                                            android:gravity="center"
-                                            tools:text="1"
-                                            android:textColor="@color/white"
-                                            android:textSize="10sp"
-                                            android:textStyle="bold"
-                                            android:elevation="2dp"
-                                            android:visibility="gone" />
-                                    </RelativeLayout>
+                                    android:layout_marginEnd="10dp">
 
                                     <androidx.cardview.widget.CardView
                                         android:layout_width="52dp"
@@ -1205,131 +1045,319 @@
                                         app:cardBackgroundColor="@color/input_background">
 
                                         <ImageButton
-                                            android:id="@+id/btn_call_driver"
+                                            android:id="@+id/btn_chat_driver"
                                             android:layout_width="match_parent"
                                             android:layout_height="match_parent"
-                                            android:src="@drawable/ic_phone"
+                                            android:src="@drawable/ic_comment"
                                             android:background="?attr/selectableItemBackground"
                                             android:padding="14dp"
                                             app:tint="@color/text_primary" />
                                     </androidx.cardview.widget.CardView>
 
-                                </LinearLayout>
-                            </RelativeLayout>
-                        </LinearLayout>
+                                    <TextView
+                                        android:id="@+id/tv_chat_badge"
+                                        android:layout_width="18dp"
+                                        android:layout_height="18dp"
+                                        android:layout_alignParentTop="true"
+                                        android:layout_alignParentEnd="true"
+                                        android:background="@drawable/bg_status_pill"
+                                        android:backgroundTint="#FF3B30"
+                                        android:gravity="center"
+                                        tools:text="1"
+                                        android:textColor="@color/white"
+                                        android:textSize="10sp"
+                                        android:textStyle="bold"
+                                        android:elevation="2dp"
+                                        android:visibility="gone" />
+                                </RelativeLayout>
 
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:layout_marginBottom="16dp"
-                            android:visibility="gone"> 
-                            <TextView
-                                android:id="@+id/tv_order_route_origin"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                tools:text="Миколи Бажана проспект, 10" />
-                            <TextView
-                                android:id="@+id/tv_order_route_dest"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                tools:text="Миколи Амосова, 12" />
-                        </LinearLayout>
+                                <androidx.cardview.widget.CardView
+                                    android:layout_width="52dp"
+                                    android:layout_height="52dp"
+                                    app:cardCornerRadius="12dp"
+                                    app:cardElevation="0dp"
+                                    app:cardBackgroundColor="@color/input_background">
 
-                        <LinearLayout
-                            android:id="@+id/layout_search_details"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="24dp">
-                            <ImageView
-                                android:id="@+id/iv_order_tariff_icon"
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                android:src="@drawable/ic_taxi_model_standard" />
-                            <LinearLayout
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:orientation="vertical">
-                                <TextView android:id="@+id/tv_order_tariff_name" android:layout_width="wrap_content" android:layout_height="wrap_content" />
-                                <TextView android:id="@+id/tv_order_services" android:layout_width="wrap_content" android:layout_height="wrap_content" />
-                                <TextView android:id="@+id/tv_order_comment" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                                    <ImageButton
+                                        android:id="@+id/btn_call_driver"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:src="@drawable/ic_phone"
+                                        android:background="?attr/selectableItemBackground"
+                                        android:padding="14dp"
+                                        app:tint="@color/text_primary" />
+                                </androidx.cardview.widget.CardView>
+
                             </LinearLayout>
-                        </LinearLayout>
-
-                        <Button
-                            android:id="@+id/btn_cancel_ride_driver"
-                            android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:layout_marginTop="0dp"
-                            android:text="@string/btn_cancel_trip"
-                            android:textColor="@color/taxi_red_cancel"  
-                            android:textSize="16sp"
-                            android:textStyle="normal"
-                            android:textAllCaps="false"
-                            app:backgroundTint="@color/menu_background_color"
-                            app:cornerRadius="12dp"
-                            android:insetTop="0dp"
-                            android:insetBottom="0dp"
-                            android:stateListAnimator="@null"
-                            android:elevation="0dp" />
-
+                        </RelativeLayout>
                     </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_expandable_details"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="8dp">
+                    
                     <LinearLayout
-                        android:id="@+id/layout_payment_completed"
+                        android:id="@+id/layout_active_order_price"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="16dp"> 
+                        
+                        <TextView
+                            android:id="@+id/tv_active_order_price"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            tools:text="92 ₴"
+                            android:textSize="28sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary" />
+                            
+                        <ImageView
+                            android:id="@+id/iv_active_order_payment"
+                            android:layout_width="40dp"
+                            android:layout_height="24dp"
+                            android:layout_marginStart="12dp"
+                            android:src="@drawable/ic_cash" />
+                    </LinearLayout>
+
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:visibility="gone"
-                        android:layout_marginHorizontal="16dp"
-                        android:layout_marginTop="16dp"
-                        android:gravity="center_horizontal">
-
+                        android:layout_marginBottom="16dp"> 
                         <TextView
+                            android:id="@+id/tv_order_route_origin"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/label_to_pay"
-                            android:textSize="16sp"
-                            android:textColor="@color/text_secondary" />
-
+                            tools:text="Миколи Бажана проспект, 10" />
                         <TextView
-                            android:id="@+id/tv_final_payment_price"
+                            android:id="@+id/tv_order_route_dest"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            tools:text="0 ₴"
-                            android:textSize="40sp"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"
-                            android:layout_marginTop="4dp"
-                            android:layout_marginBottom="24dp" />
+                            tools:text="Миколи Амосова, 12" />
+                    </LinearLayout>
 
-                        <androidx.constraintlayout.widget.ConstraintLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="60dp"
-                            android:layout_marginBottom="0dp"
-                            android:background="@drawable/bg_button_yellow">
-
-                            <Button
-                                android:id="@+id/btn_understand_payment"
-                                android:layout_width="0dp"
-                                android:layout_height="match_parent"
-                                android:text="@string/btn_understood"
-                                android:textAllCaps="false"
-                                android:textSize="18sp"
-                                android:textStyle="bold"
-                                android:textColor="#454754"
-                                android:background="@android:color/transparent"
-                                android:stateListAnimator="@null"
-                                android:elevation="0dp"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintBottom_toBottomOf="parent" />
-                        </androidx.constraintlayout.widget.ConstraintLayout>
+                    <LinearLayout
+                        android:id="@+id/layout_search_details"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+                        <ImageView
+                            android:id="@+id/iv_order_tariff_icon"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:src="@drawable/ic_taxi_model_standard" />
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginStart="8dp">
+                            <TextView android:id="@+id/tv_order_tariff_name" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                            <TextView android:id="@+id/tv_order_services" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                            <TextView android:id="@+id/tv_order_comment" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
-            </androidx.core.widget.NestedScrollView>
-        </com.google.android.material.card.MaterialCardView>
+
+                <LinearLayout
+                    android:id="@+id/layout_search_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:id="@+id/tv_search_tariff_subtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:textAlignment="center"
+                        tools:text="Стандарт"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="24dp"
+                        android:layout_marginHorizontal="16dp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/divider_color" 
+                        android:layout_marginBottom="16dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:baselineAligned="false"
+                        android:layout_marginBottom="8dp"
+                        android:layout_marginHorizontal="16dp">
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/btn_search_change_payment"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            app:cardBackgroundColor="@color/menu_background_color" 
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="0dp">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/label_payment_type"
+                                android:textColor="@color/text_primary"
+                                android:textStyle="bold"
+                                android:textSize="16sp"
+                                android:gravity="center"
+                                android:paddingVertical="16dp"/>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/btn_search_change_price"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            app:cardBackgroundColor="@color/menu_background_color"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="0dp">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/btn_change_price"
+                                android:textColor="@color/text_primary"
+                                android:textStyle="bold"
+                                android:textSize="16sp"
+                                android:gravity="center"
+                                android:paddingVertical="16dp"/>
+                        </com.google.android.material.card.MaterialCardView>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp">
+                    
+                    <Button
+                        android:id="@+id/btn_cancel_order"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:text="@string/btn_cancel_order"
+                        android:textColor="@color/taxi_red_cancel"  
+                        android:textSize="16sp"
+                        android:textStyle="normal"
+                        android:textAllCaps="false"
+                        app:backgroundTint="@color/menu_background_color"
+                        app:cornerRadius="12dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:stateListAnimator="@null"
+                        android:elevation="0dp" />
+
+                    <Button
+                        android:id="@+id/btn_cancel_ride_driver"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:text="@string/btn_cancel_trip"
+                        android:textColor="@color/taxi_red_cancel"  
+                        android:textSize="16sp"
+                        android:textStyle="normal"
+                        android:textAllCaps="false"
+                        app:backgroundTint="@color/menu_background_color"
+                        app:cornerRadius="12dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:stateListAnimator="@null"
+                        android:elevation="0dp"
+                        android:visibility="gone"/>
+                </FrameLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_payment_completed"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/label_to_pay"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/tv_final_payment_price"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        tools:text="0 ₴"
+                        android:textSize="40sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="24dp" />
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="60dp"
+                        android:layout_marginBottom="0dp"
+                        android:background="@drawable/bg_button_yellow">
+
+                        <Button
+                            android:id="@+id/btn_understand_payment"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:text="@string/btn_understood"
+                            android:textAllCaps="false"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="#454754"
+                            android:background="@android:color/transparent"
+                            android:stateListAnimator="@null"
+                            android:elevation="0dp"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintBottom_toBottomOf="parent" />
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/handle_touch_zone"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_gravity="top">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/btn_expand_handle"
+                    android:layout_width="40dp"
+                    android:layout_height="4dp"
+                    android:layout_gravity="top|center_horizontal"
+                    android:layout_marginTop="12dp"
+                    app:cardCornerRadius="2dp"
+                    app:cardBackgroundColor="#E0E0E0"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="0dp"/>
+            </FrameLayout>
+
+        </FrameLayout>
+    </androidx.core.widget.NestedScrollView>
+</com.google.android.material.card.MaterialCardView>
 
         <LinearLayout
             android:id="@+id/layout_map_picker_panel"

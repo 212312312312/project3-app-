@@ -3,6 +3,9 @@ package com.taxiapp.client
 import android.Manifest
 import android.view.Window
 import android.text.Spannable
+import android.view.MotionEvent
+import android.transition.AutoTransition
+import android.transition.TransitionManager
 import com.facebook.shimmer.ShimmerFrameLayout
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
@@ -148,6 +151,15 @@ private var lastAddressPickerIntentData: Intent? = null
     
     private val currentWaypoints = mutableListOf<Pair<LatLng, String>>()
 
+
+
+// --- Змінні для розгортання деталей замовлення ---
+    private lateinit var handleTouchZone: FrameLayout
+    private lateinit var layoutExpandableDetails: LinearLayout
+    private var isOrderDetailsExpanded = false
+
+
+
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var btnMenu: CardView
     private lateinit var ivMenuIcon: ImageView
@@ -292,7 +304,7 @@ private lateinit var statusLine2: com.google.android.material.card.MaterialCardV
 private lateinit var statusCircle3: com.google.android.material.card.MaterialCardView
 private lateinit var statusIcon3: ImageView
 
-
+private var maxDetailsHeight = 0
 
 private lateinit var cardWaitingTimer: View
 private lateinit var tvNewWaitingTimer: TextView
@@ -1045,6 +1057,95 @@ btnConfirmMapPicker.setOnClickListener {
         containerDestination = findViewById(R.id.container_destination)
         tvDestination = findViewById(R.id.text_view_destination)
 
+
+
+        layoutExpandableDetails = findViewById(R.id.layout_expandable_details)
+        handleTouchZone = findViewById(R.id.handle_touch_zone)
+
+        var startY = 0f
+        var startHeight = 0
+        var lastPaddingUpdateHeight = 0
+
+        handleTouchZone.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startY = event.rawY
+                    v.parent.requestDisallowInterceptTouchEvent(true)
+
+                    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: 
+                    // Если высота была WRAP_CONTENT, берем реальную высоту вью на экране
+                    startHeight = if (layoutExpandableDetails.layoutParams.height <= 0) {
+                        layoutExpandableDetails.height
+                    } else {
+                        layoutExpandableDetails.layoutParams.height
+                    }
+
+                    // Если мы еще не измерили максимальную высоту — измеряем
+                    if (maxDetailsHeight == 0 || maxDetailsHeight < layoutExpandableDetails.height) {
+                        val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
+                        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                        layoutExpandableDetails.measure(widthSpec, heightSpec)
+                        maxDetailsHeight = layoutExpandableDetails.measuredHeight
+                    }
+
+                    // Переключаем в режим ручного управления высотой
+                    val params = layoutExpandableDetails.layoutParams
+                    params.height = startHeight
+                    layoutExpandableDetails.layoutParams = params
+                    layoutExpandableDetails.visibility = View.VISIBLE
+                    
+                    lastPaddingUpdateHeight = startHeight
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val diffY = startY - event.rawY // Вверх - плюс, Вниз - минус
+                    var newHeight = (startHeight + diffY).toInt()
+
+                    // Ограничители, чтобы не вылезти за края
+                    if (newHeight < 0) newHeight = 0
+                    if (newHeight > maxDetailsHeight) newHeight = maxDetailsHeight
+
+                    val params = layoutExpandableDetails.layoutParams
+                    params.height = newHeight
+                    layoutExpandableDetails.layoutParams = params
+
+                    // Плавный логотип Google (обновляем карту каждые 15 пикселей движения)
+                    if (Math.abs(newHeight - lastPaddingUpdateHeight) > 15) {
+                        if (!isDestroyed && !isFinishing) updateMapPadding(activeOrderCard, 0f, 20f)
+                        lastPaddingUpdateHeight = newHeight
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    v.parent.requestDisallowInterceptTouchEvent(false)
+                    
+                    val currentHeight = layoutExpandableDetails.height
+                    
+                    // Если это просто тап (клик)
+                    if (Math.abs(startY - event.rawY) < 20) {
+                        v.performClick()
+                        animateOrderDetailsToState(!isOrderDetailsExpanded)
+                        return@setOnTouchListener true
+                    }
+
+                    // Логика доводки: 
+                    // Если тянули ВНИЗ и прошли больше 20% пути — закрываем.
+                    // Если тянули ВВЕРХ и прошли больше 20% — открываем.
+                    val movedDistance = currentHeight.toFloat() / maxDetailsHeight.toFloat()
+                    
+                    if (isOrderDetailsExpanded) {
+                        // Была открыта, проверяем на закрытие
+                        animateOrderDetailsToState(movedDistance > 0.8f) 
+                    } else {
+                        // Была закрыта, проверяем на открытие
+                        animateOrderDetailsToState(movedDistance > 0.2f)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
         buttonsShimmer = findViewById(R.id.buttons_shimmer_container)
 
 
@@ -1421,6 +1522,30 @@ btnChangePrice.setOnClickListener {
                 openAddressPicker(false, true)
             }
         }
+    }
+
+    private fun toggleOrderDetails() {
+        isOrderDetailsExpanded = !isOrderDetailsExpanded
+
+        // 1. Анімація самої картки
+        val autoTransition = AutoTransition()
+        autoTransition.duration = 250 
+        TransitionManager.beginDelayedTransition(activeOrderCard as ViewGroup, autoTransition)
+
+        // 2. Зміна видимості деталей
+        layoutExpandableDetails.visibility = if (isOrderDetailsExpanded) View.VISIBLE else View.GONE
+
+        // 3. Плавна анімація логотипу Google (замість жорсткого Handler)
+        val paddingAnimator = ValueAnimator.ofFloat(0f, 1f)
+        paddingAnimator.duration = 250
+        paddingAnimator.addUpdateListener {
+            // Цей блок викликається на кожному мікро-кадрі анімації
+            if (!isDestroyed && !isFinishing) {
+                // activeOrderCard плавно змінює висоту, а updateMapPadding бере цю висоту в реальному часі!
+                updateMapPadding(activeOrderCard, 0f, 20f)
+            }
+        }
+        paddingAnimator.start()
     }
 
     private fun setDestination(place: Place) {
@@ -3724,6 +3849,47 @@ private fun stopWaitingTimer() {
         })
     }
 
+    private fun animateOrderDetailsToState(expand: Boolean) {
+        isOrderDetailsExpanded = expand
+        
+        val startHeight = layoutExpandableDetails.height
+        val targetHeight = if (expand) maxDetailsHeight else 0
+
+        val animator = ValueAnimator.ofInt(startHeight, targetHeight)
+        animator.duration = 250
+        animator.interpolator = DecelerateInterpolator()
+        
+        var lastAnimUpdate = startHeight
+        animator.addUpdateListener { animation ->
+            val value = animation.animatedValue as Int
+            val params = layoutExpandableDetails.layoutParams
+            params.height = value
+            layoutExpandableDetails.layoutParams = params
+
+            // Двигаем логотип Google вслед за доводкой
+            if (Math.abs(value - lastAnimUpdate) > 15) {
+                if (!isDestroyed && !isFinishing) updateMapPadding(activeOrderCard, 0f, 20f)
+                lastAnimUpdate = value
+            }
+        }
+        
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (!expand) {
+                    layoutExpandableDetails.visibility = View.GONE
+                } else {
+                    // Возвращаем WRAP_CONTENT для гибкости интерфейса
+                    val params = layoutExpandableDetails.layoutParams
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    layoutExpandableDetails.layoutParams = params
+                }
+                // Финальная корректировка карты
+                if (!isDestroyed && !isFinishing) updateMapPadding(activeOrderCard, 0f, 20f)
+            }
+        })
+        animator.start()
+    }
+
     // НОВИЙ МЕТОД: Малює красивий діалог
     private fun showCustomCancelDialog(reasons: List<CancellationReasonDto>) {
     val dialog = Dialog(this)
@@ -4132,7 +4298,6 @@ private fun stopWaitingTimer() {
     when(order.status) {
         "REQUESTED", "OFFERING" -> {
             updateOrderProgress(0)
-            // ИЗМЕНЕНО: Пошук водія...
             orderStatusText.text = getString(R.string.status_searching_driver)
             startStatusBlinking()
             
@@ -4143,6 +4308,11 @@ private fun stopWaitingTimer() {
             layoutDriverDetails.visibility = View.GONE
             layoutPaymentCompleted.visibility = View.GONE 
             
+            // --- КНОПКИ ---
+            btnCancelOrder.visibility = View.VISIBLE
+            btnCancelRideDriver.visibility = View.GONE
+            // --------------
+            
             stopDriverTracking()
             stopWaitingTimer()
             
@@ -4152,16 +4322,19 @@ private fun stopWaitingTimer() {
         "ACCEPTED" -> {
             updateOrderProgress(1)
             stopStatusBlinking()
-            // ИЗМЕНЕНО: Водій їде до вас
             orderStatusText.text = getString(R.string.status_driver_coming)
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.VISIBLE
-            btnCancelRideDriver.visibility = View.VISIBLE
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
             layoutPaymentCompleted.visibility = View.GONE 
+            
+            // --- КНОПКИ ---
+            btnCancelOrder.visibility = View.GONE       // Ховаємо кнопку пошуку
+            btnCancelRideDriver.visibility = View.VISIBLE // Показуємо кнопку для водія
+            // --------------
             
             updateDriverInfo(order)
             stopWaitingTimer()
@@ -4186,16 +4359,19 @@ private fun stopWaitingTimer() {
         "DRIVER_ARRIVED" -> {
             updateOrderProgress(1)
             stopStatusBlinking()
-            // ИЗМЕНЕНО: Водій на місці
             orderStatusText.text = getString(R.string.status_driver_arrived) 
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.VISIBLE
-            btnCancelRideDriver.visibility = View.VISIBLE
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
             layoutPaymentCompleted.visibility = View.GONE 
+            
+            // --- КНОПКИ ---
+            btnCancelOrder.visibility = View.GONE       // Ховаємо кнопку пошуку
+            btnCancelRideDriver.visibility = View.VISIBLE // Показуємо кнопку для водія
+            // --------------
             
             updateDriverInfo(order)
             startWaitingTimer(order)
@@ -4220,16 +4396,19 @@ private fun stopWaitingTimer() {
         "IN_PROGRESS" -> {
             updateOrderProgress(2)
             stopStatusBlinking()
-            // ИЗМЕНЕНО: В дорозі
             orderStatusText.text = getString(R.string.status_in_progress)
             
             layoutSearchControls.visibility = View.GONE
             layoutDriverFoundState.visibility = View.VISIBLE
-            btnCancelRideDriver.visibility = View.GONE
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.VISIBLE
             layoutPaymentCompleted.visibility = View.GONE 
+            
+            // --- КНОПКИ --- (Коли в дорозі - зазвичай скасувати не можна)
+            btnCancelOrder.visibility = View.GONE
+            btnCancelRideDriver.visibility = View.GONE
+            // --------------
             
             updateDriverInfo(order)
             stopWaitingTimer()
@@ -4254,7 +4433,6 @@ private fun stopWaitingTimer() {
         "COMPLETED" -> {
             updateOrderProgress(3)
             stopStatusBlinking()
-            // ИЗМЕНЕНО: Поїздку завершено
             orderStatusText.text = getString(R.string.status_completed)
             
             layoutSearchControls.visibility = View.GONE
@@ -4262,6 +4440,11 @@ private fun stopWaitingTimer() {
             
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.GONE
+            
+            // --- КНОПКИ --- (Поїздка завершена, кнопок скасування бути не повинно)
+            btnCancelOrder.visibility = View.GONE
+            btnCancelRideDriver.visibility = View.GONE
+            // --------------
             
             stopDriverTracking()
             stopWaitingTimer()
@@ -4275,7 +4458,6 @@ private fun stopWaitingTimer() {
                 layoutPaymentCompleted.visibility = View.GONE
                 
                 if (!order.isRatedByClient) {
-                    // ИЗМЕНЕНО: "водієм" вынесено в ресурсы (если вдруг в этом месте драйвер null)
                     val driverName = order.driver?.fullName ?: getString(R.string.default_driver_name)
                     showRatingDialog(order.id, driverName)
                 } else {
@@ -4298,6 +4480,11 @@ private fun stopWaitingTimer() {
             layoutSearchDetails.visibility = View.GONE
             layoutDriverDetails.visibility = View.GONE
             layoutPaymentCompleted.visibility = View.GONE
+            
+            // --- КНОПКИ --- (Скасовано, нічого не показуємо)
+            btnCancelOrder.visibility = View.GONE
+            btnCancelRideDriver.visibility = View.GONE
+            // --------------
             
             stopDriverTracking()
             stopWaitingTimer()
