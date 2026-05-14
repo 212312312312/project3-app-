@@ -53,7 +53,10 @@ object ApiClient {
 
     private val tokenAuthenticator = object : Authenticator {
         override fun authenticate(route: Route?, response: Response): Request? {
+            println(">>> OKHTTP AUTHENTICATOR: Triggered for 401 error!") // <-- Проверяем, сработал ли триггер
+
             if (response.priorResponse?.code == 401) {
+                println(">>> OKHTTP AUTHENTICATOR: Double 401, aborting.")
                 return null
             }
 
@@ -64,23 +67,28 @@ object ApiClient {
                 val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
 
                 if (currentSavedToken != null && currentSavedToken != requestToken) {
+                    println(">>> OKHTTP AUTHENTICATOR: Token already refreshed, retrying.")
                     return response.request.newBuilder()
                         .header("Authorization", "Bearer $currentSavedToken")
                         .build()
                 }
 
                 val refreshToken = sm.fetchRefreshToken()
+                println(">>> OKHTTP AUTHENTICATOR: Refresh token in SessionManager: '$refreshToken'") // <-- Смотрим, есть ли токен
+
                 if (refreshToken.isNullOrEmpty()) {
+                    println(">>> OKHTTP AUTHENTICATOR: NO REFRESH TOKEN! Throwing to login screen.")
                     ServerStatusBus.triggerSessionExpired()
                     return null
                 }
 
                 try {
-                    // ИСПОЛЬЗУЕМ authService ОТ ЧИСТОГО КЛИЕНТА
+                    println(">>> OKHTTP AUTHENTICATOR: Sending request to /auth/refresh...")
                     val refreshCall = authService.refreshToken(TokenRefreshRequestDto(refreshToken))
                     val refreshResponse = refreshCall.execute()
 
                     if (refreshResponse.isSuccessful && refreshResponse.body() != null) {
+                        println(">>> OKHTTP AUTHENTICATOR: SUCCESS! Got new tokens.")
                         val loginResponse = refreshResponse.body()!!
 
                         sm.saveAuthToken(loginResponse.token)
@@ -92,11 +100,13 @@ object ApiClient {
                             .header("Authorization", "Bearer ${loginResponse.token}")
                             .build()
                     } else {
+                        println(">>> OKHTTP AUTHENTICATOR: Refresh FAILED with code ${refreshResponse.code()}")
                         sm.clearSession()
                         ServerStatusBus.triggerSessionExpired()
                         return null
                     }
                 } catch (e: Exception) {
+                    println(">>> OKHTTP AUTHENTICATOR: CRASH during refresh: ${e.message}")
                     e.printStackTrace()
                     return null
                 }
