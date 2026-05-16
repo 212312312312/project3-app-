@@ -511,7 +511,12 @@ private fun fetchAddressAtCurrentLocation() {
             btnOrderTaxi.text = "Оберіть тариф"
             selectedTariffItem = null
             
-            showToast("Послуги додано: +${servicesExtraCost.toInt()} грн")
+            // Новая логика уведомлений (без цены)
+            if (selectedServiceIds.isNotEmpty()) {
+                showToast("Послугу додано")
+            } else {
+                showToast("Послугу вилучено")
+            }
         }
     }
 
@@ -1072,15 +1077,12 @@ btnConfirmMapPicker.setOnClickListener {
                     startY = event.rawY
                     v.parent.requestDisallowInterceptTouchEvent(true)
 
-                    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: 
-                    // Если высота была WRAP_CONTENT, берем реальную высоту вью на экране
                     startHeight = if (layoutExpandableDetails.layoutParams.height <= 0) {
                         layoutExpandableDetails.height
                     } else {
                         layoutExpandableDetails.layoutParams.height
                     }
 
-                    // Если мы еще не измерили максимальную высоту — измеряем
                     if (maxDetailsHeight == 0 || maxDetailsHeight < layoutExpandableDetails.height) {
                         val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
                         val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
@@ -1088,12 +1090,11 @@ btnConfirmMapPicker.setOnClickListener {
                         maxDetailsHeight = layoutExpandableDetails.measuredHeight
                     }
 
-                    // Переключаем в режим ручного управления высотой
+                    // Просто фіксуємо стартову висоту, АЛЕ НЕ РОБИМО панель відразу видимою!
                     val params = layoutExpandableDetails.layoutParams
                     params.height = startHeight
                     layoutExpandableDetails.layoutParams = params
-                    layoutExpandableDetails.visibility = View.VISIBLE
-                    
+
                     lastPaddingUpdateHeight = startHeight
                     true
                 }
@@ -1105,11 +1106,18 @@ btnConfirmMapPicker.setOnClickListener {
                     if (newHeight < 0) newHeight = 0
                     if (newHeight > maxDetailsHeight) newHeight = maxDetailsHeight
 
+                    // ВМИКАЄМО ВИДИМІСТЬ ТІЛЬКИ ЯКЩО ВИСОТА > 0 (Уникаємо стрибка марджинів)
+                    if (newHeight > 0 && layoutExpandableDetails.visibility != View.VISIBLE) {
+                        layoutExpandableDetails.visibility = View.VISIBLE
+                    } else if (newHeight == 0 && layoutExpandableDetails.visibility == View.VISIBLE) {
+                        layoutExpandableDetails.visibility = View.GONE
+                    }
+
                     val params = layoutExpandableDetails.layoutParams
                     params.height = newHeight
                     layoutExpandableDetails.layoutParams = params
 
-                    // Плавный логотип Google (обновляем карту каждые 15 пикселей движения)
+                    // Плавный логотип Google
                     if (Math.abs(newHeight - lastPaddingUpdateHeight) > 15) {
                         if (!isDestroyed && !isFinishing) updateMapPadding(activeOrderCard, 0f, 20f)
                         lastPaddingUpdateHeight = newHeight
@@ -1128,16 +1136,12 @@ btnConfirmMapPicker.setOnClickListener {
                         return@setOnTouchListener true
                     }
 
-                    // Логика доводки: 
-                    // Если тянули ВНИЗ и прошли больше 20% пути — закрываем.
-                    // Если тянули ВВЕРХ и прошли больше 20% — открываем.
+                    // Логика доводки:
                     val movedDistance = currentHeight.toFloat() / maxDetailsHeight.toFloat()
                     
                     if (isOrderDetailsExpanded) {
-                        // Была открыта, проверяем на закрытие
                         animateOrderDetailsToState(movedDistance > 0.8f) 
                     } else {
-                        // Была закрыта, проверяем на открытие
                         animateOrderDetailsToState(movedDistance > 0.2f)
                     }
                     true
@@ -1838,7 +1842,16 @@ btnChangePrice.setOnClickListener {
 
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-        mMap?.uiSettings?.isCompassEnabled = false
+        
+        // --- ЖЕСТКО ОТКЛЮЧАЕМ ВСЕ СИСТЕМНЫЕ КНОПКИ И ПАНЕЛИ GOOGLE MAPS ---
+        mMap?.uiSettings?.apply {
+            isMapToolbarEnabled = false       // УБИРАЕТ ту самую панель (маршрут/открыть в картах) при клике на маркеры!
+            isCompassEnabled = false          // Убирает системный компас
+            isZoomControlsEnabled = false     // Убирает системные кнопки +/-
+            isMyLocationButtonEnabled = false // Убирает системную кнопку геолокации вверху справа
+            isIndoorLevelPickerEnabled = false // Убирает выбор этажей внутри ТЦ (чтобы не перекрывало UI)
+        }
+
         if (sessionManager.isDarkMode()) {
             try {
                 mMap?.setMapStyle(MapStyleOptions.loadRawResourceStyle(this, R.raw.map_style_dark))
@@ -1856,11 +1869,9 @@ btnChangePrice.setOnClickListener {
         val cityZoom = cityToLoad?.zoom ?: 11f
         mMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(cityCenter, cityZoom))
 
-        mMap?.uiSettings?.isZoomControlsEnabled = false
-
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             mMap?.isMyLocationEnabled = true
-            mMap?.uiSettings?.isMyLocationButtonEnabled = false 
+            // isMyLocationButtonEnabled = false мы уже прописали глобально в блоке выше, так надежнее
             if (currentCity != null) recenterMapOnUser()
         }
 
@@ -3852,6 +3863,12 @@ private fun stopWaitingTimer() {
     private fun animateOrderDetailsToState(expand: Boolean) {
         isOrderDetailsExpanded = expand
         
+        // НОВИЙ БЛОК: Обов'язково вмикаємо видимість ПЕРЕД початком анімації розширення, 
+        // щоб вона не відбувалася "в сліпу"
+        if (expand && layoutExpandableDetails.visibility != View.VISIBLE) {
+            layoutExpandableDetails.visibility = View.VISIBLE
+        }
+        
         val startHeight = layoutExpandableDetails.height
         val targetHeight = if (expand) maxDetailsHeight else 0
 
@@ -4099,51 +4116,56 @@ private fun stopWaitingTimer() {
     }
 
     private fun setButtonsLoadingState(isLoading: Boolean) {
-    // 1. Управляем мерцанием самих кнопок
-    if (isLoading) {
-        buttonsShimmer.showShimmer(true) // Возвращаем маску, если она была скрыта
-        buttonsShimmer.startShimmer()    // Запускаем анимацию
-    } else {
-        buttonsShimmer.stopShimmer()     // Останавливаем анимацию
-        buttonsShimmer.hideShimmer()     // ВОТ ОНО: Полностью удаляем застрявший градиент!
-    }
+        // Проверяем, вызвана ли загрузка именно нажатием на кнопку "Замовити"
+        val isOrdering = btnOrderTaxi.text.toString() == "Обробка..."
 
-    // 2. Прячем или показываем иконки
-    val iconVisibility = if (isLoading) View.INVISIBLE else View.VISIBLE
-    
-    findViewById<View>(R.id.iv_comment_icon).visibility = iconVisibility
-    findViewById<View>(R.id.iv_payment_icon).visibility = iconVisibility
-    findViewById<View>(R.id.iv_services_icon).visibility = iconVisibility
-    findViewById<View>(R.id.iv_price_icon).visibility = iconVisibility
-
-    // 3. БРОНЕБОЙНАЯ логика для текста оплаты
-    val paymentText = findViewById<TextView>(R.id.tv_payment_method_text)
-    if (isLoading) {
-        // Если текст сейчас видим, прячем и запоминаем
-        if (paymentText.visibility == View.VISIBLE) {
-            paymentText.tag = "was_visible"
-            paymentText.visibility = View.INVISIBLE
-        }
-    } else {
-        // Загрузка закончилась. 
-        // Показываем текст ТОЛЬКО если мы его прятали (есть тег) 
-        // ИЛИ если внутри текста есть реальные данные (не пустая строка)
-        val hasActualText = paymentText.text?.toString()?.isNotBlank() == true
-        
-        if (paymentText.tag == "was_visible" || hasActualText) {
-            paymentText.visibility = View.VISIBLE
-            paymentText.tag = null // очищаем память
+        // 1. Управляем мерцанием самих кнопок
+        // Включаем шиммер ТОЛЬКО если это обычная загрузка (не отправка заказа)
+        if (isLoading && !isOrdering) {
+            buttonsShimmer.showShimmer(true) // Возвращаем маску, если она была скрыта
+            buttonsShimmer.startShimmer()    // Запускаем анимацию
         } else {
-            paymentText.visibility = View.GONE
+            buttonsShimmer.stopShimmer()     // Останавливаем анимацию
+            buttonsShimmer.hideShimmer()     // Полностью удаляем градиент!
         }
+
+        // 2. Прячем или показываем иконки
+        // Прячем иконки ТОЛЬКО если это обычная загрузка
+        val iconVisibility = if (isLoading && !isOrdering) View.INVISIBLE else View.VISIBLE
+        
+        findViewById<View>(R.id.iv_comment_icon).visibility = iconVisibility
+        findViewById<View>(R.id.iv_payment_icon).visibility = iconVisibility
+        findViewById<View>(R.id.iv_services_icon).visibility = iconVisibility
+        findViewById<View>(R.id.iv_price_icon).visibility = iconVisibility
+
+        // 3. БРОНЕБОЙНАЯ логика для текста оплаты
+        val paymentText = findViewById<TextView>(R.id.tv_payment_method_text)
+        if (isLoading && !isOrdering) {
+            // Если текст сейчас видим, прячем и запоминаем
+            if (paymentText.visibility == View.VISIBLE) {
+                paymentText.tag = "was_visible"
+                paymentText.visibility = View.INVISIBLE
+            }
+        } else {
+            // Загрузка закончилась (ИЛИ мы сейчас отправляем заказ - тогда текст не трогаем)
+            val hasActualText = paymentText.text?.toString()?.isNotBlank() == true
+            
+            if (paymentText.tag == "was_visible" || hasActualText) {
+                paymentText.visibility = View.VISIBLE
+                paymentText.tag = null // очищаем память
+            } else {
+                paymentText.visibility = View.GONE
+            }
+        }
+        
+        // 4. Отключаем кликабельность
+        // ВАЖНО: А вот блокировать кнопки от нажатий мы должны ВСЕГДА, пока идет любая загрузка (isLoading),
+        // чтобы пользователь не начал менять цену или писать комментарий во время отправки заказа на сервер.
+        findViewById<View>(R.id.btn_open_comment).isEnabled = !isLoading
+        findViewById<View>(R.id.btn_open_payment).isEnabled = !isLoading
+        findViewById<View>(R.id.btn_open_services).isEnabled = !isLoading
+        findViewById<View>(R.id.btn_change_price).isEnabled = !isLoading
     }
-    
-    // 4. Отключаем кликабельность
-    findViewById<View>(R.id.btn_open_comment).isEnabled = !isLoading
-    findViewById<View>(R.id.btn_open_payment).isEnabled = !isLoading
-    findViewById<View>(R.id.btn_open_services).isEnabled = !isLoading
-    findViewById<View>(R.id.btn_change_price).isEnabled = !isLoading
-}
 
     private fun getSnapPointAndDistance(rawLocation: LatLng, route: List<LatLng>): Pair<LatLng, Double> {
         if (route.size < 2) return Pair(rawLocation, 0.0)
