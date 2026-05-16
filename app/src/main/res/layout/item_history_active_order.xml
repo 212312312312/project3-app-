@@ -194,12 +194,11 @@
             android:id="@+id/layout_cancel_container"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_button_yellow"
-            android:backgroundTint="@color/menu_background_color">
+            android:layout_marginTop="16dp">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_cancel_order"
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:text="@string/btn_cancel_order"
@@ -207,9 +206,11 @@
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:textColor="@color/taxi_red_cancel"
-                android:background="@android:color/transparent"
-                android:stateListAnimator="@null"
-                android:elevation="0dp"
+                app:backgroundTint="@color/menu_background_color"
+                app:rippleColor="?attr/colorControlHighlight"
+                app:cornerRadius="12dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"

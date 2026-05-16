@@ -27,29 +27,29 @@ open class BaseActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Слушаем событие "Сессия истекла" (разлогин)
+        // 1. Слушаем событие "Сессия истекла"
         ServerStatusBus.sessionExpired.observe(this) { isExpired ->
             if (isExpired) {
-                ServerStatusBus.resetSessionExpired() // Сбрасываем триггер!
+                ServerStatusBus.resetSessionExpired()
                 handleSessionExpired()
             }
         }
 
-        // 2. Слушаем ошибки сервера (502/503)
+        // 2. Слушаем ошибки сервера (502/503/Timeout)
         ServerStatusBus.serverError.observe(this) { hasError ->
             if (hasError) {
-                ServerStatusBus.resetServerError() // Сбрасываем триггер!
                 showMaintenanceDialog()
+            } else {
+                // НОВОЕ: Если ApiClient успешно достучался до сервера, прячем диалог!
+                hideMaintenanceDialog()
             }
         }
     }
 
     private fun handleSessionExpired() {
-        // Очищаем локальные данные пользователя
         val sessionManager = SessionManager(this)
         sessionManager.clearSession()
 
-        // Перебрасываем на MainActivity и очищаем весь стек экранов
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -63,7 +63,7 @@ open class BaseActivity : AppCompatActivity() {
 
         maintenanceDialog = Dialog(this).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
-            setCancelable(false)
+            setCancelable(false) // Диалог нельзя закрыть кликом мимо
             setContentView(R.layout.dialog_maintenance)
             window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
@@ -80,5 +80,13 @@ open class BaseActivity : AppCompatActivity() {
             }
         }
         maintenanceDialog?.show()
+    }
+
+    // НОВОЕ: Метод для автоматического скрытия диалога
+    private fun hideMaintenanceDialog() {
+        if (maintenanceDialog?.isShowing == true) {
+            maintenanceDialog?.dismiss()
+            maintenanceDialog = null
+        }
     }
 }
