@@ -3821,12 +3821,21 @@ private fun stopWaitingTimer() {
         }
     }
 
-    btnSave.setOnClickListener {
-        val newAddedValue = (currentPrice - minPrice).toDouble()
-        servicesExtraCost = newAddedValue 
-        tariffAdapter.setCustomPrice(selectedItem.tariff.id, newAddedValue)
-        dialog.dismiss()
-    }
+        btnSave.setOnClickListener {
+            val newAddedValue = (currentPrice - minPrice).toDouble()
+
+            // 1. УДАЛИЛИ: servicesExtraCost = newAddedValue
+            // Теперь чаевые не затирают стоимость дополнительных услуг!
+
+            // 2. Отправляем новую цену в адаптер для визуальной отрисовки
+            tariffAdapter.setCustomPrice(selectedItem.tariff.id, newAddedValue)
+
+            // 3. ФИКС ДЛЯ СЕРВЕРА: Принудительно обновляем выбранный тариф в памяти Activity,
+            // чтобы при нажатии "Замовити" на сервер ушел правильный addedValue.
+            selectedTariffItem = selectedTariffItem?.copy(addedValue = newAddedValue) ?: selectedItem.copy(addedValue = newAddedValue)
+
+            dialog.dismiss()
+        }
 
     btnClose.setOnClickListener { dialog.dismiss() }
     dialog.show()

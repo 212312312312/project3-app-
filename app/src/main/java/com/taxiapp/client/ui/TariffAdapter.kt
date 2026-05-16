@@ -204,7 +204,13 @@ class TariffAdapter(
 
     fun setCustomPrice(tariffId: Long, addedValue: Double) {
         customPrices[tariffId] = addedValue
-        recalculateItems()
+        recalculateItems() // Этот метод пересчитает цены и обновит список items
+
+        // НОВЫЙ КОД: Берем обновленный объект тарифа и передаем его обратно в Activity
+        val currentSelected = getSelectedTariff()
+        if (currentSelected != null && currentSelected.tariff.id == tariffId) {
+            onTariffSelected(currentSelected)
+        }
     }
 
     fun clearCustomPrices() {
