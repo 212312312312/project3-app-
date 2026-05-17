@@ -622,26 +622,40 @@ private fun fetchAddressAtCurrentLocation() {
         
         // ДОБАВЛЕНО: Обработка системной кнопки/жеста "Назад"
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (isMapPickingMode) {
-                    // Повертаємося до AddressPicker зі збереженням введених даних
-                    returnToAddressPicker()
-                } else if (activeOrderCard.visibility == View.VISIBLE) {
-                    // Згортаємо замовлення: очищаємо UI та зупиняємо полінг, 
-                    // але НЕ скасовуємо саме замовлення на сервері!
-                    sessionManager.clearActiveOrderId()
-                    viewModel.clearOrderState()
-                    showAddressPanel()
-                } else if (tariffsPanel.visibility == View.VISIBLE) {
-                    // Если мы в тарифах — возвращаемся к полноэкранной карте с адресами
-                    showAddressPanel()
-                } else if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                    drawerLayout.closeDrawer(GravityCompat.START)
-                } else {
-                    finish()
-                }
+    override fun handleOnBackPressed() {
+        // 1. Найвищий пріоритет: якщо відкрито бокове меню - просто закриваємо його
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START)
+        } 
+        // 2. Якщо ми обираємо точку на карті
+        else if (isMapPickingMode) {
+            // Повертаємося до AddressPicker зі збереженням введених даних
+            returnToAddressPicker()
+        } 
+        // 3. Якщо показана картка активного замовлення (ТУТ НАШЕ ОНОВЛЕННЯ)
+        else if (activeOrderCard.visibility == View.VISIBLE) {
+            if (isOrderDetailsExpanded) {
+                // Якщо панель витягнута вгору (карта закрита фоном) — просто опускаємо її
+                animateOrderDetailsToState(false)
+            } else {
+                // Якщо панель вже згорнута внизу — ховаємо замовлення як і раніше
+                // (очищаємо UI та зупиняємо полінг, але НЕ скасовуємо саме замовлення)
+                sessionManager.clearActiveOrderId()
+                viewModel.clearOrderState()
+                showAddressPanel()
             }
-        })
+        } 
+        // 4. Якщо ми на екрані вибору тарифів
+        else if (tariffsPanel.visibility == View.VISIBLE) {
+            // Повертаємося до повноекранної карти з адресами
+            showAddressPanel()
+        } 
+        // 5. Стандартна поведінка - вихід з екрану
+        else {
+            finish()
+        }
+    }
+})
         
         // Первичная загрузка тарифов (базовая)
         viewModel.loadTariffsAndCalculatePrice(null, 0)
@@ -1043,6 +1057,7 @@ btnConfirmMapPicker.setOnClickListener {
                 showToast("Оберіть тариф")
             }
         }
+        
 
 
         btnAddNewOrder = findViewById(R.id.btn_add_new_order)
@@ -1120,29 +1135,31 @@ btnConfirmMapPicker.setOnClickListener {
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val diffY = startY - event.rawY // Вверх - плюс, Вниз - минус
+                    val diffY = startY - event.rawY
                     var newHeight = (startHeight + diffY).toInt()
 
-                    // Ограничители, чтобы не вылезти за края
                     if (newHeight < 0) newHeight = 0
                     if (newHeight > maxDetailsHeight) newHeight = maxDetailsHeight
 
-                    // ВМИКАЄМО ВИДИМІСТЬ ТІЛЬКИ ЯКЩО ВИСОТА > 0 (Уникаємо стрибка марджинів)
+                    // Включаем видимость панели и нашего фона
                     if (newHeight > 0 && layoutExpandableDetails.visibility != View.VISIBLE) {
                         layoutExpandableDetails.visibility = View.VISIBLE
+                        findViewById<View>(R.id.map_solid_overlay)?.visibility = View.VISIBLE
                     } else if (newHeight == 0 && layoutExpandableDetails.visibility == View.VISIBLE) {
                         layoutExpandableDetails.visibility = View.GONE
+                        findViewById<View>(R.id.map_solid_overlay)?.visibility = View.GONE
                     }
 
                     val params = layoutExpandableDetails.layoutParams
                     params.height = newHeight
                     layoutExpandableDetails.layoutParams = params
 
-                    // Плавный логотип Google
-                    if (Math.abs(newHeight - lastPaddingUpdateHeight) > 15) {
-                        if (!isDestroyed && !isFinishing) updateMapPadding(activeOrderCard, 0f, 20f)
-                        lastPaddingUpdateHeight = newHeight
+                    // Плавно меняем прозрачность фона в зависимости от того, как высоко вытянута панель
+                    if (maxDetailsHeight > 0) {
+                        val progress = newHeight.toFloat() / maxDetailsHeight.toFloat()
+                        findViewById<View>(R.id.map_solid_overlay)?.alpha = progress
                     }
+                    
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -1312,6 +1329,12 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         }
 
         btnCancelOrder.setOnClickListener { cancelCurrentOrder() }
+
+        findViewById<View>(R.id.map_solid_overlay)?.setOnClickListener {
+            if (isOrderDetailsExpanded) {
+                animateOrderDetailsToState(false)
+            }
+        }
         
         setupMenuLogic()
     }
@@ -3934,51 +3957,47 @@ private fun stopWaitingTimer() {
     }
 
     private fun animateOrderDetailsToState(expand: Boolean) {
-        isOrderDetailsExpanded = expand
-        
-        // НОВИЙ БЛОК: Обов'язково вмикаємо видимість ПЕРЕД початком анімації розширення, 
-        // щоб вона не відбувалася "в сліпу"
-        if (expand && layoutExpandableDetails.visibility != View.VISIBLE) {
-            layoutExpandableDetails.visibility = View.VISIBLE
-        }
-        
-        val startHeight = layoutExpandableDetails.height
-        val targetHeight = if (expand) maxDetailsHeight else 0
-
-        val animator = ValueAnimator.ofInt(startHeight, targetHeight)
-        animator.duration = 250
-        animator.interpolator = DecelerateInterpolator()
-        
-        var lastAnimUpdate = startHeight
-        animator.addUpdateListener { animation ->
-            val value = animation.animatedValue as Int
-            val params = layoutExpandableDetails.layoutParams
-            params.height = value
-            layoutExpandableDetails.layoutParams = params
-
-            // Двигаем логотип Google вслед за доводкой
-            if (Math.abs(value - lastAnimUpdate) > 15) {
-                if (!isDestroyed && !isFinishing) updateMapPadding(activeOrderCard, 0f, 20f)
-                lastAnimUpdate = value
-            }
-        }
-        
-        animator.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                if (!expand) {
-                    layoutExpandableDetails.visibility = View.GONE
-                } else {
-                    // Возвращаем WRAP_CONTENT для гибкости интерфейса
-                    val params = layoutExpandableDetails.layoutParams
-                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    layoutExpandableDetails.layoutParams = params
-                }
-                // Финальная корректировка карты
-                if (!isDestroyed && !isFinishing) updateMapPadding(activeOrderCard, 0f, 20f)
-            }
-        })
-        animator.start()
+    isOrderDetailsExpanded = expand
+    
+    // --- ПОДСТРАХОВКА: Если высота обнулилась, замеряем её перед анимацией ---
+    if (maxDetailsHeight == 0) {
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        layoutExpandableDetails.measure(widthSpec, heightSpec)
+        maxDetailsHeight = layoutExpandableDetails.measuredHeight
     }
+    
+    val targetHeight = if (expand) maxDetailsHeight else 0
+    val startHeight = layoutExpandableDetails.height
+    val overlay = findViewById<View>(R.id.map_solid_overlay)
+    
+    if (expand && layoutExpandableDetails.visibility != View.VISIBLE) {
+        layoutExpandableDetails.visibility = View.VISIBLE
+        overlay?.visibility = View.VISIBLE
+    }
+    
+    val animator = android.animation.ValueAnimator.ofInt(startHeight, targetHeight)
+    animator.duration = 250
+    animator.addUpdateListener { animation ->
+        val h = animation.animatedValue as Int
+        val params = layoutExpandableDetails.layoutParams
+        params.height = h
+        layoutExpandableDetails.layoutParams = params
+        
+        if (maxDetailsHeight > 0) {
+            overlay?.alpha = h.toFloat() / maxDetailsHeight.toFloat()
+        }
+    }
+    animator.addListener(object : android.animation.AnimatorListenerAdapter() {
+        override fun onAnimationEnd(animation: android.animation.Animator) {
+            if (!expand) {
+                layoutExpandableDetails.visibility = View.GONE
+                overlay?.visibility = View.GONE
+            }
+        }
+    })
+    animator.start()
+}
 
     // НОВИЙ МЕТОД: Малює красивий діалог
     private fun showCustomCancelDialog(reasons: List<CancellationReasonDto>) {
@@ -4447,6 +4466,7 @@ private fun stopWaitingTimer() {
             layoutDriverFoundState.visibility = View.GONE
             
             layoutSearchDetails.visibility = View.VISIBLE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE // Показуємо заголовок "Тариф"
             layoutDriverDetails.visibility = View.GONE
             layoutPaymentCompleted.visibility = View.GONE 
             
@@ -4454,7 +4474,7 @@ private fun stopWaitingTimer() {
             btnCancelOrder.visibility = View.VISIBLE
             btnCancelRideDriver.visibility = View.GONE
             // --------------
-            
+
             stopDriverTracking()
             stopWaitingTimer()
             
@@ -4470,6 +4490,7 @@ private fun stopWaitingTimer() {
             layoutDriverFoundState.visibility = View.VISIBLE
             
             layoutSearchDetails.visibility = View.GONE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE // Ховаємо заголовок "Тариф"
             layoutDriverDetails.visibility = View.VISIBLE
             layoutPaymentCompleted.visibility = View.GONE 
             
@@ -4507,6 +4528,7 @@ private fun stopWaitingTimer() {
             layoutDriverFoundState.visibility = View.VISIBLE
             
             layoutSearchDetails.visibility = View.GONE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE // Ховаємо заголовок "Тариф"
             layoutDriverDetails.visibility = View.VISIBLE
             layoutPaymentCompleted.visibility = View.GONE 
             
@@ -4544,6 +4566,7 @@ private fun stopWaitingTimer() {
             layoutDriverFoundState.visibility = View.VISIBLE
             
             layoutSearchDetails.visibility = View.GONE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE // Ховаємо заголовок "Тариф"
             layoutDriverDetails.visibility = View.VISIBLE
             layoutPaymentCompleted.visibility = View.GONE 
             
@@ -4581,6 +4604,7 @@ private fun stopWaitingTimer() {
             layoutDriverFoundState.visibility = View.GONE
             
             layoutSearchDetails.visibility = View.GONE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE // Ховаємо заголовок "Тариф"
             layoutDriverDetails.visibility = View.GONE
             
             // --- КНОПКИ --- (Поїздка завершена, кнопок скасування бути не повинно)
@@ -4620,6 +4644,7 @@ private fun stopWaitingTimer() {
             layoutDriverFoundState.visibility = View.GONE
             
             layoutSearchDetails.visibility = View.GONE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE // Ховаємо заголовок "Тариф"
             layoutDriverDetails.visibility = View.GONE
             layoutPaymentCompleted.visibility = View.GONE
             
@@ -4636,6 +4661,28 @@ private fun stopWaitingTimer() {
             viewModel.clearOrderState()
             
             Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
+        }
+    }
+    layoutExpandableDetails.post {
+        // Сбрасываем старую огромную высоту
+        maxDetailsHeight = 0 
+        
+        // Замеряем актуальную высоту с учетом скрытого тарифа
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        layoutExpandableDetails.measure(widthSpec, heightSpec)
+        maxDetailsHeight = layoutExpandableDetails.measuredHeight
+        
+        // Если панель в данный момент вытянута вверх - мгновенно подтягиваем дно, убирая пустоту
+        if (isOrderDetailsExpanded) {
+            val params = layoutExpandableDetails.layoutParams
+            params.height = maxDetailsHeight
+            layoutExpandableDetails.layoutParams = params
+        } else {
+            // Если свернута - убеждаемся, что ее высота 0
+            val params = layoutExpandableDetails.layoutParams
+            params.height = 0
+            layoutExpandableDetails.layoutParams = params
         }
     }
 }
@@ -4700,8 +4747,8 @@ if (healthIssues.isNotEmpty()) {
         }
     }
     
-    private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f) {
-    // ДОДАНО: Сповіщаємо систему, що вміст панелі змінився і потрібно перерахувати висоту
+    // ДОБАВИЛИ ПАРАМЕТР recenterMap: Boolean = true по умолчанию
+private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f, recenterMap: Boolean = true) {
     bottomPanel.requestLayout()
 
     bottomPanel.post {
@@ -4711,30 +4758,38 @@ if (healthIssues.isNotEmpty()) {
                 return@post
             }
 
-            val panelHeight = bottomPanel.height
+            var panelHeight = bottomPanel.height
             if (panelHeight == 0) return@post
 
+            // --- НОВАЯ МАГИЯ: Обманываем карту ---
+            // Если это панель активного заказа, мы вычитаем высоту выезжающих деталей.
+            // Теперь карта ВСЕГДА будет думать, что панель свернута, и логотип Google 
+            // будет стоять как влитой!
+            if (bottomPanel.id == R.id.active_order_card) {
+                val detailsView = bottomPanel.findViewById<View>(R.id.layout_expandable_details)
+                if (detailsView != null && detailsView.visibility == View.VISIBLE) {
+                    panelHeight -= detailsView.height
+                }
+            }
+
             var marginBottom = 0
-            var sideMargin = 0 // <--- НОВАЯ ПЕРЕМЕННАЯ ДЛЯ БОКОВОГО ОТСТУПА
+            var sideMargin = 0
 
             val params = bottomPanel.layoutParams
             if (params is ViewGroup.MarginLayoutParams) {
                 marginBottom = params.bottomMargin
-                sideMargin = params.leftMargin // <--- ЧИТАЕМ ТВОИ 8dp НАПРЯМУЮ ИЗ XML
+                sideMargin = params.leftMargin
             }
 
             val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
-            
-            // ВАЖНО: Добавляем marginBottom к общей высоте отступа карты
             val totalBottomPadding = panelHeight + marginBottom + extraBuffer
             val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
-            // ПРИМЕНЯЕМ ОТСТУПЫ: Передаем sideMargin в качестве Left и Right padding!
-            // Логотип Google послушно сдвинется на одну линию с карточкой.
+            // Двигаем элементы Google (логотип, кнопки), чтобы они не перекрывались панелью
             mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
 
-            // Центрируем маршрут, если он есть
-            if (viewModel.currentRoutePolyline != null) {
+            // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Центрируем маршрут ТОЛЬКО если recenterMap == true ---
+            if (recenterMap && viewModel.currentRoutePolyline != null) {
                 try {
                     val boundsBuilder = LatLngBounds.Builder()
                     if (originPlace != null && destinationPlace != null) {

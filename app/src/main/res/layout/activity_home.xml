@@ -750,6 +750,15 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <View
+            android:id="@+id/map_solid_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/menu_background_color"
+            android:alpha="0"
+            android:visibility="gone"
+            android:elevation="10dp" />
+
         <com.google.android.material.card.MaterialCardView
     android:id="@+id/active_order_card"
     android:layout_width="match_parent"
@@ -785,7 +794,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingTop="32dp"
-                android:paddingBottom="24dp">
+                android:paddingBottom="0dp">
 
                 <ImageButton
                     android:id="@+id/btn_add_new_order"
@@ -1110,7 +1119,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Метод оплати"
+                        android:text="@string/label_payment_method"
                         android:textSize="13sp"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold"
@@ -1169,7 +1178,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Маршрут"
+                        android:text="@string/label_route"
                         android:textSize="13sp"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold"
@@ -1221,7 +1230,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Звідки"
+                                    android:text="@string/label_from_point"
                                     android:textSize="12sp"
                                     android:textColor="@color/text_secondary" />
                                 <TextView
@@ -1261,7 +1270,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Проміжні точки"
+                                    android:text="@string/label_waypoints"
                                     android:textSize="12sp"
                                     android:textColor="@color/text_secondary" />
                                 <TextView
@@ -1296,7 +1305,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Куди"
+                                    android:text="@string/label_to_point"
                                     android:textSize="12sp"
                                     android:textColor="@color/text_secondary" />
                                 <TextView
@@ -1312,9 +1321,10 @@
                     </com.google.android.material.card.MaterialCardView>
 
                     <TextView
+                        android:id="@+id/tv_order_tariff_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Тариф"
+                        android:text="@string/label_tariff"
                         android:textSize="13sp"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold"
@@ -1375,7 +1385,7 @@
                         android:id="@+id/tv_comment_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Коментар"
+                        android:text="@string/label_comment"
                         android:textSize="13sp"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold"
@@ -1401,11 +1411,12 @@
                             android:padding="12dp"
                             android:textSize="14sp"
                             android:textColor="@color/text_primary"
-                            android:maxLines="2"               android:ellipsize="end"            tools:text="Чекаю біля 3 під'їзду" />
+                            android:maxLines="2"               
+                            android:ellipsize="end"            
+                            tools:text="Чекаю біля 3 під'їзду" />
                     </com.google.android.material.card.MaterialCardView>
 
                 </LinearLayout>
-
                 <LinearLayout
                     android:id="@+id/layout_search_controls"
                     android:layout_width="match_parent"
@@ -1485,7 +1496,8 @@
                 <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="16dp">
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginBottom="24dp">
                     
                     <Button
                         android:id="@+id/btn_cancel_order"

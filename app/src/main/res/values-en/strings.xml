@@ -14,6 +14,14 @@
     <string name="hint_add_work">Enter work address</string>
     <string name="title_where_from">Where from?</string>
 
+    <string name="label_payment_method">Payment method</string>
+    <string name="label_route">Route</string>
+    <string name="label_from_point">From</string>
+    <string name="label_waypoints">Stops</string>
+    <string name="label_to_point">To</string>
+    <string name="label_tariff">Tariff</string>
+    <string name="label_comment">Comment</string>
+
 
     <string name="agreement_title">User Agreement</string>
     <string name="agreement_text">By continuing, you agree to our terms of service and privacy policy.</string>

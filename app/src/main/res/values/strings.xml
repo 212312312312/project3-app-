@@ -14,7 +14,13 @@
     <string name="hint_to_where">Куди?</string>
     <string name="btn_my_location">Моє місцезнаходження</string>
     <string name="btn_pick_on_map">Вказати на карті</string>
-
+    <string name="label_payment_method">Метод оплати</string>
+    <string name="label_route">Маршрут</string>
+    <string name="label_from_point">Звідки</string>
+    <string name="label_waypoints">Проміжні точки</string>
+    <string name="label_to_point">Куди</string>
+    <string name="label_tariff">Тариф</string>
+    <string name="label_comment">Коментар</string>
 
 
     <!-- Диалог отвязки карты -->
