@@ -38,6 +38,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _cardBoundEvent = MutableLiveData<Boolean>()
     val cardBoundEvent: LiveData<Boolean> get() = _cardBoundEvent
 
+    private val _scheduledOrderSuccess = MutableLiveData<TaxiOrderDto?>()
+    val scheduledOrderSuccess: LiveData<TaxiOrderDto?> get() = _scheduledOrderSuccess
+    fun resetScheduledOrderEvent() {
+        _scheduledOrderSuccess.value = null
+    }
+
     private var profilePollingHandler = Handler(Looper.getMainLooper())
     private var profilePollingRunnable: Runnable? = null
 
@@ -291,7 +297,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
                             startStatusPolling()
                         } else {
-                            _errorMessage.value = "Замовлення заплановано на ${order.scheduledAt}"
+                            // --- ИЗМЕНЕНО: Убираем errorMessage и передаем в новый канал ---
+                            _scheduledOrderSuccess.value = order
                             // Для запланированого також показуємо віджет
                             updateOrderStatusService(order)
                         }
@@ -299,7 +306,39 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _errorMessage.value = "Помилка: сервер повернув порожню відповідь"
                     }
                 } else {
-                    _errorMessage.value = "Помилка створення: ${response.message()}"
+                    var errorText = "Не вдалося створити замовлення"
+                    val code = response.code()
+                    
+                    if (code == 400) {
+                        // Жестко перехватываем ошибку лимита заказов
+                        errorText = "Перевищено ліміт: макс. 3 активних замовлення"
+                    } else {
+                        try {
+                            val errorBody = response.errorBody()?.string() ?: ""
+                            
+                            // Если сервер вернул JSON
+                            if (errorBody.trim().startsWith("{")) {
+                                val jsonObject = org.json.JSONObject(errorBody)
+                                // Если бэкенд когда-нибудь начнет отдавать поле message
+                                if (jsonObject.has("message")) {
+                                    val msg = jsonObject.getString("message")
+                                    if (msg.isNotBlank()) errorText = msg
+                                } else {
+                                    errorText = "Помилка сервера (Код: $code)"
+                                }
+                            } 
+                            // Если сервер вернул просто короткий текст
+                            else if (errorBody.isNotBlank() && errorBody.length < 50) {
+                                errorText = errorBody
+                            } 
+                            else {
+                                errorText = "Помилка сервера (Код: $code)"
+                            }
+                        } catch (e: Exception) {
+                            errorText = "Помилка мережі або сервера (Код: $code)"
+                        }
+                    }
+                    _errorMessage.value = errorText
                 }
             }
             override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {

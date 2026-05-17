@@ -211,6 +211,10 @@ private lateinit var btnConfirmMapPicker: Button
     private lateinit var ivIconHome: ImageView
     private lateinit var indicatorAddHome: ImageView
     private lateinit var btnFavWork: CardView
+
+    private var revealAnimator: ValueAnimator? = null
+    private var markerRevealAnimator: ValueAnimator? = null
+
     private lateinit var ivIconWork: ImageView
     private lateinit var indicatorAddWork: ImageView
 
@@ -718,6 +722,23 @@ private fun fetchAddressAtCurrentLocation() {
                     showActiveOrderPanel(order)
                 }
                 updateStatusUI(order)
+            }
+        }
+
+        // НОВЫЙ БЛОК: Обработка успешного предварительного заказа (на время)
+        viewModel.scheduledOrderSuccess.observe(this) { order ->
+            if (order != null) {
+                // 1. Очищаем главный экран (чтобы при возврате назад не висела панель тарифов)
+                sessionManager.clearActiveOrderId()
+                viewModel.clearOrderState()
+                showAddressPanel()
+                
+                // 2. Открываем экран "Мои поездки" (HistoryActivity)
+                val intent = Intent(this@HomeActivity, HistoryActivity::class.java)
+                startActivity(intent)
+                
+                // 3. Сбрасываем ивент (чтобы он не сработал заново при повороте экрана)
+                viewModel.resetScheduledOrderEvent()
             }
         }
 
@@ -1885,28 +1906,35 @@ btnChangePrice.setOnClickListener {
 
         // 2. ИСПРАВЛЯЕМ ПОДЛЕТ ПИНА (Мгновенный старт)
         mMap?.setOnCameraMoveStartedListener { reason ->
-            if (viewModel.currentRoutePolyline == null) {
+            // ДОБАВЛЕНА ПРОВЕРКА !isRouteMode
+            if (viewModel.currentRoutePolyline == null && !isRouteMode) { 
                 
                 // РЕАГИРУЕМ ТОЛЬКО НА ПАЛЕЦ (REASON_GESTURE), чтобы избежать прыжков от авто-центровки
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     tvOrigin.text = "Визначення..."
                     
-                    if (isInterfaceRevealed) {
+                    if (isInterfaceRevealed || isMapPickingMode) {
                         centerPin.animate().cancel()
+                        
+                        // Броня: делаем видимым только если нет маршрута
+                        centerPin.alpha = 1f 
+                        centerPin.visibility = View.VISIBLE
+
                         centerPin.animate()
                             .translationY(convertDpToPixel(-48f))
-                            .setStartDelay(0) // <--- СБРАСЫВАЕМ ЗАДЕРЖКУ! ТЕПЕРЬ МГНОВЕННО!
+                            .setStartDelay(0) 
                             .setInterpolator(AccelerateDecelerateInterpolator())
                             .setDuration(250)
                             .start()
 
                         try {
                             pinShadow.animate().cancel()
+                            pinShadow.visibility = View.VISIBLE
                             pinShadow.animate()
                                 .scaleX(0.6f)
                                 .scaleY(0.6f)
                                 .alpha(0.3f)
-                                .setStartDelay(0) // <--- Сбрасываем и у тени
+                                .setStartDelay(0) 
                                 .setDuration(250)
                                 .start()
                         } catch (e: Exception) {}
@@ -1923,9 +1951,13 @@ btnChangePrice.setOnClickListener {
         mMap?.setOnCameraIdleListener {
             val target = mMap!!.cameraPosition.target
 
-            // 1. АНИМАЦИЯ ПИНА: Должна срабатывать в обоих режимах
-            if (isInterfaceRevealed || isMapPickingMode) {
+            // 1. АНИМАЦИЯ ПИНА: Срабатывает ТОЛЬКО если маршрут не построен
+            if ((isInterfaceRevealed && !isRouteMode && viewModel.currentRoutePolyline == null) || isMapPickingMode) {
                 centerPin.animate().cancel()
+                
+                centerPin.alpha = 1f
+                centerPin.visibility = View.VISIBLE
+
                 centerPin.animate()
                     .translationY(convertDpToPixel(-32f))
                     .setStartDelay(0) 
@@ -1935,6 +1967,7 @@ btnChangePrice.setOnClickListener {
 
                 try {
                     pinShadow.animate().cancel()
+                    pinShadow.visibility = View.VISIBLE
                     pinShadow.animate()
                         .scaleX(1.0f)
                         .scaleY(1.0f)
@@ -1943,6 +1976,11 @@ btnChangePrice.setOnClickListener {
                         .setDuration(250)
                         .start()
                 } catch (e: Exception) {}
+            } else if (isRouteMode || viewModel.currentRoutePolyline != null) {
+                // <-- ИСПРАВЛЕНО: Добиваем пин ТОЛЬКО если мы реально в режиме маршрута!
+                // При запуске приложения этот блок не сработает, и пин дождется своей анимации
+                centerPin.visibility = View.GONE
+                try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
             }
 
             // ==========================================
@@ -2012,21 +2050,24 @@ btnChangePrice.setOnClickListener {
             } catch (e: Exception) {}
         }
 
-        // ДОБАВЛЕНО: Плавно проявляем центральный пин
+        centerPin.visibility = View.VISIBLE // <-- БРОНЯ ДЛЯ УСПЕШНОГО ЗАПУСКА
         centerPin.animate()
             .alpha(1f)
             .setDuration(500)
             .setStartDelay(200)
             .setInterpolator(DecelerateInterpolator())
+            .withEndAction { centerPin.alpha = 1f } 
             .start()
 
-        // ДОБАВЛЕНО: Плавно проявляем тень пина (тень должна быть полупрозрачной)
+        // ДОБАВЛЕНО: Плавно проявляем тень пина
         try {
+            pinShadow.visibility = View.VISIBLE // <-- БРОНЯ ДЛЯ УСПЕШНОГО ЗАПУСКА
             pinShadow.animate()
                 .alpha(0.5f) 
                 .setDuration(500)
                 .setStartDelay(200)
                 .setInterpolator(DecelerateInterpolator())
+                .withEndAction { pinShadow.alpha = 0.5f } 
                 .start()
         } catch (e: Exception) {}
     }
@@ -2526,11 +2567,21 @@ class RoundedBackgroundSpan(
 
             mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
                 override fun onFinish() {
-                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                    runOnUiThread { 
+                        // ПРЕДОХРАНИТЕЛЬ: рисуем только если маршрут всё ещё актуален
+                        if (viewModel.currentRoutePolyline != null) {
+                            startRouteRevealAnimation(colorMain, colorBorder, path) 
+                        }
+                    }
                 }
 
                 override fun onCancel() {
-                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                    runOnUiThread { 
+                        // ПРЕДОХРАНИТЕЛЬ: если камеру отменили (нажали Отмена), НЕ рисуем дальше
+                        if (viewModel.currentRoutePolyline != null) {
+                            startRouteRevealAnimation(colorMain, colorBorder, path) 
+                        }
+                    }
                 }
             })
         } catch (e: Exception) {
@@ -2543,45 +2594,49 @@ class RoundedBackgroundSpan(
 }
 
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
-    if (polylineMain == null || polylineBorder == null) return
+        if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
 
-    val polylineAnimator = ValueAnimator.ofInt(0, 255)
-    polylineAnimator.duration = 1000 
-    polylineAnimator.addUpdateListener { animator ->
-        val alpha = animator.animatedValue as Int
-        try {
-            val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
-            val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
-            
-            polylineMain?.color = newMainColor
-            polylineBorder?.color = newBorderColor
-        } catch (e: Exception) {}
-    }
-
-    val markerAnimator = ValueAnimator.ofFloat(0f, 1f)
-    markerAnimator.duration = 1000
-    markerAnimator.addUpdateListener { animator ->
-        val alpha = animator.animatedValue as Float
-        try {
-            originMarker?.alpha = alpha
-            destinationMarker?.alpha = alpha
-            // --- ФІКС: ПРОЯВЛЯЄМО ЗУПИНКИ РАЗОМ З ІНШИМИ МАРКЕРАМИ ---
-            waypointMarkers.forEach { it.alpha = alpha }
-        } catch (e: Exception) {}
-    }
-
-    overlayOrigin.animate().alpha(1f).setDuration(1000).start()
-    overlayDest.animate().alpha(1f).setDuration(1000).start()
-
-    polylineAnimator.addListener(object : AnimatorListenerAdapter() {
-        override fun onAnimationEnd(animation: Animator) {
-            animateRoute(path) // Запускаем наше сияние!
+        revealAnimator?.cancel()
+        revealAnimator = ValueAnimator.ofInt(0, 255)
+        revealAnimator?.duration = 1000 
+        revealAnimator?.addUpdateListener { animator ->
+            val alpha = animator.animatedValue as Int
+            try {
+                val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+                val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
+                
+                polylineMain?.color = newMainColor
+                polylineBorder?.color = newBorderColor
+            } catch (e: Exception) {}
         }
-    })
 
-    polylineAnimator.start()
-    markerAnimator.start()
-}
+        markerRevealAnimator?.cancel()
+        markerRevealAnimator = ValueAnimator.ofFloat(0f, 1f)
+        markerRevealAnimator?.duration = 1000
+        markerRevealAnimator?.addUpdateListener { animator ->
+            val alpha = animator.animatedValue as Float
+            try {
+                originMarker?.alpha = alpha
+                destinationMarker?.alpha = alpha
+                waypointMarkers.forEach { it.alpha = alpha }
+            } catch (e: Exception) {}
+        }
+
+        overlayOrigin.animate().alpha(1f).setDuration(1000).start()
+        overlayDest.animate().alpha(1f).setDuration(1000).start()
+
+        revealAnimator?.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                // ГЛАВНЫЙ ПРЕДОХРАНИТЕЛЬ: Запускаем мигание, только если маршрут жив!
+                if (viewModel.currentRoutePolyline != null) {
+                    animateRoute(path) 
+                }
+            }
+        })
+
+        revealAnimator?.start()
+        markerRevealAnimator?.start()
+    }
     
     
 
@@ -2603,6 +2658,7 @@ class RoundedBackgroundSpan(
     }
 
     private fun clearMapForRoute() {
+        mMap?.stopAnimation() // <-- 1. Сразу тормозим любой полет камеры
         mMap?.clear()
 
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -2630,8 +2686,16 @@ class RoundedBackgroundSpan(
 
         polylineAnim?.remove()
         polylineAnim = null
+        
+        // <-- 2. ЖЕСТКО УБИВАЕМ ВСЕ АНИМАТОРЫ
         routeAnimator?.cancel()
         routeAnimator = null
+        
+        revealAnimator?.cancel()
+        revealAnimator = null
+        
+        markerRevealAnimator?.cancel()
+        markerRevealAnimator = null
 
         overlayOrigin.visibility = View.GONE
         overlayDest.visibility = View.GONE
@@ -3006,7 +3070,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun animateRoute(path: List<LatLng>) {
-        if (path.isEmpty() || mMap == null) return
+        if (path.isEmpty() || mMap == null || viewModel.currentRoutePolyline == null) return
 
         val isDark = sessionManager.isDarkMode()
         val colorBase = ContextCompat.getColor(this, R.color.route_main)
