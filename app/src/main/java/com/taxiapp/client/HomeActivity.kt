@@ -176,6 +176,8 @@ private var lastAddressPickerIntentData: Intent? = null
     private lateinit var ivThemeSun: ImageView
     private lateinit var ivThemeMoon: ImageView
     private lateinit var tvThemeLabel: TextView
+
+    
     
     private lateinit var btnOpenPromo: CardView
     private lateinit var centerPin: ImageView
@@ -4480,7 +4482,53 @@ private fun stopWaitingTimer() {
     btnCancelOrder.isEnabled = true
     btnCancelOrder.text = getString(R.string.btn_cancel_order)
 
+    // --- НОВАЯ ЛОГИКА ДЛЯ ЗАПЛАНИРОВАННОГО ВРЕМЕНИ ---
+        val tvScheduledTime = findViewById<TextView>(R.id.tv_scheduled_time)
+        if (!order.scheduledAt.isNullOrEmpty()) {
+            tvScheduledTime?.visibility = View.VISIBLE
+
+            // Безопасно достаем время (ЧЧ:ММ) из строки, если сервер отдает "2024-05-18T14:30:00"
+            val timeStr = try {
+                // !! ВАЖНО: используем order.scheduledAt !!
+                if (order.scheduledAt.contains("T")) {
+                    order.scheduledAt.substringAfter("T").take(5)
+                } else {
+                    order.scheduledAt
+                }
+            } catch (e: Exception) {
+                order.scheduledAt
+            }
+            tvScheduledTime?.text = "Орієнтовний час подачі $timeStr"
+        } else {
+            tvScheduledTime?.visibility = View.GONE
+        }
+    // ------------------------------------------------
+
     when(order.status) {
+        // --- ДОБАВЛЕН НОВЫЙ СТАТУС ДЛЯ ЗАПЛАНИРОВАННЫХ ---
+        "SCHEDULED" -> {
+            updateOrderProgress(0)
+            orderStatusText.text = "Заплановано" // Можно вынести в strings.xml
+            stopStatusBlinking() // Для запланированных мигание не нужно
+            
+            layoutSearchControls.visibility = View.VISIBLE
+            layoutDriverFoundState.visibility = View.GONE
+            
+            layoutSearchDetails.visibility = View.VISIBLE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE
+            layoutDriverDetails.visibility = View.GONE
+            layoutPaymentCompleted.visibility = View.GONE 
+            
+            btnCancelOrder.visibility = View.VISIBLE
+            btnCancelRideDriver.visibility = View.GONE
+
+            stopDriverTracking()
+            stopWaitingTimer()
+            
+            updateMapPadding(activeOrderCard, 0f, 20f)
+        }
+        // ------------------------------------------------
+
         "REQUESTED", "OFFERING" -> {
             updateOrderProgress(0)
             orderStatusText.text = getString(R.string.status_searching_driver)
@@ -4519,7 +4567,7 @@ private fun stopWaitingTimer() {
             layoutPaymentCompleted.visibility = View.GONE 
             
             // --- КНОПКИ ---
-            btnCancelOrder.visibility = View.GONE       // Ховаємо кнопку пошуку
+            btnCancelOrder.visibility = View.GONE        // Ховаємо кнопку пошуку
             btnCancelRideDriver.visibility = View.VISIBLE // Показуємо кнопку для водія
             // --------------
             
@@ -4557,7 +4605,7 @@ private fun stopWaitingTimer() {
             layoutPaymentCompleted.visibility = View.GONE 
             
             // --- КНОПКИ ---
-            btnCancelOrder.visibility = View.GONE       // Ховаємо кнопку пошуку
+            btnCancelOrder.visibility = View.GONE        // Ховаємо кнопку пошуку
             btnCancelRideDriver.visibility = View.VISIBLE // Показуємо кнопку для водія
             // --------------
             

@@ -47,7 +47,8 @@
         app:tabSelectedTextColor="@color/text_primary"
         app:tabTextColor="@color/text_secondary"
         app:tabMode="fixed"
-        app:tabGravity="fill" />
+        app:tabGravity="fill"
+        app:tabRippleColor="@null" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/history_recycler_view"

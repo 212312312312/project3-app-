@@ -56,6 +56,17 @@ class HistoryActivity : BaseActivity() {
                 tabLayout.addTab(tabLayout.newTab().setText("Архів"))
             }
 
+            for (i in 0 until tabLayout.tabCount) {
+                val tabView = tabLayout.getTabAt(i)?.view
+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    tabView?.tooltipText = null
+                }
+
+                // ГОЛОВНИЙ ФІКС: Перехоплюємо довге натискання, щоб система не показувала блок
+                tabView?.setOnLongClickListener { true }
+            }
+
             tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab?) {
                     filterList(tab?.position ?: 0)
@@ -96,22 +107,17 @@ class HistoryActivity : BaseActivity() {
 
     private fun loadHistory() {
         progressBar.visibility = View.VISIBLE
-        // Вызов очищен от передачи токена
         ApiClient.instance.getHistory().enqueue(object : Callback<List<TaxiOrderDto>> {
             override fun onResponse(call: Call<List<TaxiOrderDto>>, response: Response<List<TaxiOrderDto>>) {
                 progressBar.visibility = View.GONE
                 if (response.isSuccessful) {
                     fullOrderList = response.body() ?: emptyList()
-                    // Обновляем UI (здесь у тебя может быть вызов метода фильтрации или напрямую в адаптер)
-                    // Убедись, что вызываешь свой метод отображения списка, если он назывался иначе
-                    if (fullOrderList.isNotEmpty()) {
-                        emptyView.visibility = View.GONE
-                        recyclerView.visibility = View.VISIBLE
-                        // Если у тебя адаптер обновляется так:
-                        // adapter.submitList(fullOrderList)
-                    } else {
-                        showEmpty()
-                    }
+
+                    // --- ФИКС: Узнаем текущую вкладку и пропускаем список через фильтр ---
+                    val currentTab = try { tabLayout.selectedTabPosition } catch (e: Exception) { 0 }
+                    filterList(currentTab)
+                    // filterList сам решит: показывать пустой экран или передать данные в adapter
+
                 } else {
                     showEmpty()
                 }

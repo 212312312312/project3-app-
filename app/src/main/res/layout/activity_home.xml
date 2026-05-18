@@ -908,7 +908,20 @@
                         android:textStyle="bold"
                         android:textColor="@color/text_primary"
                         android:layout_marginHorizontal="16dp" />
-                </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tv_scheduled_time"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:textAlignment="center"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginHorizontal="16dp"
+                        android:visibility="gone"
+                        tools:text="Орієнтовний час подачі 14:30" />
+                    </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/layout_driver_found_state"

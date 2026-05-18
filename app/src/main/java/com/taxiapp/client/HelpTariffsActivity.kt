@@ -30,7 +30,7 @@ class HelpTariffsActivity : BaseActivity() {
     private lateinit var tvPriceMin: TextView
 
     // Налаштування сервера
-    private val SERVER_IP = "192.168.0.104" // Твій актуальний IP
+    private val SERVER_IP = "192.168.0.107" // Твій актуальний IP
     private val SERVER_PORT = "8080"
 
     override fun onCreate(savedInstanceState: Bundle?) {
