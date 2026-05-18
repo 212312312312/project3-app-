@@ -54,20 +54,19 @@ class HelpTariffsActivity : BaseActivity() {
     }
 
     private fun loadTariffs() {
-        val token = sessionManager.fetchAuthToken() ?: return
-
-        ApiClient.instance.getTariffs("Bearer $token").enqueue(object : Callback<List<CarTariffDto>> {
+        // Вызов очищен от token
+        ApiClient.instance.getTariffs().enqueue(object : Callback<List<CarTariffDto>> {
             override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
-                if (response.isSuccessful && response.body() != null) {
-                    val tariffs = response.body()!!
-                    setupAdapter(tariffs)
+                if (response.isSuccessful) {
+                    val tariffs = response.body() ?: emptyList()
+                    // ... твой код отображения тарифов (настройка адаптера) ...
                 } else {
-                    Toast.makeText(this@HelpTariffsActivity, "Не вдалося завантажити тарифи", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@HelpTariffsActivity, "Помилка завантаження", Toast.LENGTH_SHORT).show()
                 }
             }
 
             override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
-                Toast.makeText(this@HelpTariffsActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@HelpTariffsActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
             }
         })
     }

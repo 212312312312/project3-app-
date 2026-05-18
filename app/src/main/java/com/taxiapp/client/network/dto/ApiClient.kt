@@ -4,7 +4,6 @@ import com.taxiapp.client.TaxiApplication
 import com.taxiapp.client.utils.SessionManager
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.net.ConnectException
@@ -16,36 +15,29 @@ object ApiClient {
     const val BASE_URL = "http://192.168.0.107:8080/api/v1/"
 
     var sessionManager: SessionManager? = null
+    private val refreshLock = Any() // Объект для безопасной блокировки потоков
 
     private val errorInterceptor = Interceptor { chain ->
         try {
             val response = chain.proceed(chain.request())
-
             if (response.code == 502 || response.code == 503) {
-                // Если сервер реально прислал 502/503 (упал) — бьем тревогу всегда
                 ServerStatusBus.triggerServerError()
             } else if (response.isSuccessful) {
-                // НОВОЕ: Если запрос прошел успешно, значит сервер жив. Гасим ошибку!
                 ServerStatusBus.resetServerError()
             }
             response
         } catch (e: Exception) {
             if (e is ConnectException || e is SocketTimeoutException) {
-                // НОВОЕ: Железная логика
                 if (TaxiApplication.isAppInForeground) {
                     println(">>> NETWORK: Timeout. App is in FOREGROUND. Triggering error.")
                     ServerStatusBus.triggerServerError()
-                } else {
-                    println(">>> NETWORK: Timeout. App is in BACKGROUND. Ignored system network restriction.")
                 }
             }
             throw e
         }
     }
 
-    // =====================================================================
-    // Чистый клиент только для обновления токенов (без AuthInterceptor)
-    // =====================================================================
+    // Чистый клиент только для /refresh (без AuthInterceptor)
     private val cleanOkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -58,54 +50,49 @@ object ApiClient {
         .build()
 
     private val authService = cleanRetrofit.create(ApiService::class.java)
-    // =====================================================================
 
-    // =====================================================================
-    // НОВЫЙ ИНТЕРЦЕПТОР: Железобетонная обработка 401 ошибок
-    // =====================================================================
+    // Идеальный перехватчик токенов
     private val authInterceptor = Interceptor { chain ->
         val sm = sessionManager
         val originalRequest = chain.request()
 
-        // 1. Если токен есть в сессии, автоматически добавляем его к запросу
+        // 1. Автоматически прикрепляем токен ко всем запросам (если он есть)
         val currentToken = sm?.fetchAuthToken()
         var requestBuilder = originalRequest.newBuilder()
         if (!currentToken.isNullOrEmpty() && originalRequest.header("Authorization") == null) {
             requestBuilder.header("Authorization", "Bearer $currentToken")
         }
 
-        // 2. Выполняем запрос
         var response = chain.proceed(requestBuilder.build())
 
-        // 3. Если сервер ответил 401 Unauthorized (Токен протух)
+        // 2. Ловим 401 ошибку просроченного токена
         if (response.code == 401 && sm != null) {
             println(">>> AUTH INTERCEPTOR: Caught 401 Unauthorized for ${originalRequest.url}")
 
-            // Блокируем другие потоки, пока обновляем токен (чтобы не было гонки запросов)
-            synchronized(this) {
-                // Проверяем, не обновил ли токен другой поток, пока мы ждали в очереди
+            synchronized(refreshLock) {
+                // 3. Проверка: не обновил ли токен другой поток (чтобы не дублировать запросы)
                 val newToken = sm.fetchAuthToken()
                 if (newToken != null && newToken != currentToken) {
-                    println(">>> AUTH INTERCEPTOR: Token already refreshed. Retrying original request...")
-                    response.close() // Обязательно закрываем старый ответ
+                    println(">>> AUTH INTERCEPTOR: Token already refreshed. Retrying...")
+                    response.close()
                     val newRequest = originalRequest.newBuilder()
                         .header("Authorization", "Bearer $newToken")
                         .build()
                     return@Interceptor chain.proceed(newRequest)
                 }
 
-                // Токен не обновляли. Берем рефреш-токен.
+                // 4. Берем Refresh Token
                 val refreshToken = sm.fetchRefreshToken()
                 if (refreshToken.isNullOrEmpty()) {
                     println(">>> AUTH INTERCEPTOR: NO REFRESH TOKEN! Throwing to login screen.")
                     sm.clearSession()
                     ServerStatusBus.triggerSessionExpired()
-                    return@Interceptor response // Возвращаем 401, UI перекинет на логин
+                    return@Interceptor response
                 }
 
                 try {
                     println(">>> AUTH INTERCEPTOR: Sending request to /auth/refresh...")
-                    // СИНХРОННЫЙ запрос чистым клиентом (поток заблокирован)
+                    // Выполняем СИНХРОННЫЙ запрос чистым клиентом
                     val refreshCall = authService.refreshToken(TokenRefreshRequestDto(refreshToken))
                     val refreshResponse = refreshCall.execute()
 
@@ -119,10 +106,10 @@ object ApiClient {
                             sm.saveRefreshToken(loginResponse.refreshToken)
                         }
 
-                        // Сообщаем всему приложению (и сокетам), что токен обновился!
+                        // Уведомляем приложение
                         ServerStatusBus.triggerTokenRefreshed(loginResponse.token)
 
-                        // Повторяем оригинальный запрос с НОВЫМ токеном
+                        // Повторяем упавший запрос с новым токеном!
                         response.close()
                         val retryRequest = originalRequest.newBuilder()
                             .header("Authorization", "Bearer ${loginResponse.token}")
@@ -146,7 +133,6 @@ object ApiClient {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(errorInterceptor)
-        // НОВОЕ: 5 секунд для усиления надежности при переключении сетей
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()

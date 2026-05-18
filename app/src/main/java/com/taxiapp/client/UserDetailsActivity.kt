@@ -217,7 +217,7 @@ class UserDetailsActivity : BaseActivity() {
     private fun deleteAccountOnServer() {
         val token = sessionManager.fetchAuthToken() ?: return
 
-        ApiClient.instance.deleteAccount("Bearer $token").enqueue(object : Callback<MessageResponse> {
+        ApiClient.instance.deleteAccount().enqueue(object : Callback<MessageResponse> {
             override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
                 if (response.isSuccessful) {
                     showTopMessage("Акаунт успішно видалено", false)

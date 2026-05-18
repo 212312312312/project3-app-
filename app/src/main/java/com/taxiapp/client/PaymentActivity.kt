@@ -97,9 +97,8 @@ class PaymentActivity : BaseActivity() {
             btnConfirm.isEnabled = false
             btnConfirm.text = "Видалення..."
 
-            val token = "Bearer ${sessionManager.fetchAuthToken()}"
-
-            ApiClient.instance.unbindCard(token).enqueue(object : Callback<MessageResponseDto> {
+            // Вызов очищен от ручной передачи токена
+            ApiClient.instance.unbindCard().enqueue(object : Callback<MessageResponseDto> {
                 override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                     dialog.dismiss()
                     if (response.isSuccessful) {
@@ -133,9 +132,8 @@ class PaymentActivity : BaseActivity() {
     }
 
     private fun fetchClientProfile() {
-        val token = "Bearer ${sessionManager.fetchAuthToken()}"
-
-        ApiClient.instance.getClientProfile(token).enqueue(object : Callback<ClientProfileResponse> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.getClientProfile().enqueue(object : Callback<ClientProfileResponse> {
             override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
                 if (response.isSuccessful && response.body() != null) {
                     val profile = response.body()!!
@@ -175,9 +173,8 @@ class PaymentActivity : BaseActivity() {
     }
 
     private fun bindNewCard() {
-        val token = "Bearer ${sessionManager.fetchAuthToken()}"
-
-        ApiClient.instance.initBindCard(token).enqueue(object : Callback<InitBindCardResponse> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.initBindCard().enqueue(object : Callback<InitBindCardResponse> {
             override fun onResponse(call: Call<InitBindCardResponse>, response: Response<InitBindCardResponse>) {
                 if (response.isSuccessful && response.body() != null) {
                     val url = response.body()!!.paymentUrl
@@ -234,8 +231,8 @@ class PaymentActivity : BaseActivity() {
             override fun run() {
                 if (!isPolling) return
 
-                val token = "Bearer ${sessionManager.fetchAuthToken()}"
-                ApiClient.instance.getClientProfile(token).enqueue(object : Callback<ClientProfileResponse> {
+                // Вызов очищен от ручной передачи токена
+                ApiClient.instance.getClientProfile().enqueue(object : Callback<ClientProfileResponse> {
                     override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
                         if (response.isSuccessful && response.body() != null) {
                             val profile = response.body()!!

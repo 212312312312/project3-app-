@@ -61,19 +61,12 @@ class HelpDiscountsActivity : BaseActivity() {
     }
 
     private fun loadDiscounts() {
-        val sessionManager = SessionManager(this)
-        val token = sessionManager.fetchAuthToken()
-
-        if (token == null) {
-            finish()
-            return
-        }
-
         progressBar.visibility = View.VISIBLE
         recyclerView.visibility = View.GONE
         emptyState.visibility = View.GONE
 
-        ApiClient.instance.getClientPromos("Bearer $token").enqueue(object : Callback<List<ClientPromoProgressDto>> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.getClientPromos().enqueue(object : Callback<List<ClientPromoProgressDto>> {
             override fun onResponse(call: Call<List<ClientPromoProgressDto>>, response: Response<List<ClientPromoProgressDto>>) {
                 progressBar.visibility = View.GONE
 

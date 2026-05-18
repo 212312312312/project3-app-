@@ -253,6 +253,9 @@ private var mapPickerWaypointIndex = -1
     private lateinit var tvChatBadge: TextView
     private var unreadChatMessages = 0
 
+    // --- ПЕРЕМЕННАЯ ДЛЯ КОНТРОЛЯ АНИМАЦИИ ПАНЕЛИ ---
+    private var orderDetailsAnimator: ValueAnimator? = null
+
     private lateinit var tvCarDetailsSubtitle: TextView
     private lateinit var tvDriverFirstName: TextView
     private lateinit var tvDriverExperience: TextView
@@ -2680,6 +2683,23 @@ class RoundedBackgroundSpan(
         }
     }
 
+    private fun resetOrderDetailsState() {
+        // ЖЕСТКО УБИВАЕМ АНИМАЦИЮ, если она сейчас идет (это спасает от залипания фона)
+        orderDetailsAnimator?.cancel()
+        orderDetailsAnimator = null
+        
+        isOrderDetailsExpanded = false
+        val overlay = findViewById<View>(R.id.map_solid_overlay)
+        
+        layoutExpandableDetails.visibility = View.GONE
+        val params = layoutExpandableDetails.layoutParams
+        params.height = 0
+        layoutExpandableDetails.layoutParams = params
+        
+        overlay?.visibility = View.GONE
+        overlay?.alpha = 0f
+    }
+
     private fun clearMapForRoute() {
         mMap?.stopAnimation() // <-- 1. Сразу тормозим любой полет камеры
         mMap?.clear()
@@ -3244,12 +3264,12 @@ if (!cardMask.isNullOrEmpty()) {
                 btnSave.text = "Зачекайте..."
 
                 val token = "Bearer ${sessionManager.fetchAuthToken()}"
-                
-                ApiClient.instance.initBindCard(token).enqueue(object : retrofit2.Callback<com.taxiapp.client.network.InitBindCardResponse> {
+
+                ApiClient.instance.initBindCard().enqueue(object : retrofit2.Callback<com.taxiapp.client.network.InitBindCardResponse> {
                     override fun onResponse(call: retrofit2.Call<com.taxiapp.client.network.InitBindCardResponse>, response: retrofit2.Response<com.taxiapp.client.network.InitBindCardResponse>) {
                         dialog.dismiss()
                         if (response.isSuccessful && response.body() != null) {
-                            
+
                             // === ИЗМЕНЕНИЕ ЗДЕСЬ ===
                             val url = response.body()!!.paymentUrl
                             openLiqPayInApp(url) // Вызываем встроенный браузер!
@@ -3291,27 +3311,27 @@ if (!cardMask.isNullOrEmpty()) {
         val token = sessionManager.fetchAuthToken()
         if (token.isNullOrEmpty()) return
 
-        ApiClient.instance.getClientProfile("Bearer $token").enqueue(object : retrofit2.Callback<com.taxiapp.client.network.ClientProfileResponse> {
+        ApiClient.instance.getClientProfile().enqueue(object : retrofit2.Callback<com.taxiapp.client.network.ClientProfileResponse> {
             override fun onResponse(
-                call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, 
+                call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>,
                 response: retrofit2.Response<com.taxiapp.client.network.ClientProfileResponse>
             ) {
                 if (response.isSuccessful && response.body() != null) {
                     val profile = response.body()!!
-                    
+
                     // Сохраняем новую маску (или null, если карту удалили)
                     sessionManager.saveCardMask(profile.cardMask)
 
                     // Если карты нет, а способ оплаты стоит CARD — сбрасываем на наличку
                     if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
                         sessionManager.savePaymentMethod("CASH")
-                        
+
                         // Если есть активный заказ, отправляем запрос на смену оплаты на сервере
                         if (activeOrderId != null) {
                             viewModel.updateActiveOrderPaymentMethod("CASH")
                         }
                     }
-                    
+
                     // Обновляем иконку на главном экране
                     updatePaymentIcon()
                 }
@@ -3931,7 +3951,7 @@ private fun stopWaitingTimer() {
     private fun cancelCurrentOrder() {
         val token = sessionManager.fetchAuthToken() ?: return
 
-        ApiClient.instance.getCancellationReasons("Bearer $token", "CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
+        ApiClient.instance.getCancellationReasons("CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
             override fun onResponse(call: Call<List<CancellationReasonDto>>, response: Response<List<CancellationReasonDto>>) {
                 if (response.isSuccessful) {
                     val reasons = response.body()?.filter { it.isActive } ?: emptyList()
@@ -3948,7 +3968,6 @@ private fun stopWaitingTimer() {
                     viewModel.cancelOrder(null)
                 }
             }
-
             override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
                 android.util.Log.e("CancelOrder", "Network error", t)
                 viewModel.cancelOrder(null)
@@ -3957,47 +3976,52 @@ private fun stopWaitingTimer() {
     }
 
     private fun animateOrderDetailsToState(expand: Boolean) {
-    isOrderDetailsExpanded = expand
-    
-    // --- ПОДСТРАХОВКА: Если высота обнулилась, замеряем её перед анимацией ---
-    if (maxDetailsHeight == 0) {
-        val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
-        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        layoutExpandableDetails.measure(widthSpec, heightSpec)
-        maxDetailsHeight = layoutExpandableDetails.measuredHeight
-    }
-    
-    val targetHeight = if (expand) maxDetailsHeight else 0
-    val startHeight = layoutExpandableDetails.height
-    val overlay = findViewById<View>(R.id.map_solid_overlay)
-    
-    if (expand && layoutExpandableDetails.visibility != View.VISIBLE) {
-        layoutExpandableDetails.visibility = View.VISIBLE
-        overlay?.visibility = View.VISIBLE
-    }
-    
-    val animator = android.animation.ValueAnimator.ofInt(startHeight, targetHeight)
-    animator.duration = 250
-    animator.addUpdateListener { animation ->
-        val h = animation.animatedValue as Int
-        val params = layoutExpandableDetails.layoutParams
-        params.height = h
-        layoutExpandableDetails.layoutParams = params
-        
-        if (maxDetailsHeight > 0) {
-            overlay?.alpha = h.toFloat() / maxDetailsHeight.toFloat()
+        val overlay = findViewById<View>(R.id.map_solid_overlay)
+        if (maxDetailsHeight == 0) {
+            val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
+            val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            layoutExpandableDetails.measure(widthSpec, heightSpec)
+            maxDetailsHeight = layoutExpandableDetails.measuredHeight
         }
-    }
-    animator.addListener(object : android.animation.AnimatorListenerAdapter() {
-        override fun onAnimationEnd(animation: android.animation.Animator) {
-            if (!expand) {
-                layoutExpandableDetails.visibility = View.GONE
-                overlay?.visibility = View.GONE
+
+        val startHeight = layoutExpandableDetails.layoutParams.height
+        val targetHeight = if (expand) maxDetailsHeight else 0
+
+        isOrderDetailsExpanded = expand
+
+        if (expand) {
+            layoutExpandableDetails.visibility = View.VISIBLE
+            overlay?.visibility = View.VISIBLE
+        }
+
+        // --- ИСПРАВЛЕНИЕ: Отменяем предыдущую анимацию, чтобы они не конфликтовали ---
+        orderDetailsAnimator?.cancel()
+
+        val animator = android.animation.ValueAnimator.ofInt(startHeight, targetHeight)
+        orderDetailsAnimator = animator // Сохраняем ссылку на текущую анимацию
+        
+        animator.duration = 250
+        animator.addUpdateListener { animation ->
+            val h = animation.animatedValue as Int
+            val params = layoutExpandableDetails.layoutParams
+            params.height = h
+            layoutExpandableDetails.layoutParams = params
+
+            if (maxDetailsHeight > 0) {
+                overlay?.alpha = h.toFloat() / maxDetailsHeight.toFloat()
             }
         }
-    })
-    animator.start()
-}
+
+        animator.addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) {
+                if (!expand) {
+                    layoutExpandableDetails.visibility = View.GONE
+                    overlay?.visibility = View.GONE
+                }
+            }
+        })
+        animator.start()
+    }
 
     // НОВИЙ МЕТОД: Малює красивий діалог
     private fun showCustomCancelDialog(reasons: List<CancellationReasonDto>) {
@@ -4404,13 +4428,13 @@ private fun stopWaitingTimer() {
         
         val request = RateDriverRequest(orderId, score, comment)
 
-        ApiClient.instance.rateDriver("Bearer $token", request).enqueue(object : Callback<MessageResponse> {
+        ApiClient.instance.rateDriver(request).enqueue(object : Callback<MessageResponse> {
             override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
                 fun finishRatingProcess() {
                     showToast("Дякуємо за відгук!")
                     try { dialog.dismiss() } catch (e: Exception) {}
                     isRatingDialogVisible = false
-                    
+
                     // Очистка состояния через ViewModel
                     viewModel.clearOrderState()
                     activeOrderId = null
@@ -4429,7 +4453,7 @@ private fun stopWaitingTimer() {
                             return
                         }
                     }
-                    
+
                     showToast("Помилка: $code")
                     try {
                         val btn = dialog.findViewById<Button>(R.id.btn_submit_rating)

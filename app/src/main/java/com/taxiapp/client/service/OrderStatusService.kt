@@ -30,29 +30,28 @@ class OrderStatusService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val orderId = intent?.getLongExtra(EXTRA_ORDER_ID, -1L) ?: -1L
-
-        // Коректна зупинка сервісу
-        if (intent?.action == ACTION_STOP) {
-            if (orderId != -1L) {
-                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.cancel(orderId.toInt())
-            }
-            stopForeground(true)
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
         val status = intent?.getStringExtra(EXTRA_STATUS) ?: ""
         val address = intent?.getStringExtra(EXTRA_ADDRESS) ?: "Кінцева точка"
         val customTitle = intent?.getStringExtra("custom_title")
         val customBody = intent?.getStringExtra("custom_body")
 
-        // Гарантований виклик startForeground рятує від крашу ForegroundServiceDidNotStartInTimeException
-        val notification = buildNotification(orderId, status, address, customTitle, customBody)
         val notificationId = if (orderId != -1L) orderId.toInt() else 1
+
+        // 1. ГАРАНТОВАНО викликаємо startForeground якнайшвидше для БУДЬ-ЯКОГО intent!
+        // Це рятує від крашу ForegroundServiceDidNotStartInTimeException
+        val notification = buildNotification(orderId, status, address, customTitle, customBody)
         startForeground(notificationId, notification)
 
-        // START_NOT_STICKY - забороняє Android перестворювати сервіс з пустим інтентом
+        // 2. Тільки ПІСЛЯ startForeground перевіряємо, чи не потрібно нам зупинитись
+        if (intent?.action == ACTION_STOP) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(notificationId)
+            
+            stopForeground(true)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         return START_NOT_STICKY
     }
 

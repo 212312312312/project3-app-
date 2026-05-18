@@ -63,7 +63,7 @@ class PromoActivity : BaseActivity()  {
 
         progressBar.visibility = View.VISIBLE
 
-        ApiClient.instance.getClientPromos("Bearer $token").enqueue(object : Callback<List<ClientPromoProgressDto>> {
+        ApiClient.instance.getClientPromos().enqueue(object : Callback<List<ClientPromoProgressDto>> {
             override fun onResponse(call: Call<List<ClientPromoProgressDto>>, response: Response<List<ClientPromoProgressDto>>) {
                 progressBar.visibility = View.GONE
 

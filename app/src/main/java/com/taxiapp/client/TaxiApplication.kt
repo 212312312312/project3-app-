@@ -2,6 +2,7 @@ package com.taxiapp.client
 
 import android.app.Activity
 import android.app.Application
+import com.taxiapp.client.network.ApiClient
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import com.taxiapp.client.utils.SessionManager
@@ -18,6 +19,7 @@ class TaxiApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ApiClient.sessionManager = SessionManager(this)
 
         // Встроенный в Android SDK трекер жизненного цикла экранов
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {

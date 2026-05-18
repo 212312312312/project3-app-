@@ -90,7 +90,7 @@ class ServicesActivity : BaseActivity()  {
                     return@launch
                 }
 
-                val response = ApiClient.instance.getServices("Bearer $token").execute()
+                val response = ApiClient.instance.getServices().execute()
 
                 if (response.isSuccessful && response.body() != null) {
                     val services = response.body()!!

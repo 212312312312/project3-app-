@@ -47,19 +47,12 @@ class NewsActivity : BaseActivity()  {
     }
 
     private fun loadNews() {
-        val sessionManager = SessionManager(this)
-        val token = sessionManager.fetchAuthToken()
-
-        if (token == null) {
-            finish()
-            return
-        }
-
         progressBar.visibility = View.VISIBLE
         recyclerView.visibility = View.GONE
         emptyState.visibility = View.GONE
 
-        ApiClient.instance.getClientNews("Bearer $token").enqueue(object : Callback<List<NewsDto>> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.getClientNews().enqueue(object : Callback<List<NewsDto>> {
             override fun onResponse(call: Call<List<NewsDto>>, response: Response<List<NewsDto>>) {
                 progressBar.visibility = View.GONE
 

@@ -78,9 +78,6 @@ class MainActivity : BaseActivity() {
     // Флаг, который показывает, что мы сейчас привязываем номер, а не просто логинимся
     private var isLinkingPhoneState = false
 
-    // ВРЕМЕННЫЙ ТОКЕН: Сохраняем токен от Google здесь, пока не подтвердим телефон
-    private var tempAuthToken: String? = null
-
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
@@ -111,7 +108,7 @@ class MainActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
 
         sessionManager = SessionManager(applicationContext)
-        ApiClient.sessionManager = sessionManager
+
 
         // Если токен ЕСТЬ и телефон ЕСТЬ, пускаем дальше.
         val token = sessionManager.fetchAuthToken()
@@ -196,7 +193,8 @@ class MainActivity : BaseActivity() {
                         // Если isNewUser == true, значит емейла в базе еще не было (обычный сценарий -> запрашиваем номер).
                         // Если isNewUser == false, емейл УЖЕ есть в базе -> пропускаем сразу.
                         if (body.isNewUser) {
-                            tempAuthToken = token
+                            // ЗБЕРІГАЄМО ТОКЕН ДЛЯ INTERCEPTOR, щоб linkPhone спрацював автоматично!
+                            sessionManager.saveAuthToken(token)
                             showLinkPhoneScreen()
                         } else {
                             sessionManager.saveAuthToken(token)
@@ -226,9 +224,8 @@ class MainActivity : BaseActivity() {
         val request = SmsVerifyDto(phoneNumber = phone, code = code)
 
         if (isLinkingPhoneState) {
-            val tokenToUse = tempAuthToken ?: return
-
-            ApiClient.instance.linkPhone("Bearer $tokenToUse", request).enqueue(object : Callback<LoginResponseDto> {
+            // Вызов очищен от ручной передачи токена, Interceptor подхватит его сам
+            ApiClient.instance.linkPhone(request).enqueue(object : Callback<LoginResponseDto> {
                 override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
                     setLoading(false)
                     if (response.isSuccessful) {
@@ -397,12 +394,14 @@ class MainActivity : BaseActivity() {
     }
 
     private fun updateFcmTokenOnServer() {
+        // Мы проверяем, есть ли токен, но не передаем его вручную в запрос
         val token = sessionManager.fetchAuthToken() ?: return
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) return@addOnCompleteListener
             val fcmToken = task.result
             val body = mapOf("token" to fcmToken)
-            ApiClient.instance.updateFcmToken("Bearer $token", body).enqueue(object : Callback<Void> {
+            // Вызов очищен от ручной передачи токена
+            ApiClient.instance.updateFcmToken(body).enqueue(object : Callback<Void> {
                 override fun onResponse(call: Call<Void>, response: Response<Void>) {}
                 override fun onFailure(call: Call<Void>, t: Throwable) {}
             })

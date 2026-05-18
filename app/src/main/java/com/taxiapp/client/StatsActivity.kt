@@ -63,7 +63,7 @@ class StatsActivity : BaseActivity()  {
             return
         }
 
-        ApiClient.instance.getOrderHistory("Bearer $token").enqueue(object : Callback<List<TaxiOrderDto>> {
+        ApiClient.instance.getOrderHistory().enqueue(object : Callback<List<TaxiOrderDto>> {
             override fun onResponse(call: Call<List<TaxiOrderDto>>, response: Response<List<TaxiOrderDto>>) {
                 if (response.isSuccessful && response.body() != null) {
                     allOrders = response.body()!!.filter { it.status == "COMPLETED" }

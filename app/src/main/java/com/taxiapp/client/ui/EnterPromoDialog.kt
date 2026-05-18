@@ -63,7 +63,7 @@ class EnterPromoDialog(
         val request = ApplyPromoRequestDto(code)
 
         // Викликаємо правильний метод applyPromo
-        ApiClient.instance.applyPromo("Bearer $token", request).enqueue(object : Callback<MessageResponse> {
+        ApiClient.instance.applyPromo(request).enqueue(object : Callback<MessageResponse> {
             override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
                 if (response.isSuccessful) {
                     val msg = response.body()?.message ?: "Промокод успішно активовано!"
@@ -80,9 +80,8 @@ class EnterPromoDialog(
                     Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                 }
             }
-
             override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
-                Toast.makeText(context, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Помилка мережі", Toast.LENGTH_SHORT).show()
             }
         })
     }

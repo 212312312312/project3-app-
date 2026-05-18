@@ -95,22 +95,23 @@ class HistoryActivity : BaseActivity() {
     }
 
     private fun loadHistory() {
-        val token = sessionManager.fetchAuthToken()
-        if (token == null) {
-            finish()
-            return
-        }
-
         progressBar.visibility = View.VISIBLE
-
-        ApiClient.instance.getHistory("Bearer $token").enqueue(object : Callback<List<TaxiOrderDto>> {
+        // Вызов очищен от передачи токена
+        ApiClient.instance.getHistory().enqueue(object : Callback<List<TaxiOrderDto>> {
             override fun onResponse(call: Call<List<TaxiOrderDto>>, response: Response<List<TaxiOrderDto>>) {
                 progressBar.visibility = View.GONE
-                if (response.isSuccessful && response.body() != null) {
-                    fullOrderList = response.body()!!
-
-                    val currentTab = try { tabLayout.selectedTabPosition } catch (e: Exception) { 0 }
-                    filterList(if (currentTab < 0) 0 else currentTab)
+                if (response.isSuccessful) {
+                    fullOrderList = response.body() ?: emptyList()
+                    // Обновляем UI (здесь у тебя может быть вызов метода фильтрации или напрямую в адаптер)
+                    // Убедись, что вызываешь свой метод отображения списка, если он назывался иначе
+                    if (fullOrderList.isNotEmpty()) {
+                        emptyView.visibility = View.GONE
+                        recyclerView.visibility = View.VISIBLE
+                        // Если у тебя адаптер обновляется так:
+                        // adapter.submitList(fullOrderList)
+                    } else {
+                        showEmpty()
+                    }
                 } else {
                     showEmpty()
                 }
@@ -118,7 +119,6 @@ class HistoryActivity : BaseActivity() {
 
             override fun onFailure(call: Call<List<TaxiOrderDto>>, t: Throwable) {
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@HistoryActivity, "Помилка завантаження", Toast.LENGTH_SHORT).show()
                 showEmpty()
             }
         })
@@ -159,12 +159,11 @@ class HistoryActivity : BaseActivity() {
 
     // --- НОВЫЙ МЕТОД: Отмена заказа ---
     private fun cancelOrder(orderId: Long) {
-        val token = sessionManager.fetchAuthToken() ?: return
-
-        // Показываем простой Toast, что процесс пошел
+        // Мы больше не достаем token вручную!
         Toast.makeText(this, "Скасування...", Toast.LENGTH_SHORT).show()
 
-        ApiClient.instance.cancelOrder("Bearer $token", orderId).enqueue(object : Callback<TaxiOrderDto> {
+        // Вызов очищен: передаем только orderId (без "Bearer $token")
+        ApiClient.instance.cancelOrder(orderId).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 if (response.isSuccessful) {
                     Toast.makeText(this@HistoryActivity, "Замовлення скасовано", Toast.LENGTH_SHORT).show()
@@ -177,7 +176,7 @@ class HistoryActivity : BaseActivity() {
             }
 
             override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
-                Toast.makeText(this@HistoryActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@HistoryActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
             }
         })
     }

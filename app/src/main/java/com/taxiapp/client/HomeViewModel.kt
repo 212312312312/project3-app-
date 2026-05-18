@@ -90,13 +90,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         // 2. Если есть маршрут - считаем цену на сервере
         if (routePolyline != null && distanceMeters > 0) {
-            
+
             // --- НОВЕ: Формуємо фейковий список точок потрібного розміру ---
             // Це гарантує, що сервер зможе отримати кількість через request.waypoints?.size
             val fakeWaypointsList = if (waypointsCount > 0) List(waypointsCount) { "wp" } else emptyList()
-            
+
             val request = CalculatePriceRequestDto(
-                googleRoutePolyline = routePolyline, 
+                googleRoutePolyline = routePolyline,
                 distanceMeters = distanceMeters,
                 waypointsCount = waypointsCount,
                 waypoints = fakeWaypointsList
@@ -138,9 +138,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun startCheckingCardBinding() {
         profilePollingRunnable = object : Runnable {
             override fun run() {
-                val token = sessionManager.fetchAuthToken() ?: return
-                
-                ApiClient.instance.getClientProfile("Bearer $token").enqueue(object : Callback<com.taxiapp.client.network.ClientProfileResponse> {
+                // Вызов очищен от ручной передачи токена
+                ApiClient.instance.getClientProfile().enqueue(object : Callback<com.taxiapp.client.network.ClientProfileResponse> {
                     override fun onResponse(call: Call<com.taxiapp.client.network.ClientProfileResponse>, response: Response<com.taxiapp.client.network.ClientProfileResponse>) {
                         if (response.isSuccessful) {
                             val profile = response.body()
@@ -178,8 +177,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // --- API: Маршрут ---
     fun fetchDirections(origin: LatLng, dest: LatLng, waypoints: List<Pair<LatLng, String>>) {
         // 1. ФІКС: Очищаємо старий маршрут, щоб гарантовано не відправити серверу старі кілометри!
-        currentRoutePolyline = null 
-        
+        currentRoutePolyline = null
+
         val originStr = "${origin.latitude},${origin.longitude}"
         val destStr = "${dest.latitude},${dest.longitude}"
         val wpStr = if (waypoints.isNotEmpty()) {
@@ -242,11 +241,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelOrder(reasonText: String? = null) { // <-- ДОДАНО ПАРАМЕТР
         val id = activeOrderId ?: return
-        val token = sessionManager.fetchAuthToken() ?: return
         _isLoading.value = true
 
-        // Передаємо reasonText в ApiClient
-        ApiClient.instance.cancelOrder("Bearer $token", id, reasonText).enqueue(object : Callback<TaxiOrderDto> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.cancelOrder(id, reasonText).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
@@ -277,10 +275,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- API: Создание заказа ---
     fun createOrder(request: CreateOrderRequestDto) {
-        val token = sessionManager.fetchAuthToken() ?: return
         _isLoading.value = true
 
-        ApiClient.instance.createOrder("Bearer $token", request).enqueue(object : Callback<TaxiOrderDto> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.createOrder(request).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful) {
@@ -308,14 +306,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     var errorText = "Не вдалося створити замовлення"
                     val code = response.code()
-                    
+
                     if (code == 400) {
                         // Жестко перехватываем ошибку лимита заказов
                         errorText = "Перевищено ліміт: макс. 3 активних замовлення"
                     } else {
                         try {
                             val errorBody = response.errorBody()?.string() ?: ""
-                            
+
                             // Если сервер вернул JSON
                             if (errorBody.trim().startsWith("{")) {
                                 val jsonObject = org.json.JSONObject(errorBody)
@@ -326,11 +324,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                                 } else {
                                     errorText = "Помилка сервера (Код: $code)"
                                 }
-                            } 
+                            }
                             // Если сервер вернул просто короткий текст
                             else if (errorBody.isNotBlank() && errorBody.length < 50) {
                                 errorText = errorBody
-                            } 
+                            }
                             else {
                                 errorText = "Помилка сервера (Код: $code)"
                             }
@@ -351,10 +349,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // --- API: Отмена заказа ----
     fun cancelOrder() {
         val id = activeOrderId ?: return
-        val token = sessionManager.fetchAuthToken() ?: return
         _isLoading.value = true
 
-        ApiClient.instance.cancelOrder("Bearer $token", id).enqueue(object : Callback<TaxiOrderDto> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.cancelOrder(id).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
@@ -378,22 +376,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // --- Логика опроса статуса ---
     private fun checkOrderStatus() {
         val id = activeOrderId ?: return
-        val token = sessionManager.fetchAuthToken() ?: return
 
-        ApiClient.instance.getOrder("Bearer $token", id).enqueue(object : Callback<TaxiOrderDto> {
+        ApiClient.instance.getOrder(id).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 if (response.isSuccessful) {
                     val order = response.body()
                     if (order != null) {
                         _activeOrder.value = order
 
-                        // ДОБАВЛЕНО: Синхронизируем статус с виджетом
-                        updateOrderStatusService(order)
-
+                        // ИСПРАВЛЕНИЕ: Мы НЕ обновляем сервис, если заказ отменен или завершен
                         if (order.status == "COMPLETED" || order.status == "CANCELLED") {
-                            // ДОБАВЛЕНО: Убиваем виджет, если заказ всё
                             stopOrderStatusService(order.id)
                             stopStatusPolling()
+                        } else {
+                            // Запускаем/обновляем сервис ТОЛЬКО если заказ в процессе
+                            updateOrderStatusService(order)
                         }
                     }
                 }
@@ -410,10 +407,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // --- API: Смена типа оплаты "на лету" ---
     fun updateActiveOrderPaymentMethod(method: String) {
         val id = activeOrderId ?: return
-        val token = sessionManager.fetchAuthToken() ?: return
         _isLoading.value = true
 
-        ApiClient.instance.updatePaymentMethod("Bearer $token", id, method).enqueue(object : Callback<MessageResponseDto> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.updatePaymentMethod(id, method).enqueue(object : Callback<MessageResponseDto> {
             override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful) {
@@ -434,10 +431,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // --- API: Изменение цены "на лету" ---
     fun updateActiveOrderPrice(addedValue: Double) {
         val id = activeOrderId ?: return
-        val token = sessionManager.fetchAuthToken() ?: return
         _isLoading.value = true
 
-        ApiClient.instance.updateOrderPrice("Bearer $token", id, addedValue).enqueue(object : Callback<MessageResponseDto> {
+        // Вызов очищен от ручной передачи токена
+        ApiClient.instance.updateOrderPrice(id, addedValue).enqueue(object : Callback<MessageResponseDto> {
             override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful) {

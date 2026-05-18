@@ -109,24 +109,21 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun loadMessageHistory(silent: Boolean = false) {
-        ApiClient.instance.getChatMessages(token, orderId).enqueue(object : Callback<List<ChatMessageDto>> {
+        // Вызов очищен от token
+        ApiClient.instance.getChatMessages(orderId).enqueue(object : Callback<List<ChatMessageDto>> {
             override fun onResponse(call: Call<List<ChatMessageDto>>, response: Response<List<ChatMessageDto>>) {
                 if (response.isSuccessful) {
-                    response.body()?.let { newMessages ->
-                        val isUpdated = chatAdapter.updateMessages(newMessages)
-                        if (isUpdated) {
-                            scrollToBottom()
-                        }
-                    }
-                } else if (!silent) {
-                    Log.e("CHAT_ERROR", "Помилка завантаження: ${response.code()}")
+                    val messages = response.body() ?: emptyList()
+                    // Предполагаю, что у тебя в адаптере есть метод вроде updateMessages или submitList
+                    chatAdapter.updateMessages(messages)
+                    if (!silent) scrollToBottom()
+                } else {
+                    if (!silent) Toast.makeText(this@ChatActivity, "Помилка завантаження чату", Toast.LENGTH_SHORT).show()
                 }
             }
 
             override fun onFailure(call: Call<List<ChatMessageDto>>, t: Throwable) {
-                if (!silent) {
-                    Toast.makeText(this@ChatActivity, "Помилка завантаження чату", Toast.LENGTH_SHORT).show()
-                }
+                if (!silent) Toast.makeText(this@ChatActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
             }
         })
     }
@@ -135,7 +132,8 @@ class ChatActivity : BaseActivity() {
         val request = SendMessageRequest(text)
         etMessage.text.clear()
 
-        ApiClient.instance.sendChatMessage(token, orderId, request).enqueue(object : Callback<ChatMessageDto> {
+        // Вызов очищен от token
+        ApiClient.instance.sendChatMessage(orderId, request).enqueue(object : Callback<ChatMessageDto> {
             override fun onResponse(call: Call<ChatMessageDto>, response: Response<ChatMessageDto>) {
                 if (response.isSuccessful) {
                     response.body()?.let {
