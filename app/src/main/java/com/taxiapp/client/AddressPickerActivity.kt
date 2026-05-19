@@ -276,8 +276,13 @@ class AddressPickerActivity : BaseActivity() {
 
         rowDestination.visibility = View.VISIBLE
         activeEditText = targetEt
-        targetEt.requestFocus()
         targetEt.hint = hint
+
+        // Жорстко переносимо курсор в кінець, якщо там вже є текст
+        targetEt.requestFocus()
+        if (targetEt.text.isNotEmpty()) {
+            targetEt.setSelection(targetEt.text.length)
+        }
 
         val iconView = findViewById<ImageView>(R.id.iv_dest_icon)
         try {
@@ -290,10 +295,8 @@ class AddressPickerActivity : BaseActivity() {
         if (isOriginMode) {
             // --- РЕЖИМ ВИБОРУ ТОЧКИ А (ЗВІДКИ) ---
             activeEditText = etOrigin
-            etOrigin.requestFocus()
 
-            // Відновлюємо адресу, якщо вона прийшла (з карти або при старті)
-            // Раніше тут було setText(""), що видаляло вибрану на карті адресу
+            // 1. Спочатку встановлюємо текст
             val addressText = if (!currentAddressA.isNullOrEmpty()) {
                 AddressUtils.formatAddress(currentAddressA)
             } else {
@@ -305,6 +308,12 @@ class AddressPickerActivity : BaseActivity() {
                 fieldCoordinates[etOrigin] = LatLng(latA, lngA)
             }
 
+            // 2. ТІЛЬКИ ПОТІМ запитуємо фокус і жорстко ставимо курсор в кінець
+            etOrigin.requestFocus()
+            if (etOrigin.text.isNotEmpty()) {
+                etOrigin.setSelection(etOrigin.text.length)
+            }
+
             lineOriginDown.visibility = View.GONE
             lineDestUp.visibility = View.GONE
             rowDestination.visibility = View.GONE
@@ -312,7 +321,6 @@ class AddressPickerActivity : BaseActivity() {
         } else {
             // --- РЕЖИМ ВИБОРУ ТОЧКИ Б АБО ЗУПИНОК ---
             activeEditText = etDestination
-            etDestination.requestFocus()
 
             // 1. Встановлюємо точку А (вона завжди передається як база)
             val originText = AddressUtils.formatAddress(currentAddressA ?: "Поточне місце")
@@ -347,7 +355,6 @@ class AddressPickerActivity : BaseActivity() {
             val wNames = intent.getStringArrayListExtra("prefill_waypoints_names")
 
             if (wLats != null && wLngs != null && wNames != null) {
-                // Очищуємо контейнер перед додаванням, щоб уникнути дублів при поверненні з карти
                 containerWaypoints.removeAllViews()
                 waypointViews.clear()
 
@@ -370,6 +377,12 @@ class AddressPickerActivity : BaseActivity() {
                         }
                     }
                 }
+            }
+
+            // 4. ТІЛЬКИ ПОТІМ запитуємо фокус для поля "Куди" і ставимо курсор в кінець
+            etDestination.requestFocus()
+            if (etDestination.text.isNotEmpty()) {
+                etDestination.setSelection(etDestination.text.length)
             }
         }
     }

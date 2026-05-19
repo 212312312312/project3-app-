@@ -793,7 +793,7 @@ private fun fetchAddressAtCurrentLocation() {
                 if (!isFinishing && !isDestroyed) {
                     showNotificationPermissionDialog()
                 }
-            }, 1000)
+            }, 100)
         }
     }
 
@@ -1904,6 +1904,8 @@ btnChangePayment.setOnClickListener {
         
         // --- ЖЕСТКО ОТКЛЮЧАЕМ ВСЕ СИСТЕМНЫЕ КНОПКИ И ПАНЕЛИ GOOGLE MAPS ---
         mMap?.uiSettings?.apply {
+            isRotateGesturesEnabled = false // Запрет вращения двумя пальцами
+            isTiltGesturesEnabled = false   // Запрет наклона (3D режима) двумя пальцами     // Убираем лишний компас, так как вращения нет
             isMapToolbarEnabled = false       // УБИРАЕТ ту самую панель (маршрут/открыть в картах) при клике на маркеры!
             isCompassEnabled = false          // Убирает системный компас
             isZoomControlsEnabled = false     // Убирает системные кнопки +/-
@@ -3583,59 +3585,66 @@ if (!cardMask.isNullOrEmpty()) {
     }
 
     private fun moveViewIdeally(view: View, targetX: Float, targetY: Float, isStartPoint: Boolean) {
-        val viewWidth = view.width
-        val viewHeight = view.height
-        val screenWidth = resources.displayMetrics.widthPixels
-        
-        var isRouteGoingUp = false 
+        val viewWidth = view.width.toFloat()
+        val viewHeight = view.height.toFloat()
 
-        if (decodedRoutePoints != null && decodedRoutePoints!!.isNotEmpty()) {
-            val projection = mMap!!.projection
+        // 1. Вектор за замовчуванням (виштовхуємо маркер вгору)
+        var dx = 0f
+        var dy = 1f 
+
+        if (decodedRoutePoints != null && decodedRoutePoints!!.size > 1) {
             val routePoints = decodedRoutePoints!!
             
-            val compareLatLng = if (isStartPoint) {
-                if (routePoints.size > 1) routePoints[1] else routePoints[0]
+            val p1 = if (isStartPoint) routePoints.first() else routePoints.last()
+            var p2 = p1
+            
+            // Відступаємо 20 метрів по маршруту для стабільного вектора
+            if (isStartPoint) {
+                for (i in 1 until routePoints.size) {
+                    p2 = routePoints[i]
+                    if (SphericalUtil.computeDistanceBetween(p1, p2) > 20.0) break
+                }
             } else {
-                if (routePoints.size > 1) routePoints[routePoints.size - 2] else routePoints[0]
+                for (i in routePoints.size - 2 downTo 0) {
+                    p2 = routePoints[i]
+                    if (SphericalUtil.computeDistanceBetween(p1, p2) > 20.0) break
+                }
             }
 
-            val compareScreenPt = projection.toScreenLocation(compareLatLng)
-
-            if (compareScreenPt.y < targetY) {
-                isRouteGoingUp = true
-            }
+            // РАДИКАЛЬНА ЗМІНА: Рахуємо стабільний географічний азимут (Heading)
+            // Це повністю вбиває "тремтіння" (jitter) при анімації камери!
+            val heading = SphericalUtil.computeHeading(p1, p2)
+            val headingRad = Math.toRadians(heading)
+            
+            // Проектуємо географічний кут на площину екрану:
+            // Азимут 0 (Північ) -> екранний dy = -1 (йде вгору)
+            // Азимут 90 (Схід) -> екранний dx = 1 (йде вправо)
+            dx = Math.sin(headingRad).toFloat()
+            dy = (-Math.cos(headingRad)).toFloat() // Мінус, бо вісь Y на екрані йде вниз
         }
 
-        var finalY: Float
-        val verticalPadding = convertDpToPixel(8f)
+        // 2. Ідеальний вектор - СТРОГО ПРОТИЛЕЖНО МАРШРУТУ
+        val pushDirX = -dx
+        val pushDirY = -dy
 
-        if (isRouteGoingUp) {
-            finalY = targetY + verticalPadding
-        } else {
-            finalY = targetY - viewHeight - verticalPadding
-        }
+        // 3. БЕЗПЕЧНА ОРБІТА (Зменшили до 12dp для економії місця та естетики, як в Uklon)
+        val baseDotRadius = convertDpToPixel(12f) 
 
-        var finalX = targetX - (viewWidth / 2)
+        // 4. ДИНАМІЧНИЙ ВІДСТУП (Еліптична математика залишається)
+        val w2 = viewWidth / 2f
+        val h2 = viewHeight / 2f
+        
+        val boxRadius = Math.hypot((w2 * pushDirX).toDouble(), (h2 * pushDirY).toDouble()).toFloat()
+        val safeDistance = boxRadius + baseDotRadius
 
-        val margin = convertDpToPixel(16f)
+        // 5. Рахуємо фінальні координати центру і лівого верхнього кута
+        val bubbleCenterX = targetX + pushDirX * safeDistance
+        val bubbleCenterY = targetY + pushDirY * safeDistance
 
-        if (finalX < margin) {
-            finalX = margin
-        }
-        if (finalX + viewWidth > screenWidth - margin) {
-            finalX = screenWidth - margin - viewWidth
-        }
+        val finalX = bubbleCenterX - w2
+        val finalY = bubbleCenterY - h2
 
-        val topSafeArea = convertDpToPixel(50f) 
-        val bottomSafeArea = resources.displayMetrics.heightPixels - convertDpToPixel(150f) 
-
-        if (finalY < topSafeArea) {
-            finalY = targetY + verticalPadding
-        }
-        else if (finalY + viewHeight > bottomSafeArea) {
-             finalY = targetY - viewHeight - verticalPadding
-        }
-
+        // 6. Жорстко фіксуємо координати (маркер пливе за екран разом з картою)
         view.x = finalX
         view.y = finalY
     }
