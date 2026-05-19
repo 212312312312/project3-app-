@@ -312,29 +312,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         errorText = "Перевищено ліміт: макс. 3 активних замовлення"
                     } else {
                         try {
-                            val errorBody = response.errorBody()?.string() ?: ""
+    val errorBody = response.errorBody()?.string() ?: ""
 
-                            // Если сервер вернул JSON
-                            if (errorBody.trim().startsWith("{")) {
-                                val jsonObject = org.json.JSONObject(errorBody)
-                                // Если бэкенд когда-нибудь начнет отдавать поле message
-                                if (jsonObject.has("message")) {
-                                    val msg = jsonObject.getString("message")
-                                    if (msg.isNotBlank()) errorText = msg
-                                } else {
-                                    errorText = "Помилка сервера (Код: $code)"
-                                }
-                            }
-                            // Если сервер вернул просто короткий текст
-                            else if (errorBody.isNotBlank() && errorBody.length < 50) {
-                                errorText = errorBody
-                            }
-                            else {
-                                errorText = "Помилка сервера (Код: $code)"
-                            }
-                        } catch (e: Exception) {
-                            errorText = "Помилка мережі або сервера (Код: $code)"
-                        }
+    // Если сервер вернул JSON
+    if (errorBody.trim().startsWith("{")) {
+        val jsonObject = org.json.JSONObject(errorBody)
+        if (jsonObject.has("message")) {
+            val msg = jsonObject.getString("message")
+            if (msg.isNotBlank()) errorText = msg
+        } else {
+            errorText = "Помилка сервера (Код: $code)"
+        }
+    }
+    // Если сервер вернул просто текст (как в случае с твоим 400 BAD_REQUEST)
+    else if (errorBody.isNotBlank() && errorBody.length < 150) {
+        errorText = errorBody
+    } else {
+        // Фоллбэк, если бэкенд кинул что-то непонятное, но код 400
+        errorText = if (code == 400) "Перевищено ліміт замовлень або невірні дані" else "Помилка сервера (Код: $code)"
+    }
+} catch (e: Exception) {
+    errorText = "Помилка мережі або сервера (Код: $code)"
+}
                     }
                     _errorMessage.value = errorText
                 }

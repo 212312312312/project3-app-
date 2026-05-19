@@ -92,7 +92,17 @@
                 android:timePickerMode="spinner"
                 android:theme="@style/CustomPickerTheme" />
         </FrameLayout>
-    </FrameLayout>
+    </FrameLayout>  <TextView
+    android:id="@+id/tv_schedule_error"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    android:gravity="center"
+    android:text="Мінімум за 40 хвилин до подачі"
+    android:textColor="@color/taxi_red_cancel"
+    android:textSize="14sp"
+    android:textStyle="bold"
+    android:visibility="gone" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"

@@ -1113,6 +1113,14 @@ btnConfirmMapPicker.setOnClickListener {
         var lastPaddingUpdateHeight = 0
 
         handleTouchZone.setOnTouchListener { v, event ->
+            // --- ФИНАЛЬНЫЙ ПРЕДОХРАНИТЕЛЬ ---
+            val order = viewModel.activeOrder.value
+            // Блокируем свайп, если заказ отменен, завершен, ИЛИ данные уже очищены (null)
+            if (order == null || order.status == "CANCELLED" || order.status == "COMPLETED") {
+                return@setOnTouchListener true // true означает "мы перехватили жест, но ничего не делаем"
+            }
+            // --------------------------------
+
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     startY = event.rawY
@@ -1390,20 +1398,22 @@ val btnChangePrice = activeOrderCard.findViewById<View>(R.id.btn_search_change_p
 
 // Привязываем логику
 btnChangePayment.setOnClickListener {
-    showChangePaymentDialog()
-}
+            animateOrderDetailsToState(false) // ДОДАНО: Згортаємо деталі перед відкриттям діалогу
+            showChangePaymentDialog()
+        }
 
-btnChangePrice.setOnClickListener {
-    val order = viewModel.activeOrder.value
-    if (order != null) {
-        val currentPrice = order.price
-        val addedValue = order.addedValue
-        // Вычисляем чистую базовую цену (без надбавок ползунка)
-        val basePrice = currentPrice - addedValue 
-                
-        showChangePriceDialogForActiveOrder(basePrice, addedValue)
-    }
-}
+        btnChangePrice.setOnClickListener {
+            animateOrderDetailsToState(false) // ДОДАНО: Згортаємо деталі перед відкриттям діалогу
+            val order = viewModel.activeOrder.value
+            if (order != null) {
+                val currentPrice = order.price
+                val addedValue = order.addedValue
+                // Вычисляем чистую базовую цену (без надбавок ползунка)
+                val basePrice = currentPrice - addedValue 
+                        
+                showChangePriceDialogForActiveOrder(basePrice, addedValue)
+            }
+        }
 
         findViewById<View>(R.id.btn_open_payment).setOnClickListener {
             val intent = Intent(this, PaymentActivity::class.java)
@@ -2907,30 +2917,32 @@ class RoundedBackgroundSpan(
     // 4. ЛОГИКА КНОПКИ ПОДТВЕРЖДЕНИЯ
     // ==========================================
     btnConfirm.setOnClickListener {
-        // Берем готовый день из нашего массива
-        val selectedIndex = datePicker.value
-        val selectedCalendar = availableDates[selectedIndex].clone() as Calendar
+    // Берем готовый день из нашего массива
+    val selectedIndex = datePicker.value
+    val selectedCalendar = availableDates[selectedIndex].clone() as Calendar
 
-        // Добавляем к нему время
-        val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
-        val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
+    // Добавляем к нему время
+    val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
+    val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
 
-        selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
-        selectedCalendar.set(Calendar.MINUTE, minute)
-        selectedCalendar.set(Calendar.SECOND, 0)
-        selectedCalendar.set(Calendar.MILLISECOND, 0)
+    selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
+    selectedCalendar.set(Calendar.MINUTE, minute)
+    selectedCalendar.set(Calendar.SECOND, 0)
+    selectedCalendar.set(Calendar.MILLISECOND, 0)
 
-        // Проверка на прошлое время
-        val now = Calendar.getInstance()
-        if (selectedCalendar.before(now)) {
-            showToast("Не можна обрати час у минулому")
-            updateTabs(false) // Автоматически перекидываем на вкладку времени для исправления
-        } else {
-            scheduledDate = selectedCalendar // Сохраняем выбранную дату в глобальную переменную
-            updateOrderButtonWithTime()      // Обновляем UI главной кнопки
-            dialog.dismiss()
-        }
+    // --- НОВАЯ ЛОГИКА ПРОВЕРКИ 40 МИНУТ ---
+    val minAllowedTime = Calendar.getInstance()
+    minAllowedTime.add(Calendar.MINUTE, 40) // Добавляем 40 минут к текущему времени
+
+    if (selectedCalendar.before(minAllowedTime)) {
+        showToast("Попереднє замовлення можливе мінімум за 40 хвилин")
+        updateTabs(false) // Автоматически перекидываем на вкладку времени для исправления
+    } else {
+        scheduledDate = selectedCalendar // Сохраняем выбранную дату в глобальную переменную
+        updateOrderButtonWithTime()      // Обновляем UI главной кнопки
+        dialog.dismiss()
     }
+}
 
     // Запускаем диалог
     dialog.show()
@@ -4081,6 +4093,9 @@ private fun stopWaitingTimer() {
 
     // Обробка натискання на кнопку "Підтвердити"
     btnConfirm.setOnClickListener {
+        // ДОДАНО: Миттєво згортаємо панель і прибираємо фон перед відправкою запиту!
+        animateOrderDetailsToState(false)
+
         val checkedId = rgReasons.checkedRadioButtonId
         if (checkedId != -1) {
             // Оскільки ID дорівнює індексу масиву, легко дістаємо текст
@@ -4477,19 +4492,26 @@ private fun stopWaitingTimer() {
     }
 
     private fun updateStatusUI(order: TaxiOrderDto) {
-    orderStatusText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-    
-    btnCancelOrder.isEnabled = true
-    btnCancelOrder.text = getString(R.string.btn_cancel_order)
+        // 1. НАША НОВАЯ ПЛАВНАЯ АНИМАЦИЯ
+        (activeOrderCard as? ViewGroup)?.let { cardGroup ->
+            val transition = android.transition.AutoTransition().apply {
+                duration = 300 
+                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            }
+            android.transition.TransitionManager.beginDelayedTransition(cardGroup, transition)
+        }
 
-    // --- НОВАЯ ЛОГИКА ДЛЯ ЗАПЛАНИРОВАННОГО ВРЕМЕНИ ---
+        orderStatusText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
+        
+        btnCancelOrder.isEnabled = true
+        btnCancelOrder.text = getString(R.string.btn_cancel_order)
+
+        // 2. БЛОК ЗАПЛАНИРОВАННОГО ВРЕМЕНИ (ОСТАВЬ ТОЛЬКО ОДИН ЭКЗЕМПЛЯР ЭТОГО КОДА!)
         val tvScheduledTime = findViewById<TextView>(R.id.tv_scheduled_time)
         if (!order.scheduledAt.isNullOrEmpty()) {
             tvScheduledTime?.visibility = View.VISIBLE
 
-            // Безопасно достаем время (ЧЧ:ММ) из строки, если сервер отдает "2024-05-18T14:30:00"
             val timeStr = try {
-                // !! ВАЖНО: используем order.scheduledAt !!
                 if (order.scheduledAt.contains("T")) {
                     order.scheduledAt.substringAfter("T").take(5)
                 } else {
@@ -4502,11 +4524,10 @@ private fun stopWaitingTimer() {
         } else {
             tvScheduledTime?.visibility = View.GONE
         }
-    // ------------------------------------------------
 
-    when(order.status) {
-        // --- ДОБАВЛЕН НОВЫЙ СТАТУС ДЛЯ ЗАПЛАНИРОВАННЫХ ---
-        "SCHEDULED" -> {
+        // 3. ДАЛЬШЕ СРАЗУ ИДЕТ ПРОВЕРКА СТАТУСОВ
+        when(order.status) {
+            "SCHEDULED" -> {
             updateOrderProgress(0)
             orderStatusText.text = "Заплановано" // Можно вынести в strings.xml
             stopStatusBlinking() // Для запланированных мигание не нужно
@@ -4670,6 +4691,7 @@ private fun stopWaitingTimer() {
         "COMPLETED" -> {
             updateOrderProgress(3)
             stopStatusBlinking()
+            resetOrderDetailsState()
             orderStatusText.text = getString(R.string.status_completed)
             
             layoutSearchControls.visibility = View.GONE
@@ -4708,7 +4730,7 @@ private fun stopWaitingTimer() {
         
         "CANCELLED" -> {
             stopStatusBlinking()
-            
+            resetOrderDetailsState()
             orderStatusText.text = getString(R.string.status_cancelled)
             orderStatusText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.taxi_red_cancel))
             
