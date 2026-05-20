@@ -77,6 +77,31 @@ object BitmapHelper {
         return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
+    // --- НОВЫЙ МЕТОД ДЛЯ МАСШТАБИРОВАНИЯ PNG ИКОНОК ---
+    fun getScaledBitmapDescriptor(
+        context: Context,
+        @androidx.annotation.DrawableRes id: Int,
+        widthDp: Int,
+        heightDp: Int
+    ): BitmapDescriptor? {
+        val drawable = ContextCompat.getDrawable(context, id) ?: return null
+
+        // Переводим желаемый размер из DP в реальные пиксели экрана
+        val displayMetrics = context.resources.displayMetrics
+        val widthPx = (widthDp * displayMetrics.density).toInt()
+        val heightPx = (heightDp * displayMetrics.density).toInt()
+
+        // Создаем пустой холст нужного размера
+        val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // Растягиваем/сжимаем картинку под этот холст
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+
+        return BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+
     // Твой старый метод (оставляем, если он где-то используется)
     fun vectorToBitmap(context: Context, @androidx.annotation.DrawableRes id: Int): BitmapDescriptor {
         val vectorDrawable = ContextCompat.getDrawable(context, id)!!

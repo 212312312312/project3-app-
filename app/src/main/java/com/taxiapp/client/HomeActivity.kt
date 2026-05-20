@@ -38,6 +38,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -201,6 +202,11 @@ private lateinit var btnConfirmMapPicker: Button
     private lateinit var tvOrigin: TextView
     private lateinit var containerDestination: LinearLayout
     private lateinit var tvDestination: TextView
+
+    private var lastLocationUpdateTime = 0L
+    private val LOCATION_UPDATE_INTERVAL = 7000L // Оновлення раз на 7 секунд
+    private var lastLocationSent: LatLng? = null
+    private val nearbyDriverMarkers = mutableMapOf<Long, Marker>()
 
     private lateinit var tvOverlayDestDetails: TextView
     
@@ -566,6 +572,17 @@ private fun fetchAddressAtCurrentLocation() {
 
         webSocketManager = WebSocketManager(ApiClient.BASE_URL)
         fetchCustomCarIcon()
+        val sessionManager = com.taxiapp.client.utils.SessionManager(this)
+        val token = sessionManager.fetchAuthToken() // ИСПРАВЛЕНО ЗДЕСЬ
+
+        if (!token.isNullOrEmpty()) {
+            webSocketManager?.connect(token)
+        } else {
+            android.util.Log.e("WS_TAXI_DEBUG", "❌ Токен пуст, не могу подключить сокет!")
+        }
+
+        // А затем уже слушаем
+        viewModel.startListeningNearbyDrivers(webSocketManager)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val isDark = sessionManager.isDarkMode()
@@ -624,6 +641,12 @@ private fun fetchAddressAtCurrentLocation() {
 
         // --- ПОДПИСКА НА VIEWMODEL ---
         setupViewModelObservers()
+
+        viewModel.startListeningNearbyDrivers(webSocketManager)
+
+        viewModel.nearbyDrivers.observe(this) { drivers ->
+        updateNearbyDriversOnMap(drivers)
+    }
         
         // ДОБАВЛЕНО: Обработка системной кнопки/жеста "Назад"
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
@@ -897,7 +920,18 @@ private fun fetchAddressAtCurrentLocation() {
 
     override fun onResume() {
         super.onResume()
-
+        if (webSocketManager?.isConnected() != true) {
+            Log.d("WS_TAXI_DEBUG", "📱 Приложение проснулось! Сокет мертв, пытаюсь переподключиться...")
+            
+            // Получаем актуальный токен
+            val sessionManager = com.taxiapp.client.utils.SessionManager(this)
+            val token = sessionManager.fetchAuthToken()
+            
+            if (!token.isNullOrEmpty()) {
+                // Переподключаемся
+                webSocketManager?.connect(token)
+            }
+        }
         val savedLanguage = sessionManager.getLanguage()
         if (currentActiveLanguage != savedLanguage) {
             currentActiveLanguage = savedLanguage
@@ -1007,6 +1041,8 @@ btnConfirmMapPicker.setOnClickListener {
 
         profileCityText = findViewById(R.id.profile_current_city)
         profileBtnCity = findViewById(R.id.profile_btn_change_city)
+
+        
 
         tvOverlayDestDetails = findViewById(R.id.tv_overlay_dest_details)
         
@@ -1225,7 +1261,7 @@ btnConfirmMapPicker.setOnClickListener {
         ivIconWork = findViewById(R.id.iv_icon_work)
         indicatorAddWork = findViewById(R.id.indicator_add_work)
         ivPaymentIcon = findViewById(R.id.iv_payment_icon)
-
+        
 
         activeOrderCard = findViewById(R.id.active_order_card)
         layoutActiveOrderPrice = findViewById(R.id.layout_active_order_price)
@@ -1904,11 +1940,13 @@ btnChangePayment.setOnClickListener {
         
         // --- ЖЕСТКО ОТКЛЮЧАЕМ ВСЕ СИСТЕМНЫЕ КНОПКИ И ПАНЕЛИ GOOGLE MAPS ---
         mMap?.uiSettings?.apply {
+            isRotateGesturesEnabled = false // Запрет вращения двумя пальцами
+            isTiltGesturesEnabled = false   // Запрет наклона (3D режима) двумя пальцами     // Убираем лишний компас, так как вращения нет
             isMapToolbarEnabled = false       // УБИРАЕТ ту самую панель (маршрут/открыть в картах) при клике на маркеры!
             isCompassEnabled = false          // Убирает системный компас
             isZoomControlsEnabled = false     // Убирает системные кнопки +/-
             isMyLocationButtonEnabled = false // Убирает системную кнопку геолокации вверху справа
-            isIndoorLevelPickerEnabled = false // Убирает выбор этажей внутри ТЦ (чтобы не перекрывало UI)
+            isIndoorLevelPickerEnabled = false  // Убирает выбор этажей внутри ТЦ (чтобы не перекрывало UI)
         }
 
         if (sessionManager.isDarkMode()) {
@@ -1988,6 +2026,21 @@ btnChangePayment.setOnClickListener {
         // 3. ИСПРАВЛЯЕМ ПАДЕНИЕ ПИНА (Очистка задержки при приземлении)
         mMap?.setOnCameraIdleListener {
             val target = mMap!!.cameraPosition.target
+
+            val currentTime = System.currentTimeMillis()
+            val distanceMoved = if (lastLocationSent != null) {
+                com.google.maps.android.SphericalUtil.computeDistanceBetween(lastLocationSent, target)
+            } else {
+                1000.0 // Форсуємо першу відправку
+            }
+
+            // Відправляємо якщо пройшло 7 сек АБО камеру зсунули більше ніж на 50 метрів
+            if (currentTime - lastLocationUpdateTime > LOCATION_UPDATE_INTERVAL || distanceMoved > 50.0) {
+                lastLocationUpdateTime = currentTime
+                lastLocationSent = target
+                Log.d("WS_TAXI_DEBUG", "📤 ОТПРАВЛЯЮ КООРДИНАТЫ НА СЕРВЕР: lat=${target.latitude}")
+                viewModel.updateClientLocation(webSocketManager, target.latitude, target.longitude)
+            }
 
             // 1. АНИМАЦИЯ ПИНА: Срабатывает ТОЛЬКО если маршрут не построен
             if ((isInterfaceRevealed && !isRouteMode && viewModel.currentRoutePolyline == null) || isMapPickingMode) {
@@ -3487,26 +3540,25 @@ if (!cardMask.isNullOrEmpty()) {
     }
 
     private fun animateMarker(marker: Marker, toPosition: LatLng, toRotation: Float) {
-        val startPos = marker.position
-        val startRotation = marker.rotation
+    val startPosition = marker.position
+    val startRotation = marker.rotation
+
+    val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
+    valueAnimator.duration = 2000 
+    valueAnimator.interpolator = LinearInterpolator()
+    valueAnimator.addUpdateListener { animation ->
+        val v = animation.animatedFraction
+        val lng = v * toPosition.longitude + (1 - v) * startPosition.longitude
+        val lat = v * toPosition.latitude + (1 - v) * startPosition.latitude
+        marker.position = LatLng(lat, lng)
         
-        val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
-        valueAnimator.duration = 2000
-        valueAnimator.interpolator = LinearInterpolator()
-        
-        valueAnimator.addUpdateListener { animation ->
-            val v = animation.animatedFraction
-            val lng = v * toPosition.longitude + (1 - v) * startPos.longitude
-            val lat = v * toPosition.latitude + (1 - v) * startPos.latitude
-            marker.position = LatLng(lat, lng)
-            
-            var rot = toRotation - startRotation
-            while (rot < -180) rot += 360
-            while (rot > 180) rot -= 360
-            marker.rotation = startRotation + rot * v
-        }
-        valueAnimator.start()
+        var delta = toRotation - startRotation
+        if (delta > 180) delta -= 360
+        if (delta < -180) delta += 360
+        marker.rotation = startRotation + (v * delta)
     }
+    valueAnimator.start()
+}
     
     private fun startStatusBlinking() {
         if (::statusBlinkAnimator.isInitialized && statusBlinkAnimator.isRunning) return
@@ -4900,6 +4952,82 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
         }
     }
 }
+
+private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
+        if (mMap == null) return
+        
+        // 1. НАСТРОЙКА РАДИУСА (в метрах)
+        val VISIBILITY_RADIUS_METERS = 500.0 // Например, радиус 5 км. Можешь поменять под свои нужды.
+        val mapCenter = mMap!!.cameraPosition.target
+
+        // Если юзер в режиме заказа — чистим всё
+        if (activeOrderId != null || isRouteMode || viewModel.currentRoutePolyline != null) {
+            nearbyDriverMarkers.values.forEach { it.remove() }
+            nearbyDriverMarkers.clear()
+            return
+        }
+
+        // 2. ФИЛЬТРУЕМ ПРИШЕДШИХ ВОДИТЕЛЕЙ (убираем тех, кто дальше радиуса)
+        val driversInRange = drivers.filter { driver ->
+            val driverPos = LatLng(driver.lat, driver.lng)
+            val distance = com.google.maps.android.SphericalUtil.computeDistanceBetween(mapCenter, driverPos)
+            distance <= VISIBILITY_RADIUS_METERS
+        }
+
+        val newDriverIds = driversInRange.map { it.driverId }
+        
+        // 3. УДАЛЯЕМ МАРКЕРЫ: 
+        // Если водитель был на карте, но он теперь либо далеко, либо его нет в списке — удаляем
+        val iterator = nearbyDriverMarkers.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (!newDriverIds.contains(entry.key)) {
+                entry.value.remove()
+                iterator.remove()
+            }
+        }
+
+        // 4. ДОБАВЛЯЕМ/ОБНОВЛЯЕМ МАРКЕРЫ:
+        for (driver in driversInRange) {
+            val position = LatLng(driver.lat, driver.lng)
+            if (nearbyDriverMarkers.containsKey(driver.driverId)) {
+                val marker = nearbyDriverMarkers[driver.driverId]!!
+                animateMarker(marker, position, driver.bearing)
+            } else {
+                // ПРИОРИТЕТ:
+                // 1. Используем customCarIcon (динамическую иконку с сервера/диспетчерской)
+                // 2. Если её нет (null), используем ic_car_icon (статичный фолбек)
+                val carWidth = 40
+val carHeight = 40
+
+// Если есть кастомная иконка с сервера, мы её тоже должны отмасштабировать (если она приходит Bitmap'ом)
+// Но для начала масштабируем твой локальный PNG фолбек:
+val fallbackIcon = BitmapHelper.getScaledBitmapDescriptor(
+    this, 
+    R.drawable.ic_car_icon, 
+    carWidth, 
+    carHeight
+)
+
+// Если customCarIcon уже масштабируется при скачивании, оставляем так:
+val carIcon = customCarIcon ?: fallbackIcon
+                
+                val markerOpts = MarkerOptions()
+                    .position(position)
+                    .icon(carIcon) // Используем выбранную иконку
+                    .anchor(0.5f, 0.5f)
+                    .rotation(driver.bearing)
+                    .zIndex(50f)
+                
+                val marker = mMap?.addMarker(markerOpts)
+                if (marker != null) {
+                    nearbyDriverMarkers[driver.driverId] = marker
+                }
+            }
+        }
+    }
+
+    
 
     private fun showAddressPanel() {
     isRouteMode = false

@@ -1,7 +1,9 @@
 package com.taxiapp.client.network
 
 import android.annotation.SuppressLint
+import com.taxiapp.client.network.dto.ClientLocationRequest
 import android.os.Handler
+import com.taxiapp.client.network.dto.DriverLocationDto
 import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.Observer
@@ -24,6 +26,7 @@ data class OrderSocketMessageDto(
 
 class WebSocketManager(private val baseUrl: String) {
 
+    private var currentNearbyDriversSub: Pair<String, (List<DriverLocationDto>) -> Unit>? = null
     private var stompClient: StompClient? = null
     private val compositeDisposable = CompositeDisposable()
     private val gson = Gson()
@@ -56,8 +59,70 @@ class WebSocketManager(private val baseUrl: String) {
                 .replace("http://", "ws://")
                 .replace("https://", "wss://")
                 .substringBefore("api/v1")
-            return "${cleanBase}ws"
+            return "${cleanBase}ws-taxi/websocket"
         }
+
+    private fun restoreSubscriptions() {
+        Log.d("WS_TAXI_DEBUG", "🔄 Восстанавливаем подписки после открытия сокета...")
+        currentChatSub?.let { subscribeToChat(it.first, it.second) }
+        currentLocationSub?.let { subscribeToDriverLocation(it.first, it.second) }
+        currentOrderSub?.let { subscribeToClientOrders(it.first, it.second) }
+
+        // Наша подписка на машинки
+        currentNearbyDriversSub?.let { subscribeToNearbyDrivers(it.first, it.second) }
+    }
+
+
+    @SuppressLint("CheckResult")
+    fun subscribeToNearbyDrivers(clientId: String, onDriversReceived: (List<DriverLocationDto>) -> Unit) {
+        currentNearbyDriversSub = Pair(clientId, onDriversReceived)
+
+        // Проверяем, открыт ли сокет ПРЯМО СЕЙЧАС
+        if (stompClient?.isConnected == true) {
+            val topic = "/topic/nearby-drivers/$clientId"
+            val disp = stompClient?.topic(topic)
+                ?.subscribeOn(Schedulers.io())
+                ?.observeOn(AndroidSchedulers.mainThread())
+                ?.subscribe({ topicMessage ->
+                    try {
+                        val listType = object : com.google.gson.reflect.TypeToken<List<DriverLocationDto>>() {}.type
+                        val drivers: List<DriverLocationDto> = gson.fromJson(topicMessage.payload, listType)
+                        onDriversReceived(drivers)
+                    } catch (e: Exception) {
+                        Log.e("WS_TAXI_DEBUG", "Error parsing nearby drivers: ${e.message}")
+                    }
+                }, { error ->
+                    Log.e("WS_TAXI_DEBUG", "Nearby drivers subscription error", error)
+                })
+
+            if (disp != null) compositeDisposable.add(disp)
+        } else {
+            Log.d("WS_TAXI_DEBUG", "⏳ Сокет еще подключается... Подписка отложена до OPENED.")
+        }
+    }
+
+    // НОВИЙ МЕТОД: Відправка координат клієнта на сервер
+    fun sendClientLocation(request: ClientLocationRequest) {
+        // Если сокет мертв — просто выходим, метод onResume выше всё равно скоро его поднимет
+        if (!isConnected()) {
+            Log.w("WS_TAXI_DEBUG", "⚠️ Сокет отключен, пропускаю отправку, жду onResume...")
+            return
+        }
+
+        val jsonPayload = gson.toJson(request)
+        stompClient?.send("/app/client/location", jsonPayload)
+            ?.subscribeOn(Schedulers.io())
+            ?.subscribe({
+                Log.d("WS_TAXI_DEBUG", "✅ Координаты отправлены!")
+            }, { err ->
+                Log.e("WS_TAXI_DEBUG", "❌ Ошибка при отправке", err)
+            })
+            ?.let { compositeDisposable.add(it) }
+    }
+
+    fun isConnected(): Boolean {
+        return stompClient != null && stompClient!!.isConnected
+    }
 
     fun connect(token: String?) {
         if (stompClient != null && stompClient!!.isConnected) return
@@ -77,9 +142,12 @@ class WebSocketManager(private val baseUrl: String) {
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe { lifecycleEvent ->
                 when (lifecycleEvent.type) {
-                    LifecycleEvent.Type.OPENED -> Log.d("WebSocket", "Stomp connection opened")
-                    LifecycleEvent.Type.ERROR -> Log.e("WebSocket", "Error", lifecycleEvent.exception)
-                    LifecycleEvent.Type.CLOSED -> Log.d("WebSocket", "Stomp connection closed")
+                    LifecycleEvent.Type.OPENED -> {
+                        Log.d("WS_TAXI_DEBUG", "✅ [LIFECYCLE] Сокет УСПЕШНО ОТКРЫТ!")
+                        restoreSubscriptions() // <-- ВАЖНО: Подписываемся только теперь!
+                    }
+                    LifecycleEvent.Type.ERROR -> Log.e("WS_TAXI_DEBUG", "❌ [LIFECYCLE] Ошибка сокета", lifecycleEvent.exception)
+                    LifecycleEvent.Type.CLOSED -> Log.d("WS_TAXI_DEBUG", "⚠️ [LIFECYCLE] Сокет закрыт")
                     else -> {}
                 }
             }
@@ -88,18 +156,11 @@ class WebSocketManager(private val baseUrl: String) {
 
     // --- НОВОЕ: Метод тихого переподключения ---
     private fun reconnect(newToken: String) {
-        // Отключаем старый сокет, но НЕ удаляем переменные подписок
         stompClient?.disconnect()
         compositeDisposable.clear()
         stompClient = null
 
-        // Подключаемся с новым токеном
         connect(newToken)
-
-        // Автоматически восстанавливаем все подписки
-        currentChatSub?.let { subscribeToChat(it.first, it.second) }
-        currentLocationSub?.let { subscribeToDriverLocation(it.first, it.second) }
-        currentOrderSub?.let { subscribeToClientOrders(it.first, it.second) }
     }
 
     fun subscribeToDriverLocation(orderId: Long, onLocationReceived: (TrackingLocationDto) -> Unit) {

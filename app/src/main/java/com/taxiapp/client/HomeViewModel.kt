@@ -35,6 +35,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeOrder = MutableLiveData<TaxiOrderDto?>()
     val activeOrder: LiveData<TaxiOrderDto?> get() = _activeOrder
 
+    private val mapSessionId = java.util.UUID.randomUUID().toString() // Унікальний ID для сокету
+    private val _nearbyDrivers = MutableLiveData<List<DriverLocationDto>>()
+    val nearbyDrivers: LiveData<List<DriverLocationDto>> get() = _nearbyDrivers
+
     private val _cardBoundEvent = MutableLiveData<Boolean>()
     val cardBoundEvent: LiveData<Boolean> get() = _cardBoundEvent
 
@@ -78,6 +82,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             startStatusPolling()
         }
         currentCity = sessionManager.fetchUserCity()
+    }
+
+    fun startListeningNearbyDrivers(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
+        webSocketManager?.subscribeToNearbyDrivers(mapSessionId) { drivers ->
+            _nearbyDrivers.postValue(drivers)
+        }
+    }
+
+    // Відправляємо свої координати
+    fun updateClientLocation(webSocketManager: com.taxiapp.client.network.WebSocketManager?, lat: Double, lng: Double) {
+        val request = ClientLocationRequest(mapSessionId, lat, lng)
+        webSocketManager?.sendClientLocation(request)
     }
 
     // --- API: Тарифы и Цена ---
