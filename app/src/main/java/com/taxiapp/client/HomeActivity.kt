@@ -4168,7 +4168,7 @@ private fun stopWaitingTimer() {
 
     findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
     findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
-
+    
     activeOrderCard.visibility = View.VISIBLE
     tariffsPanel.visibility = View.GONE
     
