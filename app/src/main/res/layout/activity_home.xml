@@ -1256,49 +1256,18 @@
                                     android:textColor="@color/text_primary"
                                     android:layout_marginTop="2dp"/>
                             </LinearLayout>
-                            
-
-                            <ImageView
-                                android:id="@+id/iv_order_route_waypoints_icon"
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:src="@drawable/ic_marker_waypoint"
-                                android:visibility="gone"
-                                tools:visibility="visible"
-                                app:layout_constraintStart_toStartOf="@+id/iv_order_route_origin_icon"
-                                app:layout_constraintEnd_toEndOf="@+id/iv_order_route_origin_icon"
-                                app:layout_constraintTop_toTopOf="@+id/ll_route_waypoints"
-                                app:layout_constraintBottom_toBottomOf="@+id/ll_route_waypoints"/>
 
                             <LinearLayout
                                 android:id="@+id/ll_route_waypoints"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:orientation="vertical"
-                                android:layout_marginStart="12dp"
-                                android:layout_marginTop="12dp"
+                                android:layout_marginTop="4dp"
                                 android:visibility="gone"
                                 tools:visibility="visible"
-                                app:layout_constraintStart_toEndOf="@+id/iv_order_route_waypoints_icon"
+                                app:layout_constraintStart_toStartOf="@+id/iv_order_route_origin_icon"
                                 app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toBottomOf="@+id/ll_route_origin">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/label_waypoints"
-                                    android:textSize="12sp"
-                                    android:textColor="@color/text_secondary" />
-                                <TextView
-                                    android:id="@+id/tv_order_route_waypoints"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    tools:text="Вул. Басейна, 4"
-                                    android:textSize="15sp"
-                                    android:textColor="@color/text_primary"
-                                    android:layout_marginTop="2dp"/>
-
-                                    
-                            </LinearLayout>
+                                app:layout_constraintTop_toBottomOf="@+id/ll_route_origin" />
 
                             <ImageView
                                 android:id="@+id/iv_order_route_dest_icon"

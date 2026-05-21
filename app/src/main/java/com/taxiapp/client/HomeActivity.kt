@@ -2141,26 +2141,39 @@ btnChangePayment.setOnClickListener {
             } catch (e: Exception) {}
         }
 
-        centerPin.visibility = View.VISIBLE // <-- БРОНЯ ДЛЯ УСПЕШНОГО ЗАПУСКА
-        centerPin.animate()
-            .alpha(1f)
-            .setDuration(500)
-            .setStartDelay(200)
-            .setInterpolator(DecelerateInterpolator())
-            .withEndAction { centerPin.alpha = 1f } 
-            .start()
-
-        // ДОБАВЛЕНО: Плавно проявляем тень пина
-        try {
-            pinShadow.visibility = View.VISIBLE // <-- БРОНЯ ДЛЯ УСПЕШНОГО ЗАПУСКА
-            pinShadow.animate()
-                .alpha(0.5f) 
+        // ========================================================
+        // ВАЖЛИВО: Показуємо пін ТІЛЬКИ якщо немає активного маршруту
+        // ========================================================
+        if (!isRouteMode && viewModel.currentRoutePolyline == null) {
+            centerPin.visibility = View.VISIBLE // <-- БРОНЯ ДЛЯ УСПЕШНОГО ЗАПУСКА
+            centerPin.animate()
+                .alpha(1f)
                 .setDuration(500)
                 .setStartDelay(200)
                 .setInterpolator(DecelerateInterpolator())
-                .withEndAction { pinShadow.alpha = 0.5f } 
+                .withEndAction { centerPin.alpha = 1f } 
                 .start()
-        } catch (e: Exception) {}
+
+            // Плавно проявляем тень пина
+            try {
+                pinShadow.visibility = View.VISIBLE 
+                pinShadow.animate()
+                    .alpha(0.5f) 
+                    .setDuration(500)
+                    .setStartDelay(200)
+                    .setInterpolator(DecelerateInterpolator())
+                    .withEndAction { pinShadow.alpha = 0.5f } 
+                    .start()
+            } catch (e: Exception) {}
+        } else {
+            // Якщо є маршрут (замовлення) - жорстко ховаємо пін ще до того, як він почне малюватись
+            centerPin.visibility = View.GONE
+            centerPin.alpha = 0f
+            try { 
+                pinShadow.visibility = View.GONE
+                pinShadow.alpha = 0f
+            } catch (e: Exception) {}
+        }
     }
 
     private fun convertDpToPixel(dp: Float): Float {
@@ -3575,7 +3588,11 @@ if (!cardMask.isNullOrEmpty()) {
 
         isRouteMode = true
         centerPin.visibility = View.GONE
-        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
+        centerPin.animate().cancel() // Зупиняємо будь-які можливі анімації піна
+        try { 
+            pinShadow.visibility = View.GONE 
+            pinShadow.animate().cancel()
+        } catch (e: Exception) {}
 
         val originLat = order.originLat ?: return
         val originLng = order.originLng ?: return
@@ -3592,7 +3609,15 @@ if (!cardMask.isNullOrEmpty()) {
         tvOrigin.text = cleanAddress(order.fromAddress ?: "А")
         tvDestination.text = cleanAddress(order.toAddress ?: "Б")
 
+        // ========================================================
+        // ВАЖЛИВО: Очищаємо і ВІДНОВЛЮЄМО масив зупинок з сервера
+        // ========================================================
         currentWaypoints.clear()
+        if (!order.stops.isNullOrEmpty()) {
+            order.stops.forEach { stop ->
+                currentWaypoints.add(Pair(LatLng(stop.lat, stop.lng), stop.address))
+            }
+        }
 
         val polyline = order.googleRoutePolyline
         if (!polyline.isNullOrEmpty()) {
@@ -3603,7 +3628,6 @@ if (!cardMask.isNullOrEmpty()) {
             // Гарантуємо правильні відступи перед відмальовуванням
             creationPanelCard.visibility = View.GONE
             addressPanel.visibility = View.GONE
-            
             
             drawStylishRoute(points)
         }
@@ -4185,7 +4209,7 @@ private fun stopWaitingTimer() {
         updateMapPadding(activeOrderCard, 0f, 20f)
     }
 
-    // Вирішення 4: Робимо кнопку меню видимою і перетворюємо її на кнопку "Назад"
+    // Вирішення 4: Робимо кнопку меню видимою і перетворюємо её на кнопку "Назад"
     btnMenu.visibility = View.VISIBLE
     ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
     val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
@@ -4199,9 +4223,7 @@ private fun stopWaitingTimer() {
 
     try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
     
-
-        // Далі йде твій код без змін...
-        tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
+    tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
     val tvPaymentText = findViewById<TextView>(R.id.tv_active_order_payment_text)
     if (order.paymentMethod == "CARD") {
         ivActiveOrderPayment.setImageResource(R.drawable.ic_card)
@@ -4211,22 +4233,44 @@ private fun stopWaitingTimer() {
         tvPaymentText.text = "Готівка"
     }
 
-    // 2. Маршрут
+    // ==========================================
+    // НАЧАЛО ОБНОВЛЕННОГО БЛОКА: 2. Маршрут
+    // ==========================================
+    
+    // Находим главные TextView для адресов А и Б
     findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
     findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
 
-    val llRouteWaypoints = findViewById<View>(R.id.ll_route_waypoints)
-    val ivRouteWaypointsIcon = findViewById<View>(R.id.iv_order_route_waypoints_icon)
-    val tvRouteWaypoints = findViewById<TextView>(R.id.tv_order_route_waypoints)
+    // Получаем контейнер как LinearLayout, чтобы динамически управлять вложенными элементами
+    val llRouteWaypoints = findViewById<LinearLayout>(R.id.ll_route_waypoints)
+    
+    // Обязательно очищаем контейнер от старых точек (чтобы адреса не дублировались при обновлении статуса заказа)
+    llRouteWaypoints.removeAllViews()
 
-    if (!order.formattedWaypoints.isNullOrBlank()) {
+    // Проверяем, пришел ли от сервера массив дополнительных остановок
+    if (!order.stops.isNullOrEmpty()) {
         llRouteWaypoints.visibility = View.VISIBLE
-        ivRouteWaypointsIcon.visibility = View.VISIBLE
-        tvRouteWaypoints.text = cleanAddress(order.formattedWaypoints)
+        
+        // Проходимся по каждой промежуточной точке маршрута
+        order.stops.forEach { stop ->
+            // Инфлейтим (надуваем) кастомный XML-шаблон для одной точки
+            val stopView = layoutInflater.inflate(R.layout.item_active_order_waypoint, llRouteWaypoints, false)
+            
+            // Находим TextView внутри шаблона и сетим туда чистый адрес без обрезаний
+            val tvAddress = stopView.findViewById<TextView>(R.id.tv_waypoint_address)
+            tvAddress.text = cleanAddress(stop.address)
+            
+            // Добавляем готовую строчку с адресом в наш вертикальный контейнер
+            llRouteWaypoints.addView(stopView)
+        }
     } else {
+        // Если дополнительных остановок в заказе нет, полностью скрываем контейнер
         llRouteWaypoints.visibility = View.GONE
-        ivRouteWaypointsIcon.visibility = View.GONE
     }
+    
+    // ==========================================
+    // КОНЕЦ ОБНОВЛЕННОГО БЛОКА
+    // ==========================================
 
     // 3. Тариф и Иконка (Загрузка из диспетчерской)
     val expandableDetails = findViewById<View>(R.id.layout_expandable_details)
@@ -4243,7 +4287,6 @@ private fun stopWaitingTimer() {
     ivOrderTariffIcon.clearColorFilter()
 
     if (!rawUrl.isNullOrEmpty()) {
-        // Твоя идеальная логика парсинга URL из TariffAdapter:
         val SERVER_IP = "192.168.0.107" // Правильный IP сервера!
         val SERVER_PORT = "8080"
 
@@ -4285,7 +4328,6 @@ private fun stopWaitingTimer() {
     if (!order.comment.isNullOrBlank()) {
         tvCommentTitle.visibility = View.VISIBLE
         layoutOrderCommentCard.visibility = View.VISIBLE
-        // Теперь комментарий просто выводится чистым текстом внутри красивой карточки
         tvOrderCommentText.text = order.comment 
     } else {
         tvCommentTitle.visibility = View.GONE

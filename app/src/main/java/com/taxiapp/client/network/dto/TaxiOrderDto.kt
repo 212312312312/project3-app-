@@ -26,6 +26,7 @@ data class TaxiOrderDto(
     val createdAt: String?,
     val googleRoutePolyline: String?,
     val formattedWaypoints: String?,
+    val stops: List<WaypointDto>? = null,
     val paymentMethod: String? = "CASH",
     val serviceIds: List<Long>? = null,
     val comment: String? = null,
