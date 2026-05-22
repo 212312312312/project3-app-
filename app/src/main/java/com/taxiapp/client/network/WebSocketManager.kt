@@ -26,6 +26,7 @@ data class OrderSocketMessageDto(
 
 class WebSocketManager(private val baseUrl: String) {
 
+    private var nearbyDriversDisposable: io.reactivex.disposables.Disposable? = null
     private var currentNearbyDriversSub: Pair<String, (List<DriverLocationDto>) -> Unit>? = null
     private var stompClient: StompClient? = null
     private val compositeDisposable = CompositeDisposable()
@@ -79,8 +80,11 @@ class WebSocketManager(private val baseUrl: String) {
 
         // Проверяем, открыт ли сокет ПРЯМО СЕЙЧАС
         if (stompClient?.isConnected == true) {
+            // ФИКС: Перед созданием новой подписки принудительно очищаем старую, если она была
+            nearbyDriversDisposable?.dispose()
+
             val topic = "/topic/nearby-drivers/$clientId"
-            val disp = stompClient?.topic(topic)
+            nearbyDriversDisposable = stompClient?.topic(topic)
                 ?.subscribeOn(Schedulers.io())
                 ?.observeOn(AndroidSchedulers.mainThread())
                 ?.subscribe({ topicMessage ->
@@ -95,10 +99,18 @@ class WebSocketManager(private val baseUrl: String) {
                     Log.e("WS_TAXI_DEBUG", "Nearby drivers subscription error", error)
                 })
 
-            if (disp != null) compositeDisposable.add(disp)
+            // ВАЖНО: Больше НЕ добавляем nearbyDriversDisposable в общий compositeDisposable,
+            // так как мы будем управлять его жизненным циклом вручную.
         } else {
             Log.d("WS_TAXI_DEBUG", "⏳ Сокет еще подключается... Подписка отложена до OPENED.")
         }
+    }
+
+    fun unsubscribeFromNearbyDrivers() {
+        nearbyDriversDisposable?.dispose()
+        nearbyDriversDisposable = null
+        currentNearbyDriversSub = null // Очищаем сохраненный коллбек, чтобы авто-восстановление не подняло его зря
+        Log.d("WS_TAXI_DEBUG", "🛑 Успешно отписались от топика свободных водителей на сервере")
     }
 
     // НОВИЙ МЕТОД: Відправка координат клієнта на сервер
@@ -233,6 +245,9 @@ class WebSocketManager(private val baseUrl: String) {
         stompClient?.disconnect()
         compositeDisposable.clear()
         stompClient = null
+
+        nearbyDriversDisposable?.dispose()
+        nearbyDriversDisposable = null
 
         // Очищаем подписки только при явном дисконнекте (например, логаут)
         currentChatSub = null

@@ -96,6 +96,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         webSocketManager?.sendClientLocation(request)
     }
 
+    fun stopListeningNearbyDrivers(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
+        webSocketManager?.unsubscribeFromNearbyDrivers()
+    }
+
     // --- API: Тарифы и Цена ---
     // ДОДАНО параметр waypointsCount: Int = 0
     fun loadTariffsAndCalculatePrice(routePolyline: String?, distanceMeters: Int, waypointsCount: Int = 0) {
