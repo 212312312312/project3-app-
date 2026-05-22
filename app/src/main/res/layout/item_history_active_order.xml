@@ -50,8 +50,9 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/item_order_default_time"
-                android:textSize="14sp"
-                android:textColor="@color/text_secondary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
                 android:fontFamily="sans-serif-medium" />
 
             <TextView
@@ -108,17 +109,14 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="@id/iv_from_icon" />
 
-            <TextView
-                android:id="@+id/tv_waypoints"
+            <LinearLayout
+                android:id="@+id/container_waypoints"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/item_order_waypoints"
-                android:textSize="14sp"
-                android:textColor="@color/text_secondary"
-                android:layout_marginTop="12dp"
-                android:layout_marginStart="12dp"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp"
                 android:visibility="gone"
-                app:layout_constraintStart_toEndOf="@id/iv_from_icon"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tv_from" />
 
@@ -129,7 +127,7 @@
                 android:src="@drawable/ic_marker_to"
                 android:layout_marginTop="12dp"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/tv_waypoints" />
+                app:layout_constraintTop_toBottomOf="@id/container_waypoints" />
 
             <TextView
                 android:id="@+id/tv_to"

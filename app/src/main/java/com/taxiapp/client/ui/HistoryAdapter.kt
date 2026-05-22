@@ -1,6 +1,5 @@
 package com.taxiapp.client.ui
 
-import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,7 +27,6 @@ class HistoryAdapter(
         notifyDataSetChanged()
     }
 
-    // ВИЗНАЧАЄМО ТИП ЗАМОВЛЕННЯ
     override fun getItemViewType(position: Int): Int {
         val status = orders[position].status
         val isActive = status == "SCHEDULED" || status == "REQUESTED" ||
@@ -38,7 +36,6 @@ class HistoryAdapter(
         return if (isActive) VIEW_TYPE_ACTIVE else VIEW_TYPE_ARCHIVE
     }
 
-    // РОЗДУВАЄМО ПОТРІБНИЙ МАКЕТ
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return if (viewType == VIEW_TYPE_ACTIVE) {
@@ -62,7 +59,7 @@ class HistoryAdapter(
     override fun getItemCount(): Int = orders.size
 
     // =========================================================
-    // 1. VIEWHOLDER ДЛЯ АКТИВНИХ ПОЇЗДОК (зі статусом і кнопкою)
+    // 1. VIEWHOLDER ДЛЯ АКТИВНИХ ПОЇЗДОК
     // =========================================================
     class ActiveOrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvStatusBadge: TextView = itemView.findViewById(R.id.tv_status_badge)
@@ -77,15 +74,15 @@ class HistoryAdapter(
         private val layoutDriverInfo: LinearLayout = itemView.findViewById(R.id.layout_driver_info)
         private val tvDriverName: TextView = itemView.findViewById(R.id.tv_driver_name)
         private val tvCarModel: TextView = itemView.findViewById(R.id.tv_car_model)
-        private val tvWaypoints: TextView? = itemView.findViewById(R.id.tv_waypoints)
-        private val ivWaypointDot: ImageView? = itemView.findViewById(R.id.iv_marker_waypoint)
+
+        // Новий контейнер для точок
+        private val containerWaypoints: LinearLayout? = itemView.findViewById(R.id.container_waypoints)
 
         fun bind(order: TaxiOrderDto, onItemClick: ((Long) -> Unit)?, onCancelClick: ((Long) -> Unit)?) {
             tvFrom.text = order.fromAddress
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
 
-            // За замовчуванням показуємо кнопку
             layoutCancelContainer.visibility = View.VISIBLE
             tvDateTime.text = "Зараз"
 
@@ -95,23 +92,14 @@ class HistoryAdapter(
                     tvDateTime.text = timeStr
                     tvStatusBadge.text = "Заплановано"
                 }
-                "REQUESTED", "OFFERING" -> {
-                    tvStatusBadge.text = "Пошук водія"
-                }
-                "ACCEPTED" -> {
-                    tvStatusBadge.text = "Водій їде"
-                }
-                "DRIVER_ARRIVED" -> {
-                    tvStatusBadge.text = "Водій на місці"
-                }
+                "REQUESTED", "OFFERING" -> tvStatusBadge.text = "Пошук водія"
+                "ACCEPTED" -> tvStatusBadge.text = "Водій їде"
+                "DRIVER_ARRIVED" -> tvStatusBadge.text = "Водій на місці"
                 "IN_PROGRESS" -> {
                     tvStatusBadge.text = "В дорозі"
-                    // ТУТ ХОВАЄМО ВЕСЬ КОНТЕЙНЕР, щоб не було пустої червоної пігулки!
                     layoutCancelContainer.visibility = View.GONE
                 }
-                else -> {
-                    tvStatusBadge.text = "В роботі"
-                }
+                else -> tvStatusBadge.text = "В роботі"
             }
 
             if (order.driver != null) {
@@ -122,13 +110,19 @@ class HistoryAdapter(
                 layoutDriverInfo.visibility = View.GONE
             }
 
-            if (!order.formattedWaypoints.isNullOrEmpty()) {
-                tvWaypoints?.text = order.formattedWaypoints
-                tvWaypoints?.visibility = View.VISIBLE
-                ivWaypointDot?.visibility = View.VISIBLE
+            // Рендер додаткових точок
+            containerWaypoints?.removeAllViews()
+            if (!order.stops.isNullOrEmpty()) {
+                containerWaypoints?.visibility = View.VISIBLE
+                val inflater = LayoutInflater.from(itemView.context)
+                for (stop in order.stops) {
+                    val waypointView = inflater.inflate(R.layout.item_active_order_waypoint, containerWaypoints, false)
+                    val tvWaypointAddress = waypointView.findViewById<TextView>(R.id.tv_waypoint_address)
+                    tvWaypointAddress.text = stop.address
+                    containerWaypoints?.addView(waypointView)
+                }
             } else {
-                tvWaypoints?.visibility = View.GONE
-                ivWaypointDot?.visibility = View.GONE
+                containerWaypoints?.visibility = View.GONE
             }
 
             itemView.setOnClickListener { onItemClick?.invoke(order.id) }
@@ -137,42 +131,44 @@ class HistoryAdapter(
     }
 
     // =========================================================
-    // 2. VIEWHOLDER ДЛЯ АРХІВУ (без кнопок і зайвого коду)
-    // =========================================================
-    // =========================================================
-    // 2. VIEWHOLDER ДЛЯ АРХІВУ (без кнопок і зайвого коду)
+    // 2. VIEWHOLDER ДЛЯ АРХІВУ
     // =========================================================
     class ArchiveOrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvDateTime: TextView = itemView.findViewById(R.id.tv_date_time)
         private val tvPrice: TextView = itemView.findViewById(R.id.tv_price)
         private val tvFrom: TextView = itemView.findViewById(R.id.tv_from)
         private val tvTo: TextView = itemView.findViewById(R.id.tv_to)
-        private val tvWaypoints: TextView? = itemView.findViewById(R.id.tv_waypoints)
-        private val ivWaypointDot: ImageView? = itemView.findViewById(R.id.iv_marker_waypoint)
+
+        // Новий контейнер для точок
+        private val containerWaypoints: LinearLayout? = itemView.findViewById(R.id.container_waypoints)
 
         fun bind(order: TaxiOrderDto, onItemClick: ((Long) -> Unit)?) {
             tvFrom.text = order.fromAddress
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
 
-            // Форматування дати: 09 квіт. 2026, 20:10
             try {
                 val inputFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
                 val date = inputFormat.parse(order.createdAt)
                 val outputFormat = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale("uk"))
                 tvDateTime.text = outputFormat.format(date)
             } catch (e: Exception) {
-                // Фоллбек, якщо дата прийде в іншому форматі
                 tvDateTime.text = order.createdAt?.replace("T", " ")?.take(16) ?: "Дата"
             }
 
-            if (!order.formattedWaypoints.isNullOrEmpty()) {
-                tvWaypoints?.text = order.formattedWaypoints
-                tvWaypoints?.visibility = View.VISIBLE
-                ivWaypointDot?.visibility = View.VISIBLE
+            // Рендер додаткових точок
+            containerWaypoints?.removeAllViews()
+            if (!order.stops.isNullOrEmpty()) {
+                containerWaypoints?.visibility = View.VISIBLE
+                val inflater = LayoutInflater.from(itemView.context)
+                for (stop in order.stops) {
+                    val waypointView = inflater.inflate(R.layout.item_active_order_waypoint, containerWaypoints, false)
+                    val tvWaypointAddress = waypointView.findViewById<TextView>(R.id.tv_waypoint_address)
+                    tvWaypointAddress.text = stop.address
+                    containerWaypoints?.addView(waypointView)
+                }
             } else {
-                tvWaypoints?.visibility = View.GONE
-                ivWaypointDot?.visibility = View.GONE
+                containerWaypoints?.visibility = View.GONE
             }
 
             itemView.setOnClickListener { onItemClick?.invoke(order.id) }

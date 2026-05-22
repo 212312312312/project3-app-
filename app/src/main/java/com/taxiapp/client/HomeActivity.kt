@@ -1941,13 +1941,17 @@ btnChangePayment.setOnClickListener {
         // --- ЖЕСТКО ОТКЛЮЧАЕМ ВСЕ СИСТЕМНЫЕ КНОПКИ И ПАНЕЛИ GOOGLE MAPS ---
         mMap?.uiSettings?.apply {
             isRotateGesturesEnabled = false // Запрет вращения двумя пальцами
-            isTiltGesturesEnabled = false   // Запрет наклона (3D режима) двумя пальцами     // Убираем лишний компас, так как вращения нет
-            isMapToolbarEnabled = false       // УБИРАЕТ ту самую панель (маршрут/открыть в картах) при клике на маркеры!
-            isCompassEnabled = false          // Убирает системный компас
-            isZoomControlsEnabled = false     // Убирает системные кнопки +/-
-            isMyLocationButtonEnabled = false // Убирает системную кнопку геолокации вверху справа
-            isIndoorLevelPickerEnabled = false  // Убирает выбор этажей внутри ТЦ (чтобы не перекрывало UI)
+            isTiltGesturesEnabled = false   // Запрет наклона (3D режима) двумя пальцами
+            isMapToolbarEnabled = false     // УБИРАЕТ панель при клике на маркеры
+            isCompassEnabled = false          
+            isZoomControlsEnabled = false     
+            isMyLocationButtonEnabled = false 
+            isIndoorLevelPickerEnabled = false // Убирает выбор этажей внутри ТЦ
         }
+
+        // --- ДОБАВЛЯЕМ СЮДА: ОТКЛЮЧАЕМ 3D ЗДАНИЯ С ТЕНЯМИ И ИНДОР-ЗАТЕМНЕНИЕ ---
+        mMap?.isBuildingsEnabled = false // Карта всегда будет плоской, здания не будут отбрасывать тени
+        mMap?.isIndoorEnabled = false    // Карта не будет темнеть при приближении к крупным объектам (ТЦ, вокзалы)
 
         if (sessionManager.isDarkMode()) {
             try {
@@ -1960,7 +1964,6 @@ btnChangePayment.setOnClickListener {
                 mMap?.setMapStyle(null)
             }
         }
-
         val cityToLoad = currentCity ?: sessionManager.fetchUserCity()
         val cityCenter = cityToLoad?.let { LatLng(it.lat, it.lng) } ?: LatLng(50.4501, 30.5234)
         val cityZoom = cityToLoad?.zoom ?: 11f
@@ -5072,26 +5075,29 @@ val carIcon = customCarIcon ?: fallbackIcon
     
 
     private fun showAddressPanel() {
-    isRouteMode = false
-    creationPanelCard.visibility = View.VISIBLE
-    activeOrderCard.visibility = View.GONE
-    addressPanel.visibility = View.VISIBLE
-    tariffsPanel.visibility = View.GONE
-    btnRecenter.visibility = View.VISIBLE
+        isRouteMode = false
+        creationPanelCard.visibility = View.VISIBLE
+        activeOrderCard.visibility = View.GONE
+        addressPanel.visibility = View.VISIBLE
+        tariffsPanel.visibility = View.GONE
+        btnRecenter.visibility = View.VISIBLE
 
-    setLocationButtonAnchor(R.id.bottom_sheet_card)
-    btnMenu.visibility = View.VISIBLE
+        setLocationButtonAnchor(R.id.bottom_sheet_card)
+        btnMenu.visibility = View.VISIBLE
 
-    // ДОБАВЛЕНО: Сброс отступов на всю ширину завернут в post, чтобы перекрыть старые расчеты
-    tariffsPanel.post {
-        mMap?.setPadding(0, 0, 0, 0)
-    }
+        // ДОБАВЛЕНО: Сброс отступов на всю ширину завернут в post, чтобы перекрыть старые расчеты
+        tariffsPanel.post {
+            mMap?.setPadding(0, 0, 0, 0)
+        }
 
-    try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
+        try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
 
-    ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
+        ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
 
-    clearMapForRoute()
+        clearMapForRoute()
+
+        // --- ВАЖНО: ОСТАНАВЛИВАЕМ И СКРЫВАЕМ ТАЙМЕР ОЖИДАНИЯ ---
+        stopWaitingTimer()
 
         sessionManager.clearActiveOrderId()
         tariffAdapter.submitList(emptyList(), 0)
@@ -5108,9 +5114,9 @@ val carIcon = customCarIcon ?: fallbackIcon
         
         scheduledDate = null
         try {
-    // Відновлюємо правильний колір або просто скидаємо фільтр (XML tint зробить свою справу)
-    btnSchedule.clearColorFilter() 
-} catch (e: Exception){}
+            // Відновлюємо правильний колір або просто скидаємо фільтр (XML tint зробить свою справу)
+            btnSchedule.clearColorFilter() 
+        } catch (e: Exception){}
 
         tvOrigin.text = getString(R.string.hint_where_from)
         tvDestination.text = getString(R.string.hint_where_to)
