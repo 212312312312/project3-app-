@@ -293,6 +293,7 @@ private var mapPickerWaypointIndex = -1
     private lateinit var layoutPaymentCompleted: LinearLayout
     private lateinit var tvFinalPaymentPrice: TextView
     private lateinit var btnUnderstandPayment: Button
+    private var lastLabelUpdateTime = 0L
     
     private var originPlace: Place? = null
     private var destinationPlace: Place? = null
@@ -1327,8 +1328,8 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
                      currentWaypoints.forEach { boundsBuilder.include(it.first) }
                      decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                     // Використовуємо універсальний відступ 80dp для боків, як при першому малюванні
-                     val paddingSide = convertDpToPixel(80f).toInt()
+                     // ИСПРАВЛЕНИЕ: Обновляем отступ до 36dp при ручном центрировании маршрута пользователем
+                     val paddingSide = convertDpToPixel(36f).toInt()
 
                      mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide))
                      
@@ -1985,27 +1986,34 @@ btnChangePayment.setOnClickListener {
             if (currentCity != null) recenterMapOnUser()
         }
 
-        // 1. ОПТИМИЗИРУЕМ ДВИЖЕНИЕ КАМЕРЫ (убираем микрофризы процессора)
+        // 1. ОПТИМИЗИРУЕМ ДВИЖЕНИЕ КАМЕРЫ (Квантование времени для стабильных 60+ FPS)
         mMap?.setOnCameraMoveListener {
-            // Считаем тяжелую проекцию ТОЛЬКО если уже построен маршрут
             if (viewModel.currentRoutePolyline != null) {
-                updateSmartLabels()
+                val currentTime = System.currentTimeMillis()
+                // Выполняем тяжелую native-проекцию Google Maps не чаще чем раз в 16 мс (соответствует 60 кадрам/сек).
+                // Это предотвращает удушение UI-потока на экранах 90Hz/120Hz, сохраняя идеальную плавность жеста.
+                if (currentTime - lastLabelUpdateTime >= 16L) {
+                    lastLabelUpdateTime = currentTime
+                    updateSmartLabels()
+                }
             }
         }
 
-        // 2. ИСПРАВЛЯЕМ ПОДЛЕТ ПИНА (Мгновенный старт)
+        // 2. ИСПРАВЛЯЕМ ПОДЛЕТ ПИНА И ВКЛЮЧАЕМ GPU HARDWARE LAYERS
         mMap?.setOnCameraMoveStartedListener { reason ->
-            // ДОБАВЛЕНА ПРОВЕРКА !isRouteMode
+            // При старте любого сдвига карты переводим плашки в аппаратные слои GPU.
+            // Теперь перерисовка View на процессоре полностью отключается, задействуется видеопамять.
+            if (viewModel.currentRoutePolyline != null) {
+                if (overlayOrigin.visibility == View.VISIBLE) overlayOrigin.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                if (overlayDest.visibility == View.VISIBLE) overlayDest.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            }
+
             if (viewModel.currentRoutePolyline == null && !isRouteMode) { 
-                
-                // РЕАГИРУЕМ ТОЛЬКО НА ПАЛЕЦ (REASON_GESTURE), чтобы избежать прыжков от авто-центровки
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     tvOrigin.text = "Визначення..."
                     
                     if (isInterfaceRevealed || isMapPickingMode) {
                         centerPin.animate().cancel()
-                        
-                        // Броня: делаем видимым только если нет маршрута
                         centerPin.alpha = 1f 
                         centerPin.visibility = View.VISIBLE
 
@@ -2036,18 +2044,20 @@ btnChangePayment.setOnClickListener {
             }
         }
 
-        // 3. ИСПРАВЛЯЕМ ПАДЕНИЕ ПИНА (Очистка задержки при приземлении)
+        // 3. ИСПРАВЛЯЕМ ПАДЕНИЕ ПИНА И ОЧИЩАЕМ ВИДЕОПАМЯТЬ ПРИ ОСТАНОВКЕ
         mMap?.setOnCameraIdleListener {
-            val target = mMap!!.cameraPosition.target
+            // Карта полностью остановилась — отключаем аппаратные слои, чтобы освободить ценную видеопамять смартфона
+            if (overlayOrigin.visibility == View.VISIBLE) overlayOrigin.setLayerType(View.LAYER_TYPE_NONE, null)
+            if (overlayDest.visibility == View.VISIBLE) overlayDest.setLayerType(View.LAYER_TYPE_NONE, null)
 
+            val target = mMap!!.cameraPosition.target
             val currentTime = System.currentTimeMillis()
             val distanceMoved = if (lastLocationSent != null) {
                 com.google.maps.android.SphericalUtil.computeDistanceBetween(lastLocationSent, target)
             } else {
-                1000.0 // Форсуємо першу відправку
+                1000.0 
             }
 
-            // ФИКС БАГА №1: Отправляем координаты на сервер ТОЛЬКО если мы на главном экране выбора адресов
             val isMainScreen = activeOrderId == null && 
                                !isRouteMode && 
                                viewModel.currentRoutePolyline == null && 
@@ -2063,10 +2073,8 @@ btnChangePayment.setOnClickListener {
                 }
             }
 
-            // 1. АНИМАЦИЯ ПИНА: Срабатывает ТОЛЬКО если маршрут не построен
             if ((isInterfaceRevealed && !isRouteMode && viewModel.currentRoutePolyline == null) || isMapPickingMode) {
                 centerPin.animate().cancel()
-                
                 centerPin.alpha = 1f
                 centerPin.visibility = View.VISIBLE
 
@@ -2089,31 +2097,20 @@ btnChangePayment.setOnClickListener {
                         .start()
                 } catch (e: Exception) {}
             } else if (isRouteMode || viewModel.currentRoutePolyline != null) {
-                // <-- ИСПРАВЛЕНО: Добиваем пин ТОЛЬКО если мы реально в режиме маршрута!
-                // При запуске приложения этот блок не сработает, и пин дождется своей анимации
                 centerPin.visibility = View.GONE
                 try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
             }
 
-            // ==========================================
-            // ОСЬ ЦЕЙ БЛОК - ЦЕ ТОЙ САМИЙ "КРОК 2"
-            // ==========================================
-            // 2. ЛОГИКА ГЕОКОДИНГА В ЗАВИСИМОСТИ ОТ РЕЖИМА
             if (isMapPickingMode) {
-                // Залишаємо кнопку яскравою, міняємо тільки текст
                 tvMapPickerAddress.text = "Шукаємо адресу..."
-
                 getAddressFromLocation(target) { address ->
                     tvMapPickerAddress.text = address ?: "Невідома адреса"
                 }
             } else {
-                // --- Стандартный режим главного экрана ---
                 if (viewModel.currentRoutePolyline != null) {
                     updateSmartLabels()
                 }
-
                 if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
-
                 getAddressForOrigin(target)
             }
         }
@@ -2685,7 +2682,7 @@ class RoundedBackgroundSpan(
             
             val paddingBottom = panelHeight + marginBottom
             val paddingTop = convertDpToPixel(10f).toInt() 
-            val paddingSide = convertDpToPixel(80f).toInt() 
+            val paddingSide = convertDpToPixel(36f).toInt() 
 
             mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom) 
 
@@ -3689,10 +3686,13 @@ if (!cardMask.isNullOrEmpty()) {
         val viewHeight = view.height
         val screenWidth = resources.displayMetrics.widthPixels
         
-        var isRouteGoingUp = false 
+        var isRouteGoingUp = false
+        var isRouteGoingRight = false
+        var deltaLng = 0.0
 
-        if (decodedRoutePoints != null && decodedRoutePoints!!.isNotEmpty()) {
-            val projection = mMap!!.projection
+        val baseLatLng = if (isStartPoint) originPlace?.latLng else destinationPlace?.latLng
+
+        if (baseLatLng != null && decodedRoutePoints != null && decodedRoutePoints!!.isNotEmpty()) {
             val routePoints = decodedRoutePoints!!
             
             val compareLatLng = if (isStartPoint) {
@@ -3701,26 +3701,87 @@ if (!cardMask.isNullOrEmpty()) {
                 if (routePoints.size > 1) routePoints[routePoints.size - 2] else routePoints[0]
             }
 
-            val compareScreenPt = projection.toScreenLocation(compareLatLng)
-
-            if (compareScreenPt.y < targetY) {
+            // Вертикальный вектор
+            if (compareLatLng.latitude > baseLatLng.latitude) {
                 isRouteGoingUp = true
+            }
+            // Горизонтальный вектор
+            if (compareLatLng.longitude > baseLatLng.longitude) {
+                isRouteGoingRight = true
+            }
+            // Сила отклонения маршрута по горизонтали
+            deltaLng = Math.abs(compareLatLng.longitude - baseLatLng.longitude)
+        }
+
+        val verticalPadding = convertDpToPixel(8f)
+        val horizontalPadding = convertDpToPixel(12f)
+        
+        // НОВЫЙ КОМПОНЕНТ: Воздушный зазор радиуса маркера (16dp).
+        // Гарантирует, что плашка не наедет на саму текстуру значка А или Б.
+        val markerRadiusOffset = convertDpToPixel(4f)
+
+        // 1. Рассчитываем базовую идеальную позицию по Y с учетом радиуса маркера
+        var finalY = if (isRouteGoingUp) {
+            targetY + markerRadiusOffset + verticalPadding // Маршрут идет вверх -> плашку уводим вниз за пределы пина
+        } else {
+            targetY - markerRadiusOffset - viewHeight - verticalPadding // Маршрут идет вниз -> плашку уводим вверх за пределы пина
+        }
+
+        // По умолчанию центрируем плашку горизонтально над маркером
+        var finalX = targetX - (viewWidth / 2)
+
+        val topSafeArea = convertDpToPixel(50f) 
+        val bottomSafeArea = resources.displayMetrics.heightPixels - convertDpToPixel(150f) 
+        val margin = convertDpToPixel(16f)
+
+        // Маркер жесткого конфликта: зажало краем экрана и плашка вынуждена лечь на маршрут
+        var isForcedToOverlapRoute = false
+
+        // Проверяем сжатие по границам SafeArea экрана (учитываем маркерный сдвиг)
+        if (finalY < topSafeArea) {
+            finalY = targetY + markerRadiusOffset + verticalPadding
+            if (!isRouteGoingUp) {
+                isForcedToOverlapRoute = true // Конфликт: маршрут уходит вниз, и плашка прижата вниз дисплея
+            }
+        } else if (finalY + viewHeight > bottomSafeArea) {
+            finalY = targetY - markerRadiusOffset - viewHeight - verticalPadding
+            if (isRouteGoingUp) {
+                isForcedToOverlapRoute = true // Конфликт: маршрут уходит вверх, и плашка прижата вверх дисплея
             }
         }
 
-        var finalY: Float
-        val verticalPadding = convertDpToPixel(8f)
+        // 2. ИНТЕЛЛЕКТУАЛЬНЫЙ ДИАГОНАЛЬНЫЙ ОБХОД ЛИНИИ МАРШРУТА
+        if (isForcedToOverlapRoute) {
+            // Если маршрут имеет явный наклон в сторону, уходим в противоположный бок
+            if (deltaLng > 0.0001) { 
+                if (isRouteGoingRight) {
+                    // Линия уходит вправо -> плашку изящно смещаем влево от пина + учитываем радиус пина!
+                    finalX = targetX - viewWidth - horizontalPadding - markerRadiusOffset
+                } else {
+                    // Линия уходит влево -> плашку изящно смещаем вправо от пина + учитываем радиус пина!
+                    finalX = targetX + horizontalPadding + markerRadiusOffset
+                }
+            } else {
+                // Если маршрут идет строго вертикально, выбираем сторону на основе положения пина на экране
+                if (targetX > screenWidth / 2) {
+                    finalX = targetX - viewWidth - horizontalPadding - markerRadiusOffset
+                } else {
+                    finalX = targetX + horizontalPadding + markerRadiusOffset
+                }
+            }
 
-        if (isRouteGoingUp) {
-            finalY = targetY + verticalPadding
-        } else {
-            finalY = targetY - viewHeight - verticalPadding
+            // Магия диагонали: корректируем высоту Y с зазором, чтобы плашка встала 
+            // под красивым наклоном «обтекая» маркер сбоку, а не перекрывала его.
+            if (finalY < targetY) {
+                // Находимся чуть выше уровня маркера, но смещены вбок
+                finalY = targetY - markerRadiusOffset - (viewHeight * 0.3f)
+            } else {
+                // Находимся чуть ниже уровня маркера, но смещены вбок
+                finalY = targetY + markerRadiusOffset - (viewHeight * 0.7f)
+            }
         }
 
-        var finalX = targetX - (viewWidth / 2)
-
-        val margin = convertDpToPixel(16f)
-
+        // 3. Финальный жесткий клэмп-предохранитель от вылета элементов за физический дисплей
         if (finalX < margin) {
             finalX = margin
         }
@@ -3728,18 +3789,16 @@ if (!cardMask.isNullOrEmpty()) {
             finalX = screenWidth - margin - viewWidth
         }
 
-        val topSafeArea = convertDpToPixel(50f) 
-        val bottomSafeArea = resources.displayMetrics.heightPixels - convertDpToPixel(150f) 
-
         if (finalY < topSafeArea) {
-            finalY = targetY + verticalPadding
+            finalY = topSafeArea
         }
-        else if (finalY + viewHeight > bottomSafeArea) {
-             finalY = targetY - viewHeight - verticalPadding
+        if (finalY + viewHeight > bottomSafeArea) {
+            finalY = bottomSafeArea - viewHeight
         }
 
-        view.x = finalX
-        view.y = finalY
+        // Применяем через высокопроизводительную GPU-трансляцию
+        view.translationX = finalX
+        view.translationY = finalY
     }
 
     private fun getBitmapDescriptor(id: Int): BitmapDescriptor? {
@@ -5025,7 +5084,8 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
                         currentWaypoints.forEach { boundsBuilder.include(it.first) }
                         decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                        val labelSafePadding = convertDpToPixel(80f).toInt()
+                        // ИСПРАВЛЕНИЕ: Синхронизируем падинг до 36dp для динамического кадрирования шторки
+                        val labelSafePadding = convertDpToPixel(36f).toInt()
                         mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
                     }
                 } catch (e: Exception) {}
