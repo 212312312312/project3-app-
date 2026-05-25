@@ -1324,7 +1324,6 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         }
 
         btnRecenterRoute.setOnClickListener {
-            // Перевіряємо, чи є маршрут і точки
             if (viewModel.currentRoutePolyline != null && originPlace != null && destinationPlace != null) {
                  try {
                      val boundsBuilder = LatLngBounds.Builder()
@@ -1334,13 +1333,31 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
                      currentWaypoints.forEach { boundsBuilder.include(it.first) }
                      decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                     // ИСПРАВЛЕНИЕ: Обновляем отступ до 36dp при ручном центрировании маршрута пользователем
-                     val paddingSide = convertDpToPixel(36f).toInt()
+                     val rawBounds = boundsBuilder.build()
+                     val latDelta = rawBounds.northeast.latitude - rawBounds.southwest.latitude
+                     
+                     // === УМНЫЙ ГИБРИДНЫЙ БУФЕР ДЛЯ КНОПКИ ===
+                     // Если маршрут длинный — берем 12% от дельты, если короткий — жесткий лимит 0.0055 градуса
+                     val topBuffer = if (latDelta > 0.01) latDelta * 0.12 else 0.0055
+                     val bottomBuffer = if (latDelta > 0.01) latDelta * 0.04 else 0.0020
 
-                     mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide))
+                     val professionalBoundsBuilder = LatLngBounds.Builder()
+                         .include(rawBounds.northeast)
+                         .include(rawBounds.southwest)
+                         .include(LatLng(rawBounds.northeast.latitude + topBuffer, rawBounds.northeast.longitude))
+                         .include(LatLng(rawBounds.southwest.latitude - bottomBuffer, rawBounds.southwest.longitude))
+                     
+                     currentWaypoints.forEach { professionalBoundsBuilder.include(it.first) }
+
+                     // Компактный боковой отступ
+                     val safetyPaddingSide = convertDpToPixel(32f).toInt()
+
+                     mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(professionalBoundsBuilder.build(), safetyPaddingSide))
                      
                      btnRecenterRoute.visibility = View.GONE
-                 } catch (e: Exception) {}
+                 } catch (e: Exception) {
+                     e.printStackTrace()
+                 }
             }
         }
 
@@ -2668,10 +2685,10 @@ class RoundedBackgroundSpan(
     if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
     if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
     
-    // --- ФІКС: ДОДАЄМО ЗУПИНКИ У ВІДОБРАЖЕННЯ КАМЕРИ ---
     currentWaypoints.forEach { boundsBuilder.include(it.first) }
     path.forEach { boundsBuilder.include(it) }
 
+    // --- ВНУТРИ ФУНКЦИИ drawStylishRoute ---
     val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
 
     visibleBottomPanel.post {
@@ -2687,27 +2704,44 @@ class RoundedBackgroundSpan(
             }
             
             val paddingBottom = panelHeight + marginBottom
-            // ФИКС: Делаем адаптивный верхний отступ в 110dp, чтобы tv_order_route_origin и плашки всегда были в поле зрения
-            val paddingTop = convertDpToPixel(110f).toInt() 
-            val paddingSide = convertDpToPixel(36f).toInt() 
+            
+            // ТВОЁ ТРЕБОВАНИЕ: Ставим минимальный, ультра-аккуратный отступ сверху карты (35dp)
+            val paddingTop = convertDpToPixel(35f).toInt() 
+            val paddingSide = convertDpToPixel(32f).toInt() 
 
             mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom)
 
-            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
+            val rawBounds = boundsBuilder.build()
+            val latDelta = rawBounds.northeast.latitude - rawBounds.southwest.latitude
+            
+            // === ХАРДКОРНАЯ ЗАЩИТА МАРКЕРА ОТ ВЫЛЕТА ПРИ МАЛЕНЬКОМ PADDING ===
+            // Даем 12% свободного места на трассах и стабильные 0.0055 градуса в городе для плашек
+            val topBuffer = if (latDelta > 0.01) latDelta * 0.12 else 0.0055
+            val bottomBuffer = if (latDelta > 0.01) latDelta * 0.04 else 0.0020
+
+            val professionalBoundsBuilder = LatLngBounds.Builder()
+                .include(rawBounds.northeast)
+                .include(rawBounds.southwest)
+                .include(LatLng(rawBounds.northeast.latitude + topBuffer, rawBounds.northeast.longitude))
+                .include(LatLng(rawBounds.southwest.latitude - bottomBuffer, rawBounds.southwest.longitude))
+            
+            currentWaypoints.forEach { professionalBoundsBuilder.include(it.first) }
+
+            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(
+                professionalBoundsBuilder.build(), 
+                paddingSide
+            )
 
             mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
                 override fun onFinish() {
                     runOnUiThread { 
-                        // ПРЕДОХРАНИТЕЛЬ: рисуем только если маршрут всё ещё актуален
                         if (viewModel.currentRoutePolyline != null) {
                             startRouteRevealAnimation(colorMain, colorBorder, path) 
                         }
                     }
                 }
-
                 override fun onCancel() {
                     runOnUiThread { 
-                        // ПРЕДОХРАНИТЕЛЬ: если камеру отменили (нажали Отмена), НЕ рисуем дальше
                         if (viewModel.currentRoutePolyline != null) {
                             startRouteRevealAnimation(colorMain, colorBorder, path) 
                         }
@@ -2715,7 +2749,11 @@ class RoundedBackgroundSpan(
                 }
             })
         } catch (e: Exception) {
-            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+            e.printStackTrace()
+            try {
+                val fallbackPadding = convertDpToPixel(36f).toInt()
+                mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), fallbackPadding))
+            } catch (_: Exception) {}
         }
     }
     
@@ -5208,10 +5246,6 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
             var panelHeight = bottomPanel.height
             if (panelHeight == 0) return@post
 
-            // --- НОВАЯ МАГИЯ: Обманываем карту ---
-            // Если это панель активного заказа, мы вычитаем высоту выезжающих деталей.
-            // Теперь карта ВСЕГДА будет думать, что панель свернута, и логотип Google 
-            // будет стоять как влитой!
             if (bottomPanel.id == R.id.active_order_card) {
                 val detailsView = bottomPanel.findViewById<View>(R.id.layout_expandable_details)
                 if (detailsView != null && detailsView.visibility == View.VISIBLE) {
@@ -5230,12 +5264,12 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
 
             val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
             val totalBottomPadding = panelHeight + marginBottom + extraBuffer
-            val topPadding = convertDpToPixel(topPaddingDp).toInt()
+            
+            // Синхронно зажимаем верхний физический отступ до 35dp
+            val topPadding = convertDpToPixel(35f).toInt() 
 
-            // Двигаем элементы Google (логотип, кнопки), чтобы они не перекрывались панелью
             mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
 
-            // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Центрируем маршрут ТОЛЬКО если recenterMap == true ---
             if (recenterMap && viewModel.currentRoutePolyline != null) {
                 try {
                     val boundsBuilder = LatLngBounds.Builder()
@@ -5243,13 +5277,31 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
                         boundsBuilder.include(originPlace!!.latLng!!)
                         boundsBuilder.include(destinationPlace!!.latLng!!)
                         currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                        decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+                        
+                        val decodedPoints = decodedRoutePoints
+                        decodedPoints?.forEach { boundsBuilder.include(it) }
 
-                        // ИСПРАВЛЕНИЕ: Синхронизируем падинг до 36dp для динамического кадрирования шторки
-                        val labelSafePadding = convertDpToPixel(36f).toInt()
-                        mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
+                        val rawBounds = boundsBuilder.build()
+                        val latDelta = rawBounds.northeast.latitude - rawBounds.southwest.latitude
+                        
+                        // Применяем аналогичный бронебойный буфер
+                        val topBuffer = if (latDelta > 0.01) latDelta * 0.12 else 0.0055
+                        val bottomBuffer = if (latDelta > 0.01) latDelta * 0.04 else 0.0020
+
+                        val professionalBounds = LatLngBounds.Builder()
+                            .include(rawBounds.northeast)
+                            .include(rawBounds.southwest)
+                            .include(LatLng(rawBounds.northeast.latitude + topBuffer, rawBounds.northeast.longitude))
+                            .include(LatLng(rawBounds.southwest.latitude - bottomBuffer, rawBounds.southwest.longitude))
+                        
+                        currentWaypoints.forEach { professionalBounds.include(it.first) }
+
+                        val labelSafePadding = convertDpToPixel(32f).toInt()
+                        mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(professionalBounds.build(), labelSafePadding))
                     }
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
     }
