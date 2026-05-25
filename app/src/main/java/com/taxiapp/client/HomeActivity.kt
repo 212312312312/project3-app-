@@ -185,8 +185,11 @@ private var lastAddressPickerIntentData: Intent? = null
     private lateinit var pinShadow: ImageView
 
     private lateinit var btnDriverHealthAlert: View
-    
 
+    // --- ПЕРЕМЕННЫЕ ДЛЯ АНИМАЦИИ РАДАРА (ПОИСК ЗАКАЗА) ---
+    private var radarOverlay: com.google.android.gms.maps.model.GroundOverlay? = null
+    private var radarAnimator: android.animation.ValueAnimator? = null
+    private var isRadarAnimationRunning = false
     private lateinit var btnRecenter: CardView
     private lateinit var btnRecenterRoute: CardView
 
@@ -222,6 +225,7 @@ private lateinit var btnConfirmMapPicker: Button
 
     private var revealAnimator: ValueAnimator? = null
     private var markerRevealAnimator: ValueAnimator? = null
+
 
     private lateinit var ivIconWork: ImageView
     private lateinit var indicatorAddWork: ImageView
@@ -951,6 +955,81 @@ private fun fetchAddressAtCurrentLocation() {
             }
         }, 2000)
     }
+    private fun startRadarAnimation(centerLatLng: LatLng) {
+    if (mMap == null || isRadarAnimationRunning) return
+    isRadarAnimationRunning = true
+
+    radarOverlay?.remove()
+
+    // 🛠️ СТИЛЬ UKLON В БЕЛОМ МИНИМАЛИСТИЧНОМ ЦВЕТЕ
+    val sizePx = 256 
+    val bitmap = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+    // 1. Рисуем внутреннюю плоскую заливку круга
+    // #15FFFFFF — очень нежная, едва заметная белая дымка внутри
+    paint.style = android.graphics.Paint.Style.FILL
+    paint.color = android.graphics.Color.parseColor("#15FFFFFF")
+    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
+
+    // 2. Поверх рисуем четкий векторный контур белого цвета
+    // #FFFFFFFF — плотный, яркий белый цвет для внешней линии-кольца
+    paint.style = android.graphics.Paint.Style.STROKE
+    paint.strokeWidth = 5f // Толщина кольца радара
+    paint.color = android.graphics.Color.parseColor("#FFFFFFFF")
+    
+    val strokeRadius = (sizePx / 2f) - 2.5f
+    canvas.drawCircle(sizePx / 2f, sizePx / 2f, strokeRadius, paint)
+
+    val descriptor = com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
+
+    val overlayOptions = com.google.android.gms.maps.model.GroundOverlayOptions()
+        .image(descriptor)
+        .position(centerLatLng, 0f)
+        .transparency(0f)
+        .zIndex(0f) 
+
+    radarOverlay = mMap?.addGroundOverlay(overlayOptions)
+
+    radarAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = 2400 // Комфортная скорость импульса
+        repeatCount = android.animation.ValueAnimator.INFINITE
+        repeatMode = android.animation.ValueAnimator.RESTART
+        interpolator = android.view.animation.DecelerateInterpolator()
+
+        addUpdateListener { animator ->
+            val fraction = animator.animatedValue as Float
+            try {
+                val currentSize = fraction * 450f
+                radarOverlay?.setDimensions(currentSize)
+
+                // Элегантное растворение всего белого векторного круга на финише (после 75% пути)
+                val currentTransparency = if (fraction > 0.75f) {
+                    ((fraction - 0.75f) / 0.25f)
+                } else {
+                    0f
+                }
+                radarOverlay?.transparency = currentTransparency
+            } catch (e: Exception) {}
+        }
+    }
+    
+    runOnUiThread {
+        radarAnimator?.start()
+    }
+}
+
+private fun stopRadarAnimation() {
+    isRadarAnimationRunning = false
+    
+    radarAnimator?.cancel()
+    radarAnimator = null
+    radarOverlay?.remove()
+    radarOverlay = null
+}
+
+
 
     private fun initUI() {
         drawerLayout = findViewById(R.id.drawer_layout)
@@ -2580,24 +2659,39 @@ class RoundedBackgroundSpan(
     private fun showTariffsPanel() {
        fetchTariffsAndShowPanel()
     }
-    
+
     private fun drawStylishRoute(path: List<LatLng>) {
     if (mMap == null) return
 
+    // Определяем, находится ли заказ в состоянии поиска водителя диспетчером
+    val currentStatus = viewModel.activeOrder.value?.status
+    val isSearchingState = (currentStatus == "REQUESTED" || currentStatus == "OFFERING")
+
     try {
         polylineMain?.remove()
+        polylineMain = null
         polylineBorder?.remove()
-        originMarker?.remove()
-        destinationMarker?.remove()
-        // --- ФІКС: Очищаємо старі маркери зупинок ---
+        polylineBorder = null
         waypointMarkers.forEach { it.remove() }
         waypointMarkers.clear()
+        
+        // 🔥 ИЗМЕНЕНИЕ: Если статус изменился (водитель нашелся), полностью удаляем 3D-маркер,
+        // чтобы на следующем тике создался стандартный 2D-маркер для поездки
+        if (!isSearchingState) {
+            originMarker?.remove()
+            originMarker = null
+            destinationMarker?.remove()
+            destinationMarker = null
+        }
     } catch (e: Exception) {}
 
     centerPin.visibility = View.GONE
     try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
-    try { mMap?.isMyLocationEnabled = false } catch (e: SecurityException) { }
-    mMap?.clear()
+    try { mMap?.isMyLocationEnabled = false } catch (e: SecurityException) {}
+    
+    if (!isSearchingState) {
+        mMap?.clear()
+    }
 
     val colorMain = ContextCompat.getColor(this, R.color.route_main)
     val colorBorder = ContextCompat.getColor(this, R.color.route_border)
@@ -2611,22 +2705,38 @@ class RoundedBackgroundSpan(
     val mainOpts = PolylineOptions().addAll(path).width(14f).color(transparentMain).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
     polylineMain = mMap?.addPolyline(mainOpts)
 
+    // ========================================================
+    // 📐 МОДЕРНИЗАЦИЯ ТОЧКИ А ПОД ИНТЕРАКТИВНЫЙ 3D-РЕЖИМ
+    // ========================================================
     if (originPlace != null && originPlace!!.latLng != null) {
-        originMarker = mMap?.addMarker(MarkerOptions()
-            .position(originPlace!!.latLng!!)
-            .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
-            .anchor(0.5f, 0.5f)
-            .alpha(0f) 
-            .zIndex(1000f))
+        if (originMarker == null) {
+            originMarker = mMap?.addMarker(MarkerOptions()
+                .position(originPlace!!.latLng!!)
+                .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
+                .anchor(0.5f, 0.5f)
+                .alpha(0f) 
+                .zIndex(1000f)
+                // 🔥 ФИКС: false делает маркер вертикальным "столбом", возвышающимся над картой!
+                .flat(false) 
+            )
+        } else {
+            originMarker?.isFlat = false
+        }
 
         val uiText = tvOrigin.text.toString()
         val finalOriginText = if (uiText.contains("...") || uiText.isBlank()) (originPlace?.name ?: "А") else uiText
         tvOverlayOrigin.text = finalOriginText
-        overlayOrigin.alpha = 0f
-        overlayOrigin.visibility = View.VISIBLE
+        
+        if (isSearchingState) {
+            overlayOrigin.visibility = View.GONE
+        } else {
+            overlayOrigin.alpha = 0f
+            overlayOrigin.visibility = View.VISIBLE
+        }
     }
 
-    if (destinationPlace != null && destinationPlace!!.latLng != null) {
+    // Маркер точки Б (Скрыт в режиме поиска)
+    if (!isSearchingState && destinationPlace != null && destinationPlace!!.latLng != null) {
         destinationMarker = mMap?.addMarker(MarkerOptions()
             .position(destinationPlace!!.latLng!!)
             .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
@@ -2648,77 +2758,90 @@ class RoundedBackgroundSpan(
         overlayDest.visibility = View.VISIBLE
     }
 
-    // --- ФІКС: СТВОРЮЄМО ТА ЗБЕРІГАЄМО ЗУПИНКИ ---
-    val waypointIcon = BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_waypoint_dot)
-    for (wpPair in currentWaypoints) {
-        val marker = mMap?.addMarker(MarkerOptions()
-            .position(wpPair.first)
-            .icon(waypointIcon)
-            .anchor(0.5f, 0.5f)
-            .alpha(0f) // Робимо їх поки невидимими, як і інші маркери
-            .zIndex(500f))
-        
-        if (marker != null) waypointMarkers.add(marker)
-    }
-
-    val boundsBuilder = LatLngBounds.Builder()
-    if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
-    if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
-    
-    // --- ФІКС: ДОДАЄМО ЗУПИНКИ У ВІДОБРАЖЕННЯ КАМЕРИ ---
-    currentWaypoints.forEach { boundsBuilder.include(it.first) }
-    path.forEach { boundsBuilder.include(it) }
-
-    val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
-
-    visibleBottomPanel.post {
-        try {
-            val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
+    // Промежуточные остановки (Скрыты в режиме поиска)
+    if (!isSearchingState) {
+        val waypointIcon = BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_waypoint_dot)
+        for (wpPair in currentWaypoints) {
+            val marker = mMap?.addMarker(MarkerOptions()
+                .position(wpPair.first)
+                .icon(waypointIcon)
+                .anchor(0.5f, 0.5f)
+                .alpha(0f) 
+                .zIndex(500f))
             
-            var marginBottom = 0
-            var sideMargin = 0 
-            val params = visibleBottomPanel.layoutParams
-            if (params is ViewGroup.MarginLayoutParams) {
-                marginBottom = params.bottomMargin
-                sideMargin = params.leftMargin 
-            }
-            
-            val paddingBottom = panelHeight + marginBottom
-            val paddingTop = convertDpToPixel(10f).toInt() 
-            val paddingSide = convertDpToPixel(80f).toInt() 
-
-            mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom) 
-
-            val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
-
-            mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
-                override fun onFinish() {
-                    runOnUiThread { 
-                        // ПРЕДОХРАНИТЕЛЬ: рисуем только если маршрут всё ещё актуален
-                        if (viewModel.currentRoutePolyline != null) {
-                            startRouteRevealAnimation(colorMain, colorBorder, path) 
-                        }
-                    }
-                }
-
-                override fun onCancel() {
-                    runOnUiThread { 
-                        // ПРЕДОХРАНИТЕЛЬ: если камеру отменили (нажали Отмена), НЕ рисуем дальше
-                        if (viewModel.currentRoutePolyline != null) {
-                            startRouteRevealAnimation(colorMain, colorBorder, path) 
-                        }
-                    }
-                }
-            })
-        } catch (e: Exception) {
-            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+            if (marker != null) waypointMarkers.add(marker)
         }
     }
-    
-    btnRecenterRoute.visibility = View.GONE
-    contentBottomSheet.post { updateSmartLabels() }
-}
 
+    // Логика управления 3D/2D камерой
+    if (isSearchingState) {
+        val originLoc = originPlace?.latLng
+        if (originLoc != null) {
+            btnRecenterRoute.visibility = View.GONE
+            btnRecenter.visibility = View.GONE
+            
+            val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                .target(originLoc)
+                .zoom(17f)
+                .tilt(45f) // Наклон сцены
+                .bearing(0f)
+                .build()
+            
+            mMap?.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 800, object : GoogleMap.CancelableCallback {
+                override fun onFinish() {
+                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                }
+                override fun onCancel() {
+                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                }
+            })
+        }
+    } else {
+        val boundsBuilder = LatLngBounds.Builder()
+        if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
+        if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
+        currentWaypoints.forEach { boundsBuilder.include(it.first) }
+        path.forEach { boundsBuilder.include(it) }
+
+        val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
+
+        visibleBottomPanel.post {
+            try {
+                val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
+                var marginBottom = 0
+                var sideMargin = 0 
+                val params = visibleBottomPanel.layoutParams
+                if (params is ViewGroup.MarginLayoutParams) {
+                    marginBottom = params.bottomMargin
+                    sideMargin = params.leftMargin 
+                }
+                
+                val paddingBottom = panelHeight + marginBottom
+                val paddingTop = convertDpToPixel(10f).toInt() 
+                val paddingSide = convertDpToPixel(80f).toInt() 
+
+                mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom) 
+
+                val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
+                mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
+                    override fun onFinish() {
+                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                    }
+                    override fun onCancel() {
+                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                    }
+                })
+            } catch (e: Exception) {
+                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+            }
+        }
+        btnRecenterRoute.visibility = View.GONE
+    }
+    
+    if (!isSearchingState) {
+        contentBottomSheet.post { updateSmartLabels() }
+    }
+}
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
         if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
 
@@ -3039,6 +3162,7 @@ class RoundedBackgroundSpan(
     // Запускаем диалог
     dialog.show()
 }
+
 
 
 private fun showDriverHealthDialog(issues: List<String>) {
@@ -3647,14 +3771,14 @@ if (!cardMask.isNullOrEmpty()) {
 
         val polyline = order.googleRoutePolyline
         if (!polyline.isNullOrEmpty()) {
-            viewModel.currentRoutePolyline = polyline 
+            viewModel.currentRoutePolyline = polyline
             val points = com.google.maps.android.PolyUtil.decode(polyline)
             decodedRoutePoints = points
-            
-            // Гарантуємо правильні відступи перед відмальовуванням
+
             creationPanelCard.visibility = View.GONE
             addressPanel.visibility = View.GONE
-            
+
+            // 🔥 РАЗРЕШАЕМ: Маршрут будет строиться и анимироваться на любом статусе
             drawStylishRoute(points)
         }
     }
@@ -3668,6 +3792,13 @@ if (!cardMask.isNullOrEmpty()) {
 
     private fun updateSmartLabels() {
         if (mMap == null) return
+
+        val currentStatus = viewModel.activeOrder.value?.status
+    if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
+        overlayOrigin.visibility = View.GONE
+        overlayDest.visibility = View.GONE
+        return // Выходим из метода, не давая ему выполнить логику отрисовки
+    }
         
         val originLoc = originPlace?.latLng
         val destLoc = destinationPlace?.latLng
@@ -4651,55 +4782,93 @@ private fun stopWaitingTimer() {
         // 3. ДАЛЬШЕ СРАЗУ ИДЕТ ПРОВЕРКА СТАТУСОВ
         when(order.status) {
             "SCHEDULED" -> {
-            updateOrderProgress(0)
-            orderStatusText.text = "Заплановано" // Можно вынести в strings.xml
-            stopStatusBlinking() // Для запланированных мигание не нужно
-            
-            layoutSearchControls.visibility = View.VISIBLE
-            layoutDriverFoundState.visibility = View.GONE
-            
-            layoutSearchDetails.visibility = View.VISIBLE
-            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE
-            layoutDriverDetails.visibility = View.GONE
-            layoutPaymentCompleted.visibility = View.GONE 
-            
-            btnCancelOrder.visibility = View.VISIBLE
-            btnCancelRideDriver.visibility = View.GONE
+                stopRadarAnimation()
+                // Возвращаем дефолтные настройки карты и жесты
+                mMap?.uiSettings?.isScrollGesturesEnabled = true
+                mMap?.uiSettings?.isZoomGesturesEnabled = true
 
-            stopDriverTracking()
-            stopWaitingTimer()
-            
-            updateMapPadding(activeOrderCard, 0f, 20f)
-        }
-        // ------------------------------------------------
+                updateOrderProgress(0)
+                orderStatusText.text = "Заплановано"
+                stopStatusBlinking()
 
-        "REQUESTED", "OFFERING" -> {
-            updateOrderProgress(0)
-            orderStatusText.text = getString(R.string.status_searching_driver)
-            startStatusBlinking()
-            
-            layoutSearchControls.visibility = View.VISIBLE
-            layoutDriverFoundState.visibility = View.GONE
-            
-            layoutSearchDetails.visibility = View.VISIBLE
-            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE // Показуємо заголовок "Тариф"
-            layoutDriverDetails.visibility = View.GONE
-            layoutPaymentCompleted.visibility = View.GONE 
-            
-            // --- КНОПКИ ---
-            btnCancelOrder.visibility = View.VISIBLE
-            btnCancelRideDriver.visibility = View.GONE
-            // --------------
+                layoutSearchControls.visibility = View.VISIBLE
+                layoutDriverFoundState.visibility = View.GONE
 
-            stopDriverTracking()
-            stopWaitingTimer()
-            
-            updateMapPadding(activeOrderCard, 0f, 20f)
-        }
-        
-        "ACCEPTED" -> {
-            updateOrderProgress(1)
-            stopStatusBlinking()
+                layoutSearchDetails.visibility = View.VISIBLE
+                findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE
+                layoutDriverDetails.visibility = View.GONE
+                layoutPaymentCompleted.visibility = View.GONE
+
+                btnCancelOrder.visibility = View.VISIBLE
+                btnCancelRideDriver.visibility = View.GONE
+
+                stopDriverTracking()
+                stopWaitingTimer()
+
+                updateMapPadding(activeOrderCard, 0f, 20f)
+            }
+
+            "REQUESTED", "OFFERING" -> {
+                updateOrderProgress(0)
+                orderStatusText.text = getString(R.string.status_searching_driver)
+                startStatusBlinking()
+
+                layoutSearchControls.visibility = View.VISIBLE
+                layoutDriverFoundState.visibility = View.GONE
+
+                layoutSearchDetails.visibility = View.VISIBLE
+                findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE
+                layoutDriverDetails.visibility = View.GONE
+                layoutPaymentCompleted.visibility = View.GONE
+
+                btnCancelOrder.visibility = View.VISIBLE
+                btnCancelRideDriver.visibility = View.GONE
+
+                stopDriverTracking()
+                stopWaitingTimer()
+
+                // ========================================================
+                // 🔒 НАСТРОЙКА КАРТЫ-РАДАРА (МАРШРУТ ОСТАЁТСЯ НА КАРТЕ)
+                // ========================================================
+                val originLoc = originPlace?.latLng
+                if (originLoc != null) {
+                    // Скрываем кнопки геолокации, чтобы они визуально не мешали
+                    btnRecenterRoute.visibility = View.GONE
+                    btnRecenter.visibility = View.GONE
+
+                    // Жесткая блокировка жестов управления картой
+                    mMap?.uiSettings?.isScrollGesturesEnabled = false
+                    mMap?.uiSettings?.isZoomGesturesEnabled = false
+
+                    // Плавный перевод и фиксация камеры в 3D (угол наклона 45°) на точке А
+                    val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                        .target(originLoc)
+                        .zoom(17f)
+                        .tilt(45f)
+                        .bearing(0f)
+                        .build()
+
+                    mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition))
+
+                    // Запускаем красивую контурную волну радара
+                    if (!isRadarAnimationRunning) {
+                        startRadarAnimation(originLoc)
+                    }
+                }
+                // ========================================================
+
+                // Апдейт паддингов интерфейса с параметром recenterMap = false, чтобы не сбивать 3D-фокус
+                updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
+            }
+
+            "ACCEPTED" -> {
+                // 🔓 РАЗБЛОКИРУЕМ КАРТУ И ВОЗВРАЩАЕМ В 2D ПРИ НАХОЖДЕНИИ ВОДИТЕЛЯ
+                stopRadarAnimation()
+                mMap?.uiSettings?.isScrollGesturesEnabled = true
+                mMap?.uiSettings?.isZoomGesturesEnabled = true
+
+                updateOrderProgress(1)
+                stopStatusBlinking()
             orderStatusText.text = getString(R.string.status_driver_coming)
             
             layoutSearchControls.visibility = View.GONE
@@ -4736,6 +4905,8 @@ private fun stopWaitingTimer() {
         }
 
         "DRIVER_ARRIVED" -> {
+            mMap?.uiSettings?.isScrollGesturesEnabled = true
+            mMap?.uiSettings?.isZoomGesturesEnabled = true
             updateOrderProgress(1)
             stopStatusBlinking()
             orderStatusText.text = getString(R.string.status_driver_arrived) 
@@ -4774,6 +4945,8 @@ private fun stopWaitingTimer() {
         }
 
         "IN_PROGRESS" -> {
+            mMap?.uiSettings?.isScrollGesturesEnabled = true
+            mMap?.uiSettings?.isZoomGesturesEnabled = true
             updateOrderProgress(2)
             stopStatusBlinking()
             orderStatusText.text = getString(R.string.status_in_progress)
@@ -4812,6 +4985,8 @@ private fun stopWaitingTimer() {
         }
         
         "COMPLETED" -> {
+            mMap?.uiSettings?.isScrollGesturesEnabled = true
+            mMap?.uiSettings?.isZoomGesturesEnabled = true
             updateOrderProgress(3)
             stopStatusBlinking()
             resetOrderDetailsState()
@@ -4862,6 +5037,8 @@ private fun stopWaitingTimer() {
         }
         
         "CANCELLED" -> {
+            mMap?.uiSettings?.isScrollGesturesEnabled = true
+            mMap?.uiSettings?.isZoomGesturesEnabled = true
             stopStatusBlinking()
             resetOrderDetailsState()
             orderStatusText.text = getString(R.string.status_cancelled)
@@ -5102,10 +5279,23 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         }
     }
 
-    
+
 
     private fun showAddressPanel() {
         isRouteMode = false
+
+        // 🔓 СБРОС 3D И РАЗБЛОКИРОВКА ЖЕСТОВ ДЛЯ СЛЕДУЮЩИХ ЗАКАЗОВ
+        mMap?.uiSettings?.isScrollGesturesEnabled = true
+        mMap?.uiSettings?.isZoomGesturesEnabled = true
+
+        // Плавно выравниваем камеру обратно в 2D (наклоняем на 0 градусов)
+        mMap?.cameraPosition?.let { currentPos ->
+            val flatCamera = com.google.android.gms.maps.model.CameraPosition.Builder(currentPos)
+                .tilt(0f)
+                .build()
+            mMap?.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(flatCamera))
+        }
+
         creationPanelCard.visibility = View.VISIBLE
         activeOrderCard.visibility = View.GONE
         addressPanel.visibility = View.VISIBLE
@@ -5141,11 +5331,11 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
 
         orderComment = ""
         updateCommentIconState()
-        
+
         scheduledDate = null
         try {
             // Відновлюємо правильний колір або просто скидаємо фільтр (XML tint зробить свою справу)
-            btnSchedule.clearColorFilter() 
+            btnSchedule.clearColorFilter()
         } catch (e: Exception){}
 
         tvOrigin.text = getString(R.string.hint_where_from)
@@ -5178,6 +5368,7 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
                 .start()
         } catch (e: Exception) {}
 
+        stopRadarAnimation()
         recenterMapOnUser()
         viewModel.startListeningNearbyDrivers(webSocketManager)
     }
