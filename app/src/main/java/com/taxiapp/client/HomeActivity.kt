@@ -2109,8 +2109,13 @@ btnChangePayment.setOnClickListener {
                     }
                 }
             } else {
+                // Если пользователь двигает карту пальцем при построенном маршруте
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
-                    btnRecenterRoute.visibility = View.VISIBLE
+                    val currentStatus = viewModel.activeOrder.value?.status
+                    // Проверяем: если водитель НЕ найден (ACCEPTED) и НЕ приехал (DRIVER_ARRIVED) и НЕ в пути (IN_PROGRESS)
+                    if (currentStatus != "ACCEPTED" && currentStatus != "DRIVER_ARRIVED" && currentStatus != "IN_PROGRESS") {
+                        btnRecenterRoute.visibility = View.VISIBLE
+                    }
                 }
             }
         }
@@ -3671,34 +3676,32 @@ if (!cardMask.isNullOrEmpty()) {
     }
 
     private fun updateDriverMarker(loc: TrackingLocationDto) {
-        var targetPos = LatLng(loc.lat, loc.lng)
+        val latLng = LatLng(loc.lat, loc.lng)
         
-        if (decodedRoutePoints != null && decodedRoutePoints!!.isNotEmpty()) {
-            val (snappedPoint, distance) = getSnapPointAndDistance(targetPos, decodedRoutePoints!!)
-            if (distance < 50.0) {
-                targetPos = snappedPoint
-            }
-        }
-
         if (driverMarker == null) {
-            val icon = customCarIcon ?: BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_sun)
+            val carWidth = 40
+            val carHeight = 40
+
+            val carIcon = BitmapHelper.getScaledBitmapDescriptor(
+                this, 
+                R.drawable.ic_car_icon, 
+                carWidth, 
+                carHeight
+            )
+
             val initialBearing = loc.bearing ?: 0f
-            
-            driverMarker = mMap?.addMarker(MarkerOptions()
-                .position(targetPos)
-                .icon(icon)
-                .anchor(0.5f, 0.5f)
-                .rotation(initialBearing)
-                .flat(true)) 
+
+            driverMarker = mMap?.addMarker(
+                MarkerOptions()
+                    .position(latLng)
+                    .icon(carIcon)
+                    .flat(true)          
+                    .anchor(0.5f, 0.5f)  
+                    .rotation(initialBearing)
+                    .zIndex(100f) // 🔥 ЖЕСТКИЙ ФИКС: Поднимаем слой машинки на самый верх карты!
+            )
         } else {
-            val oldPos = driverMarker!!.position
-            val distanceMoved = com.google.maps.android.SphericalUtil.computeDistanceBetween(oldPos, targetPos)
-            var newBearing = driverMarker!!.rotation
-            
-            if (distanceMoved > 2.0) {
-                newBearing = com.google.maps.android.SphericalUtil.computeHeading(oldPos, targetPos).toFloat()
-            }
-            animateMarker(driverMarker!!, targetPos, newBearing)
+            animateMarker(driverMarker!!, latLng, loc.bearing ?: 0f)
         }
     }
 
@@ -3739,8 +3742,8 @@ if (!cardMask.isNullOrEmpty()) {
         isRouteMode = true
         centerPin.visibility = View.GONE
         centerPin.animate().cancel() // Зупиняємо будь-які можливі анімації піна
-        try { 
-            pinShadow.visibility = View.GONE 
+        try {
+            pinShadow.visibility = View.GONE
             pinShadow.animate().cancel()
         } catch (e: Exception) {}
 
@@ -3752,16 +3755,14 @@ if (!cardMask.isNullOrEmpty()) {
         val originLoc = LatLng(originLat, originLng)
         val destLoc = LatLng(destLat, destLng)
 
-        // Вирішення 1: Відновлюємо логіку точок А та Б для правильного фокусу камери
+        // Відновлюємо логіку точок А та Б для правильного фокусу камери
         originPlace = Place.builder().setName(order.fromAddress).setLatLng(originLoc).build()
         destinationPlace = Place.builder().setName(order.toAddress).setLatLng(destLoc).build()
 
         tvOrigin.text = cleanAddress(order.fromAddress ?: "А")
         tvDestination.text = cleanAddress(order.toAddress ?: "Б")
 
-        // ========================================================
-        // ВАЖЛИВО: Очищаємо і ВІДНОВЛЮЄМО масив зупинок з сервера
-        // ========================================================
+        // Відновлюємо масив зупинок з сервера
         currentWaypoints.clear()
         if (!order.stops.isNullOrEmpty()) {
             order.stops.forEach { stop ->
@@ -3770,34 +3771,59 @@ if (!cardMask.isNullOrEmpty()) {
         }
 
         val polyline = order.googleRoutePolyline
-if (!polyline.isNullOrEmpty()) {
-    viewModel.currentRoutePolyline = polyline
-    val points = com.google.maps.android.PolyUtil.decode(polyline)
-    decodedRoutePoints = points
+        if (!polyline.isNullOrEmpty()) {
+            viewModel.currentRoutePolyline = polyline
+            val points = PolyUtil.decode(polyline)
+            decodedRoutePoints = points
 
-    creationPanelCard.visibility = View.GONE
-    addressPanel.visibility = View.GONE
+            creationPanelCard.visibility = View.GONE
+            addressPanel.visibility = View.GONE
 
-    // --- НАШЕ ОБНОВЛЕНИЕ ---
-    val s = order.status
-    if (s == "ACCEPTED" || s == "DRIVER_ARRIVED" || s == "IN_PROGRESS") {
-        mMap?.clear()
-        // Восстанавливаем только Точку А
-        if (originPlace?.latLng != null) {
-            originMarker = mMap?.addMarker(MarkerOptions()
-                .position(originPlace!!.latLng!!)
-                .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
-                .anchor(0.5f, 0.5f))
-            overlayOrigin.visibility = View.VISIBLE
-            overlayOrigin.alpha = 1f
+            val s = order.status
+            if (s == "ACCEPTED" || s == "DRIVER_ARRIVED") {
+                mMap?.clear()
+                if (originPlace?.latLng != null) {
+                    originMarker = mMap?.addMarker(MarkerOptions()
+                        .position(originPlace!!.latLng!!)
+                        .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
+                        .anchor(0.5f, 0.5f))
+                    overlayOrigin.visibility = View.VISIBLE
+                    overlayOrigin.alpha = 1f
+                }
+                overlayDest.visibility = View.GONE
+                startDriverTracking(order.id)
+            } else if (s == "IN_PROGRESS") {
+                // 🔥 ФИКС: Для "IN_PROGRESS" принудительно запускаем отрисовку маршрутной линии и трекинг!
+                startDriverTracking(order.id)
+                drawStylishRoute(points)
+            } else {
+                drawStylishRoute(points)
+            }
+        } else {
+            // 🔥 ЖЕЛЕЗОБЕТОННЫЙ ФИКС ХОЛОДНОГО СТАРТА:
+            // Полилинии нет в DTO активного заказа — принудительно просим ViewModel перезапросить маршрут у Google API
+            creationPanelCard.visibility = View.GONE
+            addressPanel.visibility = View.GONE
+
+            viewModel.fetchDirections(originLoc, destLoc, currentWaypoints)
+
+            if (order.status == "ACCEPTED" || order.status == "DRIVER_ARRIVED" || order.status == "IN_PROGRESS") {
+                startDriverTracking(order.id)
+            }
         }
-        overlayDest.visibility = View.GONE
-        startDriverTracking(order.id)
-    } else {
-        // Для поиска и других статусов — рисуем как обычно
-        drawStylishRoute(points)
-    }
-}
+
+        order.driver?.let { drv ->
+            val lat = drv.latitude
+            val lng = drv.longitude
+            if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                val initialLoc = TrackingLocationDto(
+                    lat = lat, 
+                    lng = lng, 
+                    bearing = drv.bearing ?: 0f
+                )
+                updateDriverMarker(initialLoc)
+            }
+        }
     }
 
     private fun stopStatusBlinking() {
@@ -5029,28 +5055,13 @@ private fun stopWaitingTimer() {
         updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
     }
 
-    "IN_PROGRESS" -> {
-        // 1. ОЧИЩЕННЯ КАРТИ: При поїздці також приховуємо весь старий маршрут та Точку Б
-        polylineMain?.remove()
-        polylineMain = null
-        polylineBorder?.remove()
-        polylineBorder = null
-        polylineAnim?.remove()
-        polylineAnim = null
-        
-        waypointMarkers.forEach { it.remove() }
-        waypointMarkers.clear()
-        
-        destinationMarker?.remove()
-        destinationMarker = null
-        
-        // 🛠️ ЖЕСТКА ОЧИСТКА: Повністю приховуємо smartLabels обох точок
-        overlayOrigin.visibility = View.GONE
-        overlayDest.visibility = View.GONE
+       "IN_PROGRESS" -> {
         stopRadarAnimation()
 
+        // 🔓 Дозволяємо жести керування картою
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
+        
         updateOrderProgress(2)
         stopStatusBlinking()
         orderStatusText.text = getString(R.string.status_in_progress)
@@ -5059,38 +5070,107 @@ private fun stopWaitingTimer() {
         layoutDriverFoundState.visibility = View.VISIBLE
         
         layoutSearchDetails.visibility = View.GONE
-        findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE // Ховаємо заголовок "Тариф"
+        findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE
         layoutDriverDetails.visibility = View.VISIBLE
         layoutPaymentCompleted.visibility = View.GONE 
         
-        // --- КНОПКИ --- (Коли в дорозі - зазвичай скасувати не можна)
         btnCancelOrder.visibility = View.GONE
         btnCancelRideDriver.visibility = View.GONE
-        btnRecenterRoute.visibility = View.GONE      // 🛠 Ховаємо кнопку центрування маршруту!
-        // --------------
+        
+        // Кнопка рецентровки маршруту повертається
+        btnRecenterRoute.visibility = View.VISIBLE
         
         updateDriverInfo(order)
         stopWaitingTimer()
 
+        // Оновлюємо маркер машинки водія на карті
         order.driver?.let { drv ->
             val lat = drv.latitude
             val lng = drv.longitude
             if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-                val initialLoc = TrackingLocationDto(
-                    lat = lat, 
-                    lng = lng, 
-                    bearing = drv.bearing ?: 0f
-                )
+                val initialLoc = TrackingLocationDto(lat = lat, lng = lng, bearing = drv.bearing ?: 0f)
                 updateDriverMarker(initialLoc)
             }
         }
 
+        // Перевіряємо та малюємо лінію маршруту, якщо її немає
+        if (polylineMain == null) {
+            val polylineStr = order.googleRoutePolyline ?: viewModel.currentRoutePolyline
+            if (!polylineStr.isNullOrEmpty()) {
+                try {
+                    val decodedLists = com.taxiapp.client.utils.GeometryUtils.decodePolyline(polylineStr) as? List<*>
+                    if (!decodedLists.isNullOrEmpty()) {
+                        val mainRoutePoints = decodedLists[0] as? List<com.google.android.gms.maps.model.LatLng>
+                        if (!mainRoutePoints.isNullOrEmpty()) {
+                            drawStylishRoute(mainRoutePoints)
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        // Тотально ховаємо старі прямокутні смарт-лейбли з адресами
+        overlayOrigin.visibility = View.GONE 
+        overlayDest.visibility = View.GONE 
+
+        // Розрахунок хвилин поїздки
+        val secondsLeft = order.durationSeconds ?: 0
+        val minutesLeft = if (secondsLeft > 0) java.lang.Math.ceil(secondsLeft.toDouble() / 60.0).toInt() else 0
+        val timeText = if (minutesLeft > 0) "$minutesLeft хв" else "?? хв"
+
+        // 🛠️ МАЛЮЄМО БЕЛЫЙ БАЗОВЫЙ МАРКЕР ТА СТАВИМО НА НЕГО ПАРЯЩУ ПЛАШКУ ЧЕРЕЗ ANCHOR
+        val destLat = order.destLat
+        val destLng = order.destLng
+        if (destLat != null && destLng != null && destLat != 0.0 && destLng != 0.0) {
+            val destLatLng = LatLng(destLat, destLng)
+            
+            try {
+                // Чистимо старі маркери, щоб уникнути дублікатів при оновленні сокетів
+                (destinationMarker?.tag as? Marker)?.remove()
+                destinationMarker?.remove()
+
+                // 1. Отрисовуємо ТВОЙ РОДНОЙ БЕЛЫЙ МАРКЕР ic_marker_base_white на его законное место
+                destinationMarker = mMap?.addMarker(
+                    MarkerOptions()
+                        .position(destLatLng)
+                        .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white)) // ЗАМЕНИЛИ НА БЕЛЫЙ МАРКЕР!
+                        .anchor(0.5f, 1.0f) // Основание маркера четко на дороге
+                )
+
+                // 2. Генеруємо Bitmap з твоєї чистой XML-плашки з часом
+                val markerView = android.view.LayoutInflater.from(this).inflate(R.layout.layout_route_time_marker, null)
+                val tvMarkerTime = markerView.findViewById<TextView>(R.id.tv_marker_time)
+                tvMarkerTime.text = timeText
+
+                markerView.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                markerView.layout(0, 0, markerView.measuredWidth, markerView.measuredHeight)
+                
+                val bitmap = Bitmap.createBitmap(markerView.measuredWidth, markerView.measuredHeight, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                markerView.draw(canvas)
+
+                // 3. Ставимо плашку часу НА ТУ Ж САМУ координату, але піднімаємо її в повітря через anchor
+                // Смещение (0.5f, 2.0f) поднимет плашку ровно над макушкой маркера ic_marker_base_white!
+                val timeBadgeMarker = mMap?.addMarker(
+                    MarkerOptions()
+                        .position(destLatLng)
+                        .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
+                        .anchor(0.5f, 1.5f) // Элегантная левитация силами карт
+                )
+                
+                // Зв'язуємо маркер часу з основним маркером, щоб вони жили і вмирали разом
+                destinationMarker?.tag = timeBadgeMarker
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         startDriverTracking(order.id)
-        
-        // 2. ПАДДІНГИ: Передаємо recenterMap = false, щоб карта плавно вела клієнта за маркером машини
         updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
     }
-
     "COMPLETED" -> {
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
