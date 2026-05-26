@@ -2668,7 +2668,7 @@ class RoundedBackgroundSpan(
     private fun drawStylishRoute(path: List<LatLng>) {
     if (mMap == null) return
 
-    // Определяем, находится ли заказ в состоянии поиска водителя диспетчером
+    // Визначаємо, чи знаходиться замовлення в стані пошуку водія диспетчером
     val currentStatus = viewModel.activeOrder.value?.status
     val isSearchingState = (currentStatus == "REQUESTED" || currentStatus == "OFFERING")
 
@@ -2680,8 +2680,8 @@ class RoundedBackgroundSpan(
         waypointMarkers.forEach { it.remove() }
         waypointMarkers.clear()
         
-        // 🔥 ИЗМЕНЕНИЕ: Если статус изменился (водитель нашелся), полностью удаляем 3D-маркер,
-        // чтобы на следующем тике создался стандартный 2D-маркер для поездки
+        // Якщо статус змінився (водій знайшовся), повністю видаляємо 3D-маркер,
+        // щоб на наступному тіку створився стандартний 2D-маркер для поїздки
         if (!isSearchingState) {
             originMarker?.remove()
             originMarker = null
@@ -2696,6 +2696,8 @@ class RoundedBackgroundSpan(
     
     if (!isSearchingState) {
         mMap?.clear()
+        // 🔥 ФИКС НЕВИДИМОЙ СТЕНЫ: Сообщаем приложению, что маркер физически стерт с карты!
+        driverMarker = null 
     }
 
     val colorMain = ContextCompat.getColor(this, R.color.route_main)
@@ -3706,25 +3708,37 @@ if (!cardMask.isNullOrEmpty()) {
     }
 
     private fun animateMarker(marker: Marker, toPosition: LatLng, toRotation: Float) {
-    val startPosition = marker.position
-    val startRotation = marker.rotation
+        val startPosition = marker.position
+        val startRotation = marker.rotation
 
-    val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
-    valueAnimator.duration = 2000 
-    valueAnimator.interpolator = LinearInterpolator()
-    valueAnimator.addUpdateListener { animation ->
-        val v = animation.animatedFraction
-        val lng = v * toPosition.longitude + (1 - v) * startPosition.longitude
-        val lat = v * toPosition.latitude + (1 - v) * startPosition.latitude
-        marker.position = LatLng(lat, lng)
+        // 📏 Вычисляем расстояние между старой и новой позицией машины
+        val distance = com.google.maps.android.SphericalUtil.computeDistanceBetween(startPosition, toPosition)
         
-        var delta = toRotation - startRotation
-        if (delta > 180) delta -= 360
-        if (delta < -180) delta += 360
-        marker.rotation = startRotation + (v * delta)
+        // 🔥 ФИКС: Если машина проехала больше 1.5 метров, вычисляем идеальный угол направления движения.
+        // Если машина стоит на месте, плавно оставляем текущий курс или угол от сервера.
+        val finalRotation = if (distance > 1.5) {
+            com.google.maps.android.SphericalUtil.computeHeading(startPosition, toPosition).toFloat()
+        } else {
+            toRotation
+        }
+
+        val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
+        valueAnimator.duration = 2000 
+        valueAnimator.interpolator = LinearInterpolator()
+        valueAnimator.addUpdateListener { animation ->
+            val v = animation.animatedFraction
+            val lng = v * toPosition.longitude + (1 - v) * startPosition.longitude
+            val lat = v * toPosition.latitude + (1 - v) * startPosition.latitude
+            marker.position = LatLng(lat, lng)
+            
+            // Плавное вращение с учетом перехода через 180/-180 градусов
+            var delta = finalRotation - startRotation
+            if (delta > 180) delta -= 360
+            if (delta < -180) delta += 360
+            marker.rotation = startRotation + (v * delta)
+        }
+        valueAnimator.start()
     }
-    valueAnimator.start()
-}
     
     private fun startStatusBlinking() {
         if (::statusBlinkAnimator.isInitialized && statusBlinkAnimator.isRunning) return
@@ -5080,6 +5094,31 @@ private fun stopWaitingTimer() {
         // Кнопка рецентровки маршруту повертається
         btnRecenterRoute.visibility = View.VISIBLE
         
+        // Тотально ховаємо старі прямокутні смарт-лейбли з адресами
+        overlayOrigin.visibility = View.GONE 
+        overlayDest.visibility = View.GONE 
+
+        // ====================================================================
+        // 🔥 ШАГ 1: СНАЧАЛА СТРОИМ МАРШРУТ (Он вызовет mMap?.clear() внутри себя)
+        // ====================================================================
+        if (polylineMain == null) {
+            val polylineStr = order.googleRoutePolyline ?: viewModel.currentRoutePolyline
+            if (!polylineStr.isNullOrEmpty()) {
+                try {
+                    val mainRoutePoints = com.google.maps.android.PolyUtil.decode(polylineStr)
+                    if (!mainRoutePoints.isNullOrEmpty()) {
+                        decodedRoutePoints = mainRoutePoints
+                        drawStylishRoute(mainRoutePoints)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        // ====================================================================
+        // 🚗 ШАГ 2: И ТОЛЬКО ТЕПЕРЬ СТАВИМ ВОДИТЕЛЯ (Карта уже чистая, его никто не сотрет)
+        // ====================================================================
         updateDriverInfo(order)
         stopWaitingTimer()
 
@@ -5092,28 +5131,6 @@ private fun stopWaitingTimer() {
                 updateDriverMarker(initialLoc)
             }
         }
-
-        // Перевіряємо та малюємо лінію маршруту, якщо її немає
-        if (polylineMain == null) {
-            val polylineStr = order.googleRoutePolyline ?: viewModel.currentRoutePolyline
-            if (!polylineStr.isNullOrEmpty()) {
-                try {
-                    val decodedLists = com.taxiapp.client.utils.GeometryUtils.decodePolyline(polylineStr) as? List<*>
-                    if (!decodedLists.isNullOrEmpty()) {
-                        val mainRoutePoints = decodedLists[0] as? List<com.google.android.gms.maps.model.LatLng>
-                        if (!mainRoutePoints.isNullOrEmpty()) {
-                            drawStylishRoute(mainRoutePoints)
-                        }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-
-        // Тотально ховаємо старі прямокутні смарт-лейбли з адресами
-        overlayOrigin.visibility = View.GONE 
-        overlayDest.visibility = View.GONE 
 
         // Розрахунок хвилин поїздки
         val secondsLeft = order.durationSeconds ?: 0
@@ -5135,7 +5152,7 @@ private fun stopWaitingTimer() {
                 destinationMarker = mMap?.addMarker(
                     MarkerOptions()
                         .position(destLatLng)
-                        .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white)) // ЗАМЕНИЛИ НА БЕЛЫЙ МАРКЕР!
+                        .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
                         .anchor(0.5f, 1.0f) // Основание маркера четко на дороге
                 )
 
@@ -5152,7 +5169,6 @@ private fun stopWaitingTimer() {
                 markerView.draw(canvas)
 
                 // 3. Ставимо плашку часу НА ТУ Ж САМУ координату, але піднімаємо її в повітря через anchor
-                // Смещение (0.5f, 2.0f) поднимет плашку ровно над макушкой маркера ic_marker_base_white!
                 val timeBadgeMarker = mMap?.addMarker(
                     MarkerOptions()
                         .position(destLatLng)
@@ -5160,7 +5176,7 @@ private fun stopWaitingTimer() {
                         .anchor(0.5f, 1.5f) // Элегантная левитация силами карт
                 )
                 
-                // Зв'язуємо маркер часу з основним маркером, щоб вони жили і вмирали разом
+                // Зв'язуємо маркер часу з основним маркером, щоб вони жили і вмирали вместе
                 destinationMarker?.tag = timeBadgeMarker
 
             } catch (e: Exception) {
@@ -5465,6 +5481,7 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
                 val markerOpts = MarkerOptions()
                     .position(position)
                     .icon(carIcon)
+                    .flat(true)
                     .anchor(0.5f, 0.5f)
                     .rotation(driver.bearing)
                     .zIndex(50f)
