@@ -19,6 +19,8 @@ class SessionManager(context: Context) {
         const val PREFS_NAME = "TaxiAppPrefs"
 
         const val KEY_LANGUAGE = "app_language"
+
+        const val KEY_USER_ID = "user_id"
         const val USER_TOKEN = "user_token"
         const val REFRESH_TOKEN = "refresh_token" // <-- ДОБАВЛЕН REFRESH TOKEN
         const val USER_FULL_NAME = "user_full_name"
@@ -73,6 +75,13 @@ class SessionManager(context: Context) {
             putString(USER_PHONE, phone)
             apply()
         }
+    }
+    fun saveUserId(id: Long) {
+        prefs.edit().putLong(KEY_USER_ID, id).apply()
+    }
+
+    fun fetchUserId(): Long {
+        return prefs.getLong(KEY_USER_ID, -1L)
     }
     fun getUserName(): String = prefs.getString(USER_FULL_NAME, "Райдер") ?: "Райдер"
     fun getUserPhone(): String = prefs.getString(USER_PHONE, "") ?: ""

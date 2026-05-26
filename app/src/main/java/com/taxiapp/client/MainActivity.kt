@@ -189,6 +189,9 @@ class MainActivity : BaseActivity() {
                     val phone = body?.phoneNumber
 
                     if (token != null) {
+                        // КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: Сохраняем userId для WebSocket топиков
+                        sessionManager.saveUserId(body.userId)
+
                         // ПРОПУСК ВЕРИФИКАЦИИ НОМЕРА:
                         // Если isNewUser == true, значит емейла в базе еще не было (обычный сценарий -> запрашиваем номер).
                         // Если isNewUser == false, емейл УЖЕ есть в базе -> пропускаем сразу.
@@ -232,6 +235,7 @@ class MainActivity : BaseActivity() {
                         val body = response.body()
                         if (body != null) {
                             sessionManager.saveAuthToken(body.token)
+                            sessionManager.saveUserId(body.userId)
                             if (body.refreshToken != null) {
                                 sessionManager.saveRefreshToken(body.refreshToken)
                             }
@@ -257,6 +261,7 @@ class MainActivity : BaseActivity() {
                         val body = response.body()
                         if (body != null) {
                             sessionManager.saveAuthToken(body.token)
+                            sessionManager.saveUserId(body.userId)
                             if (body.refreshToken != null) {
                                 sessionManager.saveRefreshToken(body.refreshToken)
                             }

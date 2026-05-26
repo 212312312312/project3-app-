@@ -923,38 +923,42 @@ private fun fetchAddressAtCurrentLocation() {
     }
 
     override fun onResume() {
-        super.onResume()
-        if (webSocketManager?.isConnected() != true) {
-            Log.d("WS_TAXI_DEBUG", "📱 Приложение проснулось! Сокет мертв, пытаюсь переподключиться...")
-            
-            // Получаем актуальный токен
-            val sessionManager = com.taxiapp.client.utils.SessionManager(this)
-            val token = sessionManager.fetchAuthToken()
-            
-            if (!token.isNullOrEmpty()) {
-                // Переподключаемся
-                webSocketManager?.connect(token)
-            }
+    super.onResume()
+    if (webSocketManager?.isConnected() != true) {
+        Log.d("WS_TAXI_DEBUG", "📱 Приложение проснулось! Сокет мертв, пытаюсь переподключиться...")
+        
+        // Получаем актуальный токен
+        val sessionManager = com.taxiapp.client.utils.SessionManager(this)
+        val token = sessionManager.fetchAuthToken()
+        
+        if (!token.isNullOrEmpty()) {
+            // Переподключаемся
+            webSocketManager?.connect(token)
         }
-        val savedLanguage = sessionManager.getLanguage()
-        if (currentActiveLanguage != savedLanguage) {
-            currentActiveLanguage = savedLanguage
-            recreate() // Пересоздаем HomeActivity с новым языком
-            return // Прерываем выполнение старого onResume
-        }
-        updateFavoriteButtonsUI()
-        updateDrawerHeader()
-        updatePaymentMethodFromSession()
-
-        if (tariffsPanel.visibility == View.VISIBLE) {
-            fetchTariffsAndShowPanel()
-        }
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (!isDestroyed && !isFinishing) {
-                fetchClientProfile()
-            }
-        }, 2000)
     }
+
+    // КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: Включаем реалтайм отслеживание статусов заказов клиента через сокет
+    viewModel.startOrderSocketListening(webSocketManager)
+
+    val savedLanguage = sessionManager.getLanguage()
+    if (currentActiveLanguage != savedLanguage) {
+        currentActiveLanguage = savedLanguage
+        recreate() // Пересоздаем HomeActivity с новым языком
+        return // Прерываем выполнение старого onResume
+    }
+    updateFavoriteButtonsUI()
+    updateDrawerHeader()
+    updatePaymentMethodFromSession()
+
+    if (tariffsPanel.visibility == View.VISIBLE) {
+        fetchTariffsAndShowPanel()
+    }
+    Handler(Looper.getMainLooper()).postDelayed({
+        if (!isDestroyed && !isFinishing) {
+            fetchClientProfile()
+        }
+    }, 2000)
+}
     private fun startRadarAnimation(centerLatLng: LatLng) {
     if (mMap == null || isRadarAnimationRunning) return
     isRadarAnimationRunning = true
@@ -1891,6 +1895,7 @@ btnChangePayment.setOnClickListener {
     override fun onDestroy() {
         super.onDestroy()
         stopDriverTracking()
+        viewModel.stopOrderSocketListening()
     }
 
     private fun recenterMapOnUser() {
