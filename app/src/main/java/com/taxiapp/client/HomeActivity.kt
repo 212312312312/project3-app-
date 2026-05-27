@@ -184,6 +184,8 @@ private var lastAddressPickerIntentData: Intent? = null
     private lateinit var centerPin: ImageView
     private lateinit var pinShadow: ImageView
 
+    private var isCameraFocusedOnSearch = false
+
     private lateinit var btnDriverHealthAlert: View
 
     // --- ПЕРЕМЕННЫЕ ДЛЯ АНИМАЦИИ РАДАРА (ПОИСК ЗАКАЗА) ---
@@ -1462,6 +1464,14 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
 
         btnCancelOrder.setOnClickListener { cancelCurrentOrder() }
 
+        btnCancelRideDriver.setOnClickListener {
+            val currentOrder = viewModel.activeOrder.value
+            if (currentOrder != null) {
+                // Передаем пустой список, если серверу пока не принципиально или
+                // если диалог сам подгружает причины внутри
+                showCustomCancelDialog(emptyList(), currentOrder.id)
+            }
+        }
         findViewById<View>(R.id.map_solid_overlay)?.setOnClickListener {
             if (isOrderDetailsExpanded) {
                 animateOrderDetailsToState(false)
@@ -3550,40 +3560,51 @@ if (!cardMask.isNullOrEmpty()) {
     }
 
     private fun fetchClientProfile() {
-        val token = sessionManager.fetchAuthToken()
-        if (token.isNullOrEmpty()) return
+    val token = sessionManager.fetchAuthToken()
+    if (token.isNullOrEmpty()) return
 
-        ApiClient.instance.getClientProfile().enqueue(object : retrofit2.Callback<com.taxiapp.client.network.ClientProfileResponse> {
-            override fun onResponse(
-                call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>,
-                response: retrofit2.Response<com.taxiapp.client.network.ClientProfileResponse>
-            ) {
-                if (response.isSuccessful && response.body() != null) {
-                    val profile = response.body()!!
+    ApiClient.instance.getClientProfile().enqueue(object : retrofit2.Callback<com.taxiapp.client.network.ClientProfileResponse> {
+        override fun onResponse(
+            call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>,
+            response: retrofit2.Response<com.taxiapp.client.network.ClientProfileResponse>
+        ) {
+            if (response.isSuccessful && response.body() != null) {
+                val profile = response.body()!!
 
-                    // Сохраняем новую маску (или null, если карту удалили)
-                    sessionManager.saveCardMask(profile.cardMask)
+                // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ СЛЕПОТЫ СОКЕТОВ:
+                // Достаем старый ID, сохраняем новый реальный ID профиля из базы данных
+                val oldId = sessionManager.fetchUserId()
+                sessionManager.saveUserId(profile.id)
 
-                    // Если карты нет, а способ оплаты стоит CARD — сбрасываем на наличку
-                    if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
-                        sessionManager.savePaymentMethod("CASH")
+                // Твой код синхронизации карты и оплаты
+                sessionManager.saveCardMask(profile.cardMask)
 
-                        // Если есть активный заказ, отправляем запрос на смену оплаты на сервере
-                        if (activeOrderId != null) {
-                            viewModel.updateActiveOrderPaymentMethod("CASH")
-                        }
+                if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
+                    sessionManager.savePaymentMethod("CASH")
+
+                    if (activeOrderId != null) {
+                        viewModel.updateActiveOrderPaymentMethod("CASH")
                     }
-
-                    // Обновляем иконку на главном экране
-                    updatePaymentIcon()
                 }
-            }
 
-            override fun onFailure(call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
-                // Игнорируем ошибку сети в фоне, пользователь этого не заметит
+                updatePaymentIcon()
+                
+                // Если ID обновился с -1 на реальный, принудительно пинаем сокеты заказов!
+                if (oldId == -1L && profile.id != -1L) {
+                    Log.d("WS_TAXI_DEBUG", "🔄 ID получен из профиля (${profile.id}), перезапускаем WebSocket подписку!")
+                    viewModel.startOrderSocketListening(webSocketManager)
+                }
+
+                // Дополнительно обновляем хедер шторки, раз профиль подгрузился
+                updateDrawerHeader()
             }
-        })
-    }
+        }
+
+        override fun onFailure(call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
+            // Игнорируем ошибку сети в фоне, пользователь этого не заметит
+        }
+    })
+}
 
     private fun showChangePriceDialogForActiveOrder(basePrice: Double, currentAddedValue: Double) {
         val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
@@ -4825,7 +4846,7 @@ private fun stopWaitingTimer() {
         btnCancelOrder.isEnabled = true
         btnCancelOrder.text = getString(R.string.btn_cancel_order)
 
-        // 2. БЛОК ЗАПЛАНИРОВАННОГО ВРЕМЕНИ (ОСТАВЬ ТОЛЬКО ОДИН ЭКЗЕМПЛЯР ЭТОГО КОДА!)
+        // 2. БЛОК ЗАПЛАНИРОВАННОГО ВРЕМЕНИ
         val tvScheduledTime = findViewById<TextView>(R.id.tv_scheduled_time)
         if (!order.scheduledAt.isNullOrEmpty()) {
             tvScheduledTime?.visibility = View.VISIBLE
@@ -4848,6 +4869,8 @@ private fun stopWaitingTimer() {
         when(order.status) {
     "SCHEDULED" -> {
         stopRadarAnimation()
+        isCameraFocusedOnSearch = false // Сбрасываем флаг
+
         // Возвращаем дефолтные настройки карты и жесты
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
@@ -4901,41 +4924,63 @@ private fun stopWaitingTimer() {
         stopDriverTracking()
         stopWaitingTimer()
 
+        // Скрываем кнопки геолокации, чтобы они визуально не мешали
+        btnRecenterRoute.visibility = View.GONE
+        btnRecenter.visibility = View.GONE
+
+        // Жесткая блокировка жестов управления картой
+        mMap?.uiSettings?.isScrollGesturesEnabled = false
+        mMap?.uiSettings?.isZoomGesturesEnabled = false
+
         // ========================================================
-        // 🔒 НАСТРОЙКА КАРТЫ-РАДАРА (МАРШРУТ ОСТАЁТСЯ НА КАРТЕ)
+        // 🛠️ ФИКС БАГА №1 (Паддинги): Сначала жестко выставляем паддинги, 
+        // чтобы карта зафиксировалась над activeOrderCard и не сбрасывала камеру!
         // ========================================================
-        val originLoc = originPlace?.latLng
-        if (originLoc != null) {
-            // Скрываем кнопки геолокации, чтобы они визуально не мешали
-            btnRecenterRoute.visibility = View.GONE
-            btnRecenter.visibility = View.GONE
+        updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
 
-            // Жесткая блокировка жестов управления картой
-            mMap?.uiSettings?.isScrollGesturesEnabled = false
-            mMap?.uiSettings?.isZoomGesturesEnabled = false
+        // 🔥 ФИКС ОШИБКИ КОМПИЛЯЦИИ: Добавили операторы фолбека (?: 0.0) для Null-безопасности
+        val originLoc = originPlace?.latLng ?: com.google.android.gms.maps.model.LatLng(
+            order.originLat ?: 0.0, 
+            order.originLng ?: 0.0
+        )
+        
+        // Запускаем радар вокруг точки А
+        if (!isRadarAnimationRunning) {
+            startRadarAnimation(originLoc)
+        }
 
-            // Плавный перевод и фиксация камеры в 3D (угол наклона 45°) на точке А
-            val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
-                .target(originLoc)
-                .zoom(17f)
-                .tilt(45f)
-                .bearing(0f)
-                .build()
+        // ========================================================
+        // 🛸 ФИКС БАГА №2 и №3 (Камера и 3D режим):
+        // Делаем микро-пост-задержку, чтобы Android успел применить паддинги и показать карточку.
+        // Только после этого запускаем чистую, непрерываемую анимацию камеры!
+        // ========================================================
+        if (!isCameraFocusedOnSearch) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (!isDestroyed && !isFinishing && mMap != null) {
+                    Log.d("WS_TAXI_DEBUG", "🚀 Карта готова, запускаем полет в 3D и ЗУМ на точку А!")
+                    
+                    val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                        .target(originLoc)
+                        .zoom(17.8f)      // Отличный близкий зум для реалтайм поиска
+                        .tilt(50f)        // Честный наклон карты (3D режим)
+                        .bearing(0f)
+                        .build()
 
-            mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition))
-
-            // Запускаем красивую контурную волну радара
-            if (!isRadarAnimationRunning) {
-                startRadarAnimation(originLoc)
-            }
+                    mMap?.animateCamera(
+                        com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition),
+                        1400,
+                        null
+                    )
+                    isCameraFocusedOnSearch = true
+                }
+            }, 180) // 180 миллисекунд достаточно, чтобы UI полностью стабилизировался
         }
         // ========================================================
-
-        // Апдейт паддингов интерфейса с параметром recenterMap = false, чтобы не сбивать 3D-фокус
-        updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
     }
 
     "ACCEPTED" -> {
+        isCameraFocusedOnSearch = false // Водитель найден, сбрасываем поисковый флаг для будущего
+
         // 1. ОЧИЩЕННЯ КАРТИ: Видаляємо лінії маршруту, спалахи, маркер Б та зупинки
         polylineMain?.remove()
         polylineMain = null
@@ -5013,6 +5058,8 @@ private fun stopWaitingTimer() {
     }
 
     "DRIVER_ARRIVED" -> {
+        isCameraFocusedOnSearch = false
+
         // 1. ОЧИЩЕННЯ КАРТИ: Видаляємо лінії маршруту, спалахи, маркер Б та зупинки
         polylineMain?.remove()
         polylineMain = null
@@ -5075,6 +5122,7 @@ private fun stopWaitingTimer() {
     }
 
        "IN_PROGRESS" -> {
+        isCameraFocusedOnSearch = false
         stopRadarAnimation()
 
         // 🔓 Дозволяємо жести керування картою
@@ -5138,61 +5186,64 @@ private fun stopWaitingTimer() {
         }
 
         // Розрахунок хвилин поїздки
-        val secondsLeft = order.durationSeconds ?: 0
-        val minutesLeft = if (secondsLeft > 0) java.lang.Math.ceil(secondsLeft.toDouble() / 60.0).toInt() else 0
-        val timeText = if (minutesLeft > 0) "$minutesLeft хв" else "?? хв"
+           val secondsLeft = order.durationSeconds ?: 0
+           val minutesLeft = if (secondsLeft > 0) java.lang.Math.ceil(secondsLeft.toDouble() / 60.0).toInt() else 0
+           val timeText = if (minutesLeft > 0) "$minutesLeft хв" else "?? хв"
 
-        // 🛠️ МАЛЮЄМО БЕЛЫЙ БАЗОВЫЙ МАРКЕР ТА СТАВИМО НА НЕГО ПАРЯЩУ ПЛАШКУ ЧЕРЕЗ ANCHOR
-        val destLat = order.destLat
-        val destLng = order.destLng
-        if (destLat != null && destLng != null && destLat != 0.0 && destLng != 0.0) {
-            val destLatLng = LatLng(destLat, destLng)
-            
-            try {
-                // Чистимо старі маркери, щоб уникнути дублікатів при оновленні сокетів
-                (destinationMarker?.tag as? Marker)?.remove()
-                destinationMarker?.remove()
+           // 🛠️ МАЛЮЄМО БЕЛЫЙ БАЗОВЫЙ МАРКЕР ТА СТАВИМО НА НЕГО ПАРЯЩУ ПЛАШКУ ЧЕРЕЗ ANCHOR
+           val destLat = order.destLat
+           val destLng = order.destLng
+           if (destLat != null && destLng != null && destLat != 0.0 && destLng != 0.0) {
+               val destLatLng = LatLng(destLat, destLng)
 
-                // 1. Отрисовуємо ТВОЙ РОДНОЙ БЕЛЫЙ МАРКЕР ic_marker_base_white на его законное место
-                destinationMarker = mMap?.addMarker(
-                    MarkerOptions()
-                        .position(destLatLng)
-                        .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
-                        .anchor(0.5f, 1.0f) // Основание маркера четко на дороге
-                )
+               try {
+                   // Чистимо старі маркери, щоб уникнути дублікатів при оновленні сокетів
+                   (destinationMarker?.tag as? Marker)?.remove()
+                   destinationMarker?.remove()
 
-                // 2. Генеруємо Bitmap з твоєї чистой XML-плашки з часом
-                val markerView = android.view.LayoutInflater.from(this).inflate(R.layout.layout_route_time_marker, null)
-                val tvMarkerTime = markerView.findViewById<TextView>(R.id.tv_marker_time)
-                tvMarkerTime.text = timeText
+                   // 1. Отрисовуємо ТВОЙ РОДНОЙ БЕЛЫЙ МАРКЕР ic_marker_base_white на его законное место
+                   destinationMarker = mMap?.addMarker(
+                       MarkerOptions()
+                           .position(destLatLng)
+                           .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
+                           .anchor(0.5f, 1.0f) // Основание маркера четко на дороге
+                   )
 
-                markerView.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-                markerView.layout(0, 0, markerView.measuredWidth, markerView.measuredHeight)
-                
-                val bitmap = Bitmap.createBitmap(markerView.measuredWidth, markerView.measuredHeight, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                markerView.draw(canvas)
+                   // 2. Генеруємо Bitmap з твоєї чистой XML-плашки з часом
+                   val markerView = android.view.LayoutInflater.from(this).inflate(R.layout.layout_route_time_marker, null)
+                   val tvMarkerTime = markerView.findViewById<TextView>(R.id.tv_marker_time)
 
-                // 3. Ставимо плашку часу НА ТУ Ж САМУ координату, але піднімаємо її в повітря через anchor
-                val timeBadgeMarker = mMap?.addMarker(
-                    MarkerOptions()
-                        .position(destLatLng)
-                        .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
-                        .anchor(0.5f, 1.5f) // Элегантная левитация силами карт
-                )
-                
-                // Зв'язуємо маркер часу з основним маркером, щоб вони жили і вмирали вместе
-                destinationMarker?.tag = timeBadgeMarker
+                   // Исправлено: пишем время ровно так, как было заложено в твоем проекте
+                   tvMarkerTime.text = timeText
 
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+                   markerView.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                   markerView.layout(0, 0, markerView.measuredWidth, markerView.measuredHeight)
+
+                   val bitmap = Bitmap.createBitmap(markerView.measuredWidth, markerView.measuredHeight, Bitmap.Config.ARGB_8888)
+                   val canvas = Canvas(bitmap)
+                   markerView.draw(canvas)
+
+                   // 3. Ставимо плашку часу НА ТУ Ж САМУ координату, але піднімаємо її в повітря через anchor
+                   val timeBadgeMarker = mMap?.addMarker(
+                       MarkerOptions()
+                           .position(destLatLng)
+                           .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
+                           .anchor(0.5f, 1.5f) // Элегантная левитация силами карт
+                   )
+
+                   // Зв'язуємо маркер часу з основним маркером, щоб вони жили і вмирали вместе
+                   destinationMarker?.tag = timeBadgeMarker
+
+               } catch (e: Exception) {
+                   e.printStackTrace()
+               }
+           }
 
         startDriverTracking(order.id)
         updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
     }
     "COMPLETED" -> {
+        isCameraFocusedOnSearch = false // Сброс
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
         updateOrderProgress(3)
@@ -5250,6 +5301,7 @@ private fun stopWaitingTimer() {
     }
 
     "CANCELLED" -> {
+        isCameraFocusedOnSearch = false // Сброс
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
         stopStatusBlinking()
@@ -5283,29 +5335,6 @@ private fun stopWaitingTimer() {
         viewModel.clearOrderState()
         
         Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
-    }
-}
-
-layoutExpandableDetails.post {
-    // Сбрасываем старую огромную высоту
-    maxDetailsHeight = 0 
-    
-    // Замеряем актуальную высоту с учетом скрытого тарифа
-    val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
-    val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-    layoutExpandableDetails.measure(widthSpec, heightSpec)
-    maxDetailsHeight = layoutExpandableDetails.measuredHeight
-    
-    // Если панель в данный момент вытянута вверх - мгновенно подтягиваем дно, убирая пустоту
-    if (isOrderDetailsExpanded) {
-        val params = layoutExpandableDetails.layoutParams
-        params.height = maxDetailsHeight
-        layoutExpandableDetails.layoutParams = params
-    } else {
-        // Если свернута - убеждаемся, что ее высота 0
-        val params = layoutExpandableDetails.layoutParams
-        params.height = 0
-        layoutExpandableDetails.layoutParams = params
     }
 }
 }
