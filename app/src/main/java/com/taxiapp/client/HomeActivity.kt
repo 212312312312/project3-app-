@@ -1465,12 +1465,26 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         btnCancelOrder.setOnClickListener { cancelCurrentOrder() }
 
         btnCancelRideDriver.setOnClickListener {
-            val currentOrder = viewModel.activeOrder.value
-            if (currentOrder != null) {
-                // Передаем пустой список, если серверу пока не принципиально или
-                // если диалог сам подгружает причины внутри
-                showCustomCancelDialog(emptyList(), currentOrder.id)
-            }
+            // Вместо пустого списка загружаем реальные причины отмены для клиента с сервера
+            ApiClient.instance.getCancellationReasons("CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
+                override fun onResponse(call: Call<List<CancellationReasonDto>>, response: Response<List<CancellationReasonDto>>) {
+                    if (response.isSuccessful) {
+                        val reasons = response.body()?.filter { it.isActive } ?: emptyList()
+                        if (reasons.isNotEmpty()) {
+                            showCustomCancelDialog(reasons) // Передаем только один нужный аргумент
+                        } else {
+                            viewModel.cancelOrder(null)
+                        }
+                    } else {
+                        android.util.Log.e("CancelOrder", "Failed to load reasons: ${response.code()}")
+                        viewModel.cancelOrder(null)
+                    }
+                }
+                override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
+                    android.util.Log.e("CancelOrder", "Network error", t)
+                    viewModel.cancelOrder(null)
+                }
+            })
         }
         findViewById<View>(R.id.map_solid_overlay)?.setOnClickListener {
             if (isOrderDetailsExpanded) {
@@ -2041,19 +2055,19 @@ btnChangePayment.setOnClickListener {
 
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-        
+
         // --- ЖЕСТКО ОТКЛЮЧАЕМ ВСЕ СИСТЕМНЫЕ КНОПКИ И ПАНЕЛИ GOOGLE MAPS ---
         mMap?.uiSettings?.apply {
             isRotateGesturesEnabled = false // Запрет вращения двумя пальцами
             isTiltGesturesEnabled = false   // Запрет наклона (3D режима) двумя пальцами
             isMapToolbarEnabled = false     // УБИРАЕТ панель при клике на маркеры
-            isCompassEnabled = false          
-            isZoomControlsEnabled = false     
-            isMyLocationButtonEnabled = false 
+            isCompassEnabled = false
+            isZoomControlsEnabled = false
+            isMyLocationButtonEnabled = false
             isIndoorLevelPickerEnabled = false // Убирает выбор этажей внутри ТЦ
         }
 
-        // --- ДОБАВЛЯЕМ СЮДА: ОТКЛЮЧАЕМ 3D ЗДАНИЯ С ТЕНЯМИ И ИНДОР-ЗАТЕМНЕНИЕ ---
+        // --- ОТКЛЮЧАЕМ 3D ЗДАНИЯ С ТЕНЯМИ И ИНДОР-ЗАТЕМНЕНИЕ ---
         mMap?.isBuildingsEnabled = false // Карта всегда будет плоской, здания не будут отбрасывать тени
         mMap?.isIndoorEnabled = false    // Карта не будет темнеть при приближении к крупным объектам (ТЦ, вокзалы)
 
@@ -2068,15 +2082,31 @@ btnChangePayment.setOnClickListener {
                 mMap?.setMapStyle(null)
             }
         }
-        val cityToLoad = currentCity ?: sessionManager.fetchUserCity()
-        val cityCenter = cityToLoad?.let { LatLng(it.lat, it.lng) } ?: LatLng(50.4501, 30.5234)
-        val cityZoom = cityToLoad?.zoom ?: 11f
-        mMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(cityCenter, cityZoom))
 
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            mMap?.isMyLocationEnabled = true
-            // isMyLocationButtonEnabled = false мы уже прописали глобально в блоке выше, так надежнее
-            if (currentCity != null) recenterMapOnUser()
+        // 🛠️ КРИТИЧЕСКИЙ ФИКС ГОНКИ АСИНХРОННОСТИ: Проверяем, загрузился ли уже заказ во ViewModel на холодном старте
+        val activeOrder = viewModel.activeOrder.value
+
+        if (activeOrder == null) {
+            // Ситуация А: Заказа нет, ведем стандартную инициализацию дефолтного вида города/пользователя
+            val cityToLoad = currentCity ?: sessionManager.fetchUserCity()
+            val cityCenter = cityToLoad?.let { LatLng(it.lat, it.lng) } ?: LatLng(50.4501, 30.5234)
+            val cityZoom = cityToLoad?.zoom ?: 11f
+            mMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(cityCenter, cityZoom))
+
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                mMap?.isMyLocationEnabled = true
+                if (currentCity != null) recenterMapOnUser()
+            }
+        } else {
+            // Ситуация Б: Приложение восстановилось с активным заказом. Предотвращаем сброс камеры в дефолт!
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                mMap?.isMyLocationEnabled = true
+            }
+
+            // Принудительно восстанавливаем всю графику, так как mMap теперь гарантированно живой!
+            restoreOrderOnMap(activeOrder)
+            showActiveOrderPanel(activeOrder)
+            updateStatusUI(activeOrder)
         }
 
         // 1. ОПТИМИЗИРУЕМ ДВИЖЕНИЕ КАМЕРЫ (убираем микрофризы процессора)
@@ -2089,23 +2119,19 @@ btnChangePayment.setOnClickListener {
 
         // 2. ИСПРАВЛЯЕМ ПОДЛЕТ ПИНА (Мгновенный старт)
         mMap?.setOnCameraMoveStartedListener { reason ->
-            // ДОБАВЛЕНА ПРОВЕРКА !isRouteMode
-            if (viewModel.currentRoutePolyline == null && !isRouteMode) { 
-                
+            if (viewModel.currentRoutePolyline == null && !isRouteMode) {
                 // РЕАГИРУЕМ ТОЛЬКО НА ПАЛЕЦ (REASON_GESTURE), чтобы избежать прыжков от авто-центровки
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     tvOrigin.text = "Визначення..."
-                    
+
                     if (isInterfaceRevealed || isMapPickingMode) {
                         centerPin.animate().cancel()
-                        
-                        // Броня: делаем видимым только если нет маршрута
-                        centerPin.alpha = 1f 
+                        centerPin.alpha = 1f
                         centerPin.visibility = View.VISIBLE
 
                         centerPin.animate()
                             .translationY(convertDpToPixel(-48f))
-                            .setStartDelay(0) 
+                            .setStartDelay(0)
                             .setInterpolator(AccelerateDecelerateInterpolator())
                             .setDuration(250)
                             .start()
@@ -2117,7 +2143,7 @@ btnChangePayment.setOnClickListener {
                                 .scaleX(0.6f)
                                 .scaleY(0.6f)
                                 .alpha(0.3f)
-                                .setStartDelay(0) 
+                                .setStartDelay(0)
                                 .setDuration(250)
                                 .start()
                         } catch (e: Exception) {}
@@ -2127,7 +2153,6 @@ btnChangePayment.setOnClickListener {
                 // Если пользователь двигает карту пальцем при построенном маршруте
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     val currentStatus = viewModel.activeOrder.value?.status
-                    // Проверяем: если водитель НЕ найден (ACCEPTED) и НЕ приехал (DRIVER_ARRIVED) и НЕ в пути (IN_PROGRESS)
                     if (currentStatus != "ACCEPTED" && currentStatus != "DRIVER_ARRIVED" && currentStatus != "IN_PROGRESS") {
                         btnRecenterRoute.visibility = View.VISIBLE
                     }
@@ -2138,20 +2163,18 @@ btnChangePayment.setOnClickListener {
         // 3. ИСПРАВЛЯЕМ ПАДЕНИЕ ПИНА (Очистка задержки при приземлении)
         mMap?.setOnCameraIdleListener {
             val target = mMap!!.cameraPosition.target
-
             val currentTime = System.currentTimeMillis()
             val distanceMoved = if (lastLocationSent != null) {
                 com.google.maps.android.SphericalUtil.computeDistanceBetween(lastLocationSent, target)
             } else {
-                1000.0 // Форсуємо першу відправку
+                1000.0
             }
 
-            // ФИКС БАГА №1: Отправляем координаты на сервер ТОЛЬКО если мы на главном экране выбора адресов
-            val isMainScreen = activeOrderId == null && 
-                               !isRouteMode && 
-                               viewModel.currentRoutePolyline == null && 
-                               tariffsPanel.visibility != View.VISIBLE && 
-                               !isMapPickingMode
+            val isMainScreen = activeOrderId == null &&
+                    !isRouteMode &&
+                    viewModel.currentRoutePolyline == null &&
+                    tariffsPanel.visibility != View.VISIBLE &&
+                    !isMapPickingMode
 
             if (isMainScreen) {
                 if (currentTime - lastLocationUpdateTime > LOCATION_UPDATE_INTERVAL || distanceMoved > 50.0) {
@@ -2162,16 +2185,14 @@ btnChangePayment.setOnClickListener {
                 }
             }
 
-            // 1. АНИМАЦИЯ ПИНА: Срабатывает ТОЛЬКО если маршрут не построен
             if ((isInterfaceRevealed && !isRouteMode && viewModel.currentRoutePolyline == null) || isMapPickingMode) {
                 centerPin.animate().cancel()
-                
                 centerPin.alpha = 1f
                 centerPin.visibility = View.VISIBLE
 
                 centerPin.animate()
                     .translationY(convertDpToPixel(-32f))
-                    .setStartDelay(0) 
+                    .setStartDelay(0)
                     .setInterpolator(android.view.animation.BounceInterpolator())
                     .setDuration(500)
                     .start()
@@ -2188,31 +2209,20 @@ btnChangePayment.setOnClickListener {
                         .start()
                 } catch (e: Exception) {}
             } else if (isRouteMode || viewModel.currentRoutePolyline != null) {
-                // <-- ИСПРАВЛЕНО: Добиваем пин ТОЛЬКО если мы реально в режиме маршрута!
-                // При запуске приложения этот блок не сработает, и пин дождется своей анимации
                 centerPin.visibility = View.GONE
                 try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
             }
 
-            // ==========================================
-            // ОСЬ ЦЕЙ БЛОК - ЦЕ ТОЙ САМИЙ "КРОК 2"
-            // ==========================================
-            // 2. ЛОГИКА ГЕОКОДИНГА В ЗАВИСИМОСТИ ОТ РЕЖИМА
             if (isMapPickingMode) {
-                // Залишаємо кнопку яскравою, міняємо тільки текст
                 tvMapPickerAddress.text = "Шукаємо адресу..."
-
                 getAddressFromLocation(target) { address ->
                     tvMapPickerAddress.text = address ?: "Невідома адреса"
                 }
             } else {
-                // --- Стандартный режим главного экрана ---
                 if (viewModel.currentRoutePolyline != null) {
                     updateSmartLabels()
                 }
-
                 if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
-
                 getAddressForOrigin(target)
             }
         }
@@ -5300,42 +5310,82 @@ private fun stopWaitingTimer() {
         }
     }
 
-    "CANCELLED" -> {
-        isCameraFocusedOnSearch = false // Сброс
-        mMap?.uiSettings?.isScrollGesturesEnabled = true
-        mMap?.uiSettings?.isZoomGesturesEnabled = true
-        stopStatusBlinking()
-        resetOrderDetailsState()
-        orderStatusText.text = getString(R.string.status_cancelled)
-        orderStatusText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.taxi_red_cancel))
-        
-        layoutSearchControls.visibility = View.GONE
-        layoutDriverFoundState.visibility = View.GONE
-        
-        layoutSearchDetails.visibility = View.GONE
-        findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE // Ховаємо заголовок "Тариф"
-        layoutDriverDetails.visibility = View.GONE
-        layoutPaymentCompleted.visibility = View.GONE
-        
-        // --- КНОПКИ --- (Скасовано, нічого не показуємо)
-        btnCancelOrder.visibility = View.GONE
-        btnCancelRideDriver.visibility = View.GONE
-        btnRecenterRoute.visibility = View.GONE      // 🛠 Ховаємо кнопку центрування маршруту!
-        // --------------
-        
-        // 🛠️ ЗАХИСТ ВІД БАГІВ: Тотально ховаємо плашки на карті
-        overlayOrigin.visibility = View.GONE
-        overlayDest.visibility = View.GONE
+            "CANCELLED" -> {
+                isCameraFocusedOnSearch = false // Сброс поискового флага
+                mMap?.uiSettings?.isScrollGesturesEnabled = true
+                mMap?.uiSettings?.isZoomGesturesEnabled = true
+                stopStatusBlinking()
+                resetOrderDetailsState()
+                orderStatusText.text = getString(R.string.status_cancelled)
+                orderStatusText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.taxi_red_cancel))
 
-        stopDriverTracking()
-        stopWaitingTimer()
+                layoutSearchControls.visibility = View.GONE
+                layoutDriverFoundState.visibility = View.GONE
 
-        updateMapPadding(activeOrderCard, 0f, 20f)
-        
-        viewModel.clearOrderState()
-        
-        Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
-    }
+                layoutSearchDetails.visibility = View.GONE
+                findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE
+                layoutDriverDetails.visibility = View.GONE
+                layoutPaymentCompleted.visibility = View.GONE
+
+                // --- КНОПКИ ---
+                btnCancelOrder.visibility = View.GONE
+                btnCancelRideDriver.visibility = View.GONE
+                btnRecenterRoute.visibility = View.GONE
+                // --------------
+
+                // 🛠️ ИСПРАВЛЕНИЕ: Гасим импульсы радара поиска вокруг точки А
+                stopRadarAnimation()
+
+                // 🗺️ ИСПРАВЛЕНИЕ: Декодируем и отображаем полноценный маршрут со всеми точками и анимацией
+                val polylineStr = order.googleRoutePolyline ?: viewModel.currentRoutePolyline
+                if (!polylineStr.isNullOrEmpty()) {
+                    try {
+                        val mainRoutePoints = PolyUtil.decode(polylineStr)
+                        if (!mainRoutePoints.isNullOrEmpty()) {
+                            decodedRoutePoints = mainRoutePoints
+
+                            // Если объекты точек еще не инициализированы, восстанавливаем их для корректного фокуса камеры (bounds)
+                            if (originPlace == null) {
+                                originPlace = Place.builder()
+                                    .setName(order.fromAddress ?: "А")
+                                    .setLatLng(LatLng(order.originLat ?: 0.0, order.originLng ?: 0.0))
+                                    .build()
+                            }
+                            if (destinationPlace == null) {
+                                destinationPlace = Place.builder()
+                                    .setName(order.toAddress ?: "Б")
+                                    .setLatLng(LatLng(order.destLat ?: 0.0, order.destLng ?: 0.0))
+                                    .build()
+                            }
+
+                            // Восстанавливаем список промежуточных остановок из DTO заказа
+                            currentWaypoints.clear()
+                            order.stops?.forEach { stop ->
+                                currentWaypoints.add(Pair(LatLng(stop.lat, stop.lng), stop.address))
+                            }
+
+                            // Делаем плашки адресов видимыми, чтобы они красиво парили над маркерами (их альфа проявится анимацией)
+                            overlayOrigin.visibility = View.VISIBLE
+                            overlayDest.visibility = View.VISIBLE
+
+                            // Отрисовываем стильную линию, маркеры и плавно отдаляем камеру, чтобы показать ВЕСЬ маршрут целиком
+                            drawStylishRoute(mainRoutePoints)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
+                stopDriverTracking()
+                stopWaitingTimer()
+
+                updateMapPadding(activeOrderCard, 0f, 20f)
+
+                viewModel.clearOrderState()
+
+                // Оставляем задержку в 3 секунды, чтобы пользователь успел рассмотреть карту перед сбросом UI
+                Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
+            }
 }
 }
     
