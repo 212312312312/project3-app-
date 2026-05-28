@@ -265,6 +265,7 @@ private var mapPickerWaypointIndex = -1
 
     private lateinit var btnChatDriver: ImageButton
     private lateinit var tvChatBadge: TextView
+    private var lastDrawnPathHash: Int = 0
     private var unreadChatMessages = 0
 
     // --- ПЕРЕМЕННАЯ ДЛЯ КОНТРОЛЯ АНИМАЦИИ ПАНЕЛИ ---
@@ -2691,7 +2692,14 @@ class RoundedBackgroundSpan(
     }
 
     private fun drawStylishRoute(path: List<LatLng>) {
-    if (mMap == null) return
+    if (mMap == null || path.isEmpty()) return
+
+    // 🔥 ФИКС: Если этот путь уже нарисован и анимация активна — ничего не перерисовываем!
+    val pathHash = path.hashCode()
+    if (pathHash == lastDrawnPathHash && polylineMain != null && routeAnimator?.isRunning == true) {
+        return 
+    }
+    lastDrawnPathHash = pathHash
 
     // Визначаємо, чи знаходиться замовлення в стані пошуку водія диспетчером
     val currentStatus = viewModel.activeOrder.value?.status
@@ -2806,29 +2814,19 @@ class RoundedBackgroundSpan(
     }
 
     // Логика управления 3D/2D камерой
-    if (isSearchingState) {
-        val originLoc = originPlace?.latLng
-        if (originLoc != null) {
+        if (isSearchingState) {
+            // Прячем кнопки центрирования, так как в режиме поиска интерфейс заблокирован
             btnRecenterRoute.visibility = View.GONE
             btnRecenter.visibility = View.GONE
-            
-            val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
-                .target(originLoc)
-                .zoom(17f)
-                .tilt(45f) // Наклон сцены
-                .bearing(0f)
-                .build()
-            
-            mMap?.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 800, object : GoogleMap.CancelableCallback {
-                override fun onFinish() {
-                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                }
-                override fun onCancel() {
-                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                }
-            })
-        }
-    } else {
+
+            // 🔥 ФИКС: Полностью убираем отсюда mMap?.animateCamera!
+            // Теперь drawStylishRoute занимается исключительно отрисовкой линий,
+            // а за правильный 3D-полет, наклон в 50° и зум на точку А отвечает только updateStatusUI.
+            runOnUiThread {
+                startRouteRevealAnimation(colorMain, colorBorder, path)
+            }
+        } else {
+        // Логика для обычных состояний
         val boundsBuilder = LatLngBounds.Builder()
         if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
         if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
@@ -2841,28 +2839,36 @@ class RoundedBackgroundSpan(
             try {
                 val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
                 var marginBottom = 0
-                var sideMargin = 0 
+                var sideMargin = 0
                 val params = visibleBottomPanel.layoutParams
                 if (params is ViewGroup.MarginLayoutParams) {
                     marginBottom = params.bottomMargin
-                    sideMargin = params.leftMargin 
+                    sideMargin = params.leftMargin
                 }
-                
+
                 val paddingBottom = panelHeight + marginBottom
-                val paddingTop = convertDpToPixel(10f).toInt() 
-                val paddingSide = convertDpToPixel(80f).toInt() 
+                val paddingTop = convertDpToPixel(10f).toInt()
+                val paddingSide = convertDpToPixel(80f).toInt()
 
-                mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom) 
+                mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom)
 
-                val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
-                mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
-                    override fun onFinish() {
-                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                    }
-                    override fun onCancel() {
-                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                    }
-                })
+                // 🔥 ФИКС ДЛЯ СТАТУСОВ: Если статус активный, то drawStylishRoute НЕ должен
+                // сбрасывать камеру на обзор всего маршрута. Камеру настроит сам метод updateStatusUI!
+                if (currentStatus == "ACCEPTED" || currentStatus == "DRIVER_ARRIVED" || currentStatus == "IN_PROGRESS") {
+                    // Просто запускаем анимацию линии, камеру не трогаем!
+                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                } else {
+                    // Если это режим обычного выбора тарифов до создания заказа — ведем стандартный обзор
+                    val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
+                    mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
+                        override fun onFinish() {
+                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                        }
+                        override fun onCancel() {
+                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                        }
+                    })
+                }
             } catch (e: Exception) {
                 runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
             }
@@ -2875,10 +2881,16 @@ class RoundedBackgroundSpan(
     }
 }
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
-        if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
+    if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
 
-        revealAnimator?.cancel()
-        revealAnimator = ValueAnimator.ofInt(0, 255)
+    // 🔥 ФИКС: Гасим пульсацию на время анимации появления (Reveal)
+    routeAnimator?.cancel()
+    routeAnimator = null
+    polylineAnim?.remove()
+    polylineAnim = null
+
+    revealAnimator?.cancel()
+    revealAnimator = ValueAnimator.ofInt(0, 255)
         revealAnimator?.duration = 1000 
         revealAnimator?.addUpdateListener { animator ->
             val alpha = animator.animatedValue as Int
@@ -2908,9 +2920,14 @@ class RoundedBackgroundSpan(
 
         revealAnimator?.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
-                // ГЛАВНЫЙ ПРЕДОХРАНИТЕЛЬ: Запускаем мигание, только если маршрут жив!
                 if (viewModel.currentRoutePolyline != null) {
-                    animateRoute(path) 
+                    animateRoute(path)
+                }
+
+                // 🔥 ФИКС ХОЛОДНОГО СТАРТА: Маршрут нарисовался, теперь принудительно
+                // обновляем статус UI, чтобы закрепить карту, вернуть 3D, паддинги и запустить радары!
+                viewModel.activeOrder.value?.let { currentOrder ->
+                    updateStatusUI(currentOrder)
                 }
             }
         })
@@ -3375,59 +3392,61 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun animateRoute(path: List<LatLng>) {
-        if (path.isEmpty() || mMap == null || viewModel.currentRoutePolyline == null) return
+    if (path.isEmpty() || mMap == null || viewModel.currentRoutePolyline == null) return
 
-        val isDark = sessionManager.isDarkMode()
-        val colorBase = ContextCompat.getColor(this, R.color.route_main)
-        
-        // Для темной темы — почти белый (240)
-        // Для светлой темы — мягкий черный / графитовый (50)
-        val colorGlow = if (isDark) {
-            Color.rgb(240, 240, 240) 
-        } else {
-            Color.rgb(112, 112, 112) 
-        }
+    // 🔥 ФИКС МИГАНИЯ: Жестко останавливаем старый аниматор перед запуском нового!
+    routeAnimator?.cancel()
+    routeAnimator = null
+    
+    // Удаляем старую анимационную линию, если она осталась в памяти
+    polylineAnim?.remove()
+    polylineAnim = null
 
-        val animOpts = PolylineOptions()
-            .addAll(path)
-            .width(8f) 
-            .color(colorBase) 
-            .zIndex(2.5f) 
-            .startCap(RoundCap())
-            .endCap(RoundCap())
-            .jointType(JointType.ROUND) 
+    val isDark = sessionManager.isDarkMode()
+    val colorBase = ContextCompat.getColor(this, R.color.route_main)
+    
+    val colorGlow = if (isDark) {
+        Color.rgb(240, 240, 240) 
+    } else {
+        Color.rgb(112, 112, 112) 
+    }
 
-        polylineAnim = mMap?.addPolyline(animOpts)
+    val animOpts = PolylineOptions()
+        .addAll(path)
+        .width(8f) 
+        .color(colorBase) 
+        .zIndex(2.5f) 
+        .startCap(RoundCap())
+        .endCap(RoundCap())
+        .jointType(JointType.ROUND) 
 
-        // Итоговый тайминг: 750мс (вспышка) + 500мс (удержание) + 2500мс (спад) + 1750мс (пауза) = 5500 мс
-        val totalDurationMs = 5500f
-        val argbEvaluator = android.animation.ArgbEvaluator() 
+    polylineAnim = mMap?.addPolyline(animOpts)
 
-        routeAnimator = ValueAnimator.ofFloat(0f, 1f)
-        routeAnimator?.duration = totalDurationMs.toLong()
-        routeAnimator?.interpolator = LinearInterpolator()
-        routeAnimator?.repeatCount = ValueAnimator.INFINITE
-        routeAnimator?.repeatMode = ValueAnimator.RESTART
+    val totalDurationMs = 5500f
+    val argbEvaluator = android.animation.ArgbEvaluator() 
 
-        routeAnimator?.addUpdateListener { animator ->
+    routeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = totalDurationMs.toLong()
+        interpolator = LinearInterpolator()
+        repeatCount = ValueAnimator.INFINITE
+        repeatMode = ValueAnimator.RESTART
+
+        addUpdateListener { animator ->
             try {
+                // Защита: если линию стерли извне, гасим аниматор
+                if (polylineAnim == null) {
+                    animator.cancel()
+                    return@addUpdateListener
+                }
+                
                 val progress = animator.animatedValue as Float
                 val timeMs = progress * totalDurationMs
                 
                 val fraction = when {
-                    timeMs <= 750f -> {
-                        // Этап 1: Вспышка (0.75 сек)
-                        timeMs / 750f
-                    }
-                    timeMs <= 1250f -> {
-                        // Этап 2: Удержание (0.5 сек)
-                        1f
-                    }
-                    timeMs <= 3750f -> {
-                        // Этап 3: Затухание (2.5 сек)
-                        1f - ((timeMs - 1250f) / 2500f)
-                    }
-                    else -> 0f // Этап 4: Пауза (1.75 сек)
+                    timeMs <= 750f -> timeMs / 750f
+                    timeMs <= 1250f -> 1f
+                    timeMs <= 3750f -> 1f - ((timeMs - 1250f) / 2500f)
+                    else -> 0f
                 }
 
                 val currentColor = argbEvaluator.evaluate(fraction, colorBase, colorGlow) as Int
@@ -3435,9 +3454,10 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                 
             } catch (_: Exception) {}
         }
-        
-        routeAnimator?.start()
     }
+    
+    routeAnimator?.start()
+}
 
     private fun showChangePaymentDialog() {
         // Создаем красивый BottomSheetDialog
@@ -3816,7 +3836,10 @@ if (!cardMask.isNullOrEmpty()) {
         currentWaypoints.clear()
         if (!order.stops.isNullOrEmpty()) {
             order.stops.forEach { stop ->
-                currentWaypoints.add(Pair(LatLng(stop.lat, stop.lng), stop.address))
+                // 🔥 ФИКС ТОЧКИ СЛЕВА СНИЗУ: Игнорируем дефолтные нулевые координаты!
+                if (stop.lat != 0.0 && stop.lng != 0.0) {
+                    currentWaypoints.add(Pair(LatLng(stop.lat, stop.lng), stop.address))
+                }
             }
         }
 
@@ -4965,10 +4988,14 @@ private fun stopWaitingTimer() {
         // Только после этого запускаем чистую, непрерываемую анимацию камеры!
         // ========================================================
         if (!isCameraFocusedOnSearch) {
+            // 🔥 ФИКС: Выставляем true МГНОВЕННО, чтобы повторные вызовы метода
+            // в этот же миг не наплодили дублирующих Handler-анимаций!
+            isCameraFocusedOnSearch = true
+
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 if (!isDestroyed && !isFinishing && mMap != null) {
                     Log.d("WS_TAXI_DEBUG", "🚀 Карта готова, запускаем полет в 3D и ЗУМ на точку А!")
-                    
+
                     val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
                         .target(originLoc)
                         .zoom(17.8f)      // Отличный близкий зум для реалтайм поиска
@@ -4981,9 +5008,8 @@ private fun stopWaitingTimer() {
                         1400,
                         null
                     )
-                    isCameraFocusedOnSearch = true
                 }
-            }, 180) // 180 миллисекунд достаточно, чтобы UI полностью стабилизировался
+            }, 180)
         }
         // ========================================================
     }
@@ -5582,6 +5608,9 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
 
     private fun showAddressPanel() {
         isRouteMode = false
+
+        // 🔥 ФИКС: Сбрасываем флаг поиска, чтобы при следующем заказе приближение сработало идеально
+        isCameraFocusedOnSearch = false
 
         // 🔓 СБРОС 3D И РАЗБЛОКИРОВКА ЖЕСТОВ ДЛЯ СЛЕДУЮЩИХ ЗАКАЗОВ
         mMap?.uiSettings?.isScrollGesturesEnabled = true
