@@ -706,19 +706,22 @@ private fun fetchAddressAtCurrentLocation() {
                 // ДОБАВЛЕНО: Защита от кэша LiveData. Проверяем, наш ли это маршрут
                 val origin = originPlace?.latLng
                 val dest = destinationPlace?.latLng
-                
+
                 if (origin != null && dest != null) {
                     val startDist = SphericalUtil.computeDistanceBetween(points.first(), origin)
                     val endDist = SphericalUtil.computeDistanceBetween(points.last(), dest)
-                    
+
                     // Если маршрут начинается/заканчивается дальше чем в 2 км от наших точек — это старый кэш, игнорируем!
                     if (startDist > 2000.0 || endDist > 2000.0) {
-                        return@observe 
+                        return@observe
                     }
                 }
 
                 decodedRoutePoints = points
-                drawStylishRoute(points)
+
+                // 🔥 ОБНОВЛЕНО: Достаем актуальный статус из ViewModel (если заказа нет, передаем пустую строку)
+                val currentStatus = viewModel.activeOrder.value?.status ?: ""
+                drawStylishRoute(points, currentStatus)
             }
         }
         
@@ -2691,195 +2694,179 @@ class RoundedBackgroundSpan(
        fetchTariffsAndShowPanel()
     }
 
-    private fun drawStylishRoute(path: List<LatLng>) {
-    if (mMap == null || path.isEmpty()) return
+    private fun drawStylishRoute(path: List<LatLng>, orderStatus: String) {
+        if (mMap == null || path.isEmpty()) return
 
-    // 🔥 ФИКС: Если этот путь уже нарисован и анимация активна — ничего не перерисовываем!
-    val pathHash = path.hashCode()
-    if (pathHash == lastDrawnPathHash && polylineMain != null && routeAnimator?.isRunning == true) {
-        return 
-    }
-    lastDrawnPathHash = pathHash
+        val pathHash = path.hashCode()
+        if (pathHash == lastDrawnPathHash && polylineMain != null && routeAnimator?.isRunning == true) {
+            return
+        }
+        lastDrawnPathHash = pathHash
 
-    // Визначаємо, чи знаходиться замовлення в стані пошуку водія диспетчером
-    val currentStatus = viewModel.activeOrder.value?.status
-    val isSearchingState = (currentStatus == "REQUESTED" || currentStatus == "OFFERING")
+        // ИСПОЛЬЗУЕМ СТАТУС ИЗ ПАРАМЕТРА — теперь рассинхронизация при перезаходе невозможна!
+        val isSearchingState = (orderStatus == "REQUESTED" || orderStatus == "OFFERING")
 
-    try {
-        polylineMain?.remove()
-        polylineMain = null
-        polylineBorder?.remove()
-        polylineBorder = null
-        waypointMarkers.forEach { it.remove() }
-        waypointMarkers.clear()
-        
-        // Якщо статус змінився (водій знайшовся), повністю видаляємо 3D-маркер,
-        // щоб на наступному тіку створився стандартний 2D-маркер для поїздки
+        try {
+            polylineMain?.remove()
+            polylineMain = null
+            polylineBorder?.remove()
+            polylineBorder = null
+            waypointMarkers.forEach { it.remove() }
+            waypointMarkers.clear()
+
+            if (!isSearchingState) {
+                originMarker?.remove()
+                originMarker = null
+                destinationMarker?.remove()
+                destinationMarker = null
+            }
+        } catch (e: Exception) {}
+
+        centerPin.visibility = View.GONE
+        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
+        try { mMap?.isMyLocationEnabled = false } catch (e: SecurityException) {}
+
         if (!isSearchingState) {
-            originMarker?.remove()
-            originMarker = null
-            destinationMarker?.remove()
-            destinationMarker = null
+            mMap?.clear()
+            driverMarker = null
         }
-    } catch (e: Exception) {}
 
-    centerPin.visibility = View.GONE
-    try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
-    try { mMap?.isMyLocationEnabled = false } catch (e: SecurityException) {}
-    
-    if (!isSearchingState) {
-        mMap?.clear()
-        // 🔥 ФИКС НЕВИДИМОЙ СТЕНЫ: Сообщаем приложению, что маркер физически стерт с карты!
-        driverMarker = null 
-    }
+        val colorMain = ContextCompat.getColor(this, R.color.route_main)
+        val colorBorder = ContextCompat.getColor(this, R.color.route_border)
 
-    val colorMain = ContextCompat.getColor(this, R.color.route_main)
-    val colorBorder = ContextCompat.getColor(this, R.color.route_border)
+        val transparentMain = Color.argb(0, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+        val transparentBorder = Color.argb(0, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
 
-    val transparentMain = Color.argb(0, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
-    val transparentBorder = Color.argb(0, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
+        val borderOpts = PolylineOptions().addAll(path).width(20f).color(transparentBorder).startCap(RoundCap()).endCap(RoundCap()).zIndex(1f)
+        polylineBorder = mMap?.addPolyline(borderOpts)
 
-    val borderOpts = PolylineOptions().addAll(path).width(20f).color(transparentBorder).startCap(RoundCap()).endCap(RoundCap()).zIndex(1f)
-    polylineBorder = mMap?.addPolyline(borderOpts)
+        val mainOpts = PolylineOptions().addAll(path).width(14f).color(transparentMain).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
+        polylineMain = mMap?.addPolyline(mainOpts)
 
-    val mainOpts = PolylineOptions().addAll(path).width(14f).color(transparentMain).startCap(RoundCap()).endCap(RoundCap()).zIndex(2f)
-    polylineMain = mMap?.addPolyline(mainOpts)
+        if (originPlace != null && originPlace!!.latLng != null) {
+            if (originMarker == null) {
+                originMarker = mMap?.addMarker(MarkerOptions()
+                    .position(originPlace!!.latLng!!)
+                    .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
+                    .anchor(0.5f, 0.5f)
+                    .alpha(0f)
+                    .zIndex(1000f)
+                    .flat(false)
+                )
+            } else {
+                originMarker?.isFlat = false
+            }
 
-    // ========================================================
-    // 📐 МОДЕРНИЗАЦИЯ ТОЧКИ А ПОД ИНТЕРАКТИВНЫЙ 3D-РЕЖИМ
-    // ========================================================
-    if (originPlace != null && originPlace!!.latLng != null) {
-        if (originMarker == null) {
-            originMarker = mMap?.addMarker(MarkerOptions()
-                .position(originPlace!!.latLng!!)
-                .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
+            val uiText = tvOrigin.text.toString()
+            val finalOriginText = if (uiText.contains("...") || uiText.isBlank()) (originPlace?.name ?: "А") else uiText
+            tvOverlayOrigin.text = finalOriginText
+
+            if (isSearchingState) {
+                overlayOrigin.visibility = View.GONE
+            } else {
+                overlayOrigin.alpha = 0f
+                overlayOrigin.visibility = View.VISIBLE
+            }
+        }
+
+        if (!isSearchingState && destinationPlace != null && destinationPlace!!.latLng != null) {
+            destinationMarker = mMap?.addMarker(MarkerOptions()
+                .position(destinationPlace!!.latLng!!)
+                .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
                 .anchor(0.5f, 0.5f)
-                .alpha(0f) 
-                .zIndex(1000f)
-                // 🔥 ФИКС: false делает маркер вертикальным "столбом", возвышающимся над картой!
-                .flat(false) 
-            )
-        } else {
-            originMarker?.isFlat = false
+                .alpha(0f)
+                .zIndex(1000f))
+
+            val uiText = tvDestination.text.toString()
+            val finalDestText = if (uiText.contains("...") || uiText.isBlank()) (destinationPlace?.name ?: "Б") else uiText
+            tvOverlayDest.text = finalDestText
+
+            val calendar = java.util.Calendar.getInstance()
+            calendar.add(java.util.Calendar.SECOND, routeDurationSeconds)
+            val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            val arrivalTime = sdf.format(calendar.time)
+            tvOverlayDestDetails.text = "Приїдемо о $arrivalTime"
+
+            overlayDest.alpha = 0f
+            overlayDest.visibility = View.VISIBLE
         }
 
-        val uiText = tvOrigin.text.toString()
-        val finalOriginText = if (uiText.contains("...") || uiText.isBlank()) (originPlace?.name ?: "А") else uiText
-        tvOverlayOrigin.text = finalOriginText
-        
+        // Промежуточные остановки (Скрыты в режиме поиска)
+        if (!isSearchingState) {
+            val waypointIcon = BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_waypoint_dot)
+            for (wpPair in currentWaypoints) {
+                // Жесткая защита от улета маркера в координаты (0,0)
+                if (wpPair.first.latitude != 0.0 && wpPair.first.longitude != 0.0) {
+                    val marker = mMap?.addMarker(MarkerOptions()
+                        .position(wpPair.first)
+                        .icon(waypointIcon)
+                        .anchor(0.5f, 0.5f)
+                        .alpha(0f)
+                        .zIndex(500f))
+
+                    if (marker != null) waypointMarkers.add(marker)
+                }
+            }
+        }
+
+        // Логика управления 3D/2D камерой
         if (isSearchingState) {
-            overlayOrigin.visibility = View.GONE
-        } else {
-            overlayOrigin.alpha = 0f
-            overlayOrigin.visibility = View.VISIBLE
-        }
-    }
-
-    // Маркер точки Б (Скрыт в режиме поиска)
-    if (!isSearchingState && destinationPlace != null && destinationPlace!!.latLng != null) {
-        destinationMarker = mMap?.addMarker(MarkerOptions()
-            .position(destinationPlace!!.latLng!!)
-            .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
-            .anchor(0.5f, 0.5f)
-            .alpha(0f)
-            .zIndex(1000f))
-
-        val uiText = tvDestination.text.toString()
-        val finalDestText = if (uiText.contains("...") || uiText.isBlank()) (destinationPlace?.name ?: "Б") else uiText
-        tvOverlayDest.text = finalDestText
-
-        val calendar = java.util.Calendar.getInstance()
-        calendar.add(java.util.Calendar.SECOND, routeDurationSeconds)
-        val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-        val arrivalTime = sdf.format(calendar.time)
-        tvOverlayDestDetails.text = "Приїдемо о $arrivalTime"
-
-        overlayDest.alpha = 0f
-        overlayDest.visibility = View.VISIBLE
-    }
-
-    // Промежуточные остановки (Скрыты в режиме поиска)
-    if (!isSearchingState) {
-        val waypointIcon = BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_waypoint_dot)
-        for (wpPair in currentWaypoints) {
-            val marker = mMap?.addMarker(MarkerOptions()
-                .position(wpPair.first)
-                .icon(waypointIcon)
-                .anchor(0.5f, 0.5f)
-                .alpha(0f) 
-                .zIndex(500f))
-            
-            if (marker != null) waypointMarkers.add(marker)
-        }
-    }
-
-    // Логика управления 3D/2D камерой
-        if (isSearchingState) {
-            // Прячем кнопки центрирования, так как в режиме поиска интерфейс заблокирован
             btnRecenterRoute.visibility = View.GONE
             btnRecenter.visibility = View.GONE
 
-            // 🔥 ФИКС: Полностью убираем отсюда mMap?.animateCamera!
-            // Теперь drawStylishRoute занимается исключительно отрисовкой линий,
-            // а за правильный 3D-полет, наклон в 50° и зум на точку А отвечает только updateStatusUI.
             runOnUiThread {
                 startRouteRevealAnimation(colorMain, colorBorder, path)
             }
         } else {
-        // Логика для обычных состояний
-        val boundsBuilder = LatLngBounds.Builder()
-        if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
-        if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
-        currentWaypoints.forEach { boundsBuilder.include(it.first) }
-        path.forEach { boundsBuilder.include(it) }
+            val boundsBuilder = LatLngBounds.Builder()
+            if (originPlace?.latLng != null) boundsBuilder.include(originPlace!!.latLng!!)
+            if (destinationPlace?.latLng != null) boundsBuilder.include(destinationPlace!!.latLng!!)
+            currentWaypoints.forEach { boundsBuilder.include(it.first) }
+            path.forEach { boundsBuilder.include(it) }
 
-        val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
+            val visibleBottomPanel = if (activeOrderCard.visibility == View.VISIBLE) activeOrderCard else tariffsPanel
 
-        visibleBottomPanel.post {
-            try {
-                val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
-                var marginBottom = 0
-                var sideMargin = 0
-                val params = visibleBottomPanel.layoutParams
-                if (params is ViewGroup.MarginLayoutParams) {
-                    marginBottom = params.bottomMargin
-                    sideMargin = params.leftMargin
-                }
+            visibleBottomPanel.post {
+                try {
+                    val panelHeight = if (visibleBottomPanel.visibility == View.VISIBLE) visibleBottomPanel.height else 0
+                    var marginBottom = 0
+                    var sideMargin = 0
+                    val params = visibleBottomPanel.layoutParams
+                    if (params is ViewGroup.MarginLayoutParams) {
+                        marginBottom = params.bottomMargin
+                        sideMargin = params.leftMargin
+                    }
 
-                val paddingBottom = panelHeight + marginBottom
-                val paddingTop = convertDpToPixel(10f).toInt()
-                val paddingSide = convertDpToPixel(80f).toInt()
+                    val paddingBottom = panelHeight + marginBottom
+                    val paddingTop = convertDpToPixel(10f).toInt()
+                    val paddingSide = convertDpToPixel(80f).toInt()
 
-                mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom)
+                    mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom)
 
-                // 🔥 ФИКС ДЛЯ СТАТУСОВ: Если статус активный, то drawStylishRoute НЕ должен
-                // сбрасывать камеру на обзор всего маршрута. Камеру настроит сам метод updateStatusUI!
-                if (currentStatus == "ACCEPTED" || currentStatus == "DRIVER_ARRIVED" || currentStatus == "IN_PROGRESS") {
-                    // Просто запускаем анимацию линии, камеру не трогаем!
+                    if (orderStatus == "ACCEPTED" || orderStatus == "DRIVER_ARRIVED" || orderStatus == "IN_PROGRESS") {
+                        runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                    } else {
+                        val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
+                        mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
+                            override fun onFinish() {
+                                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                            }
+                            override fun onCancel() {
+                                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                            }
+                        })
+                    }
+                } catch (e: Exception) {
                     runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                } else {
-                    // Если это режим обычного выбора тарифов до создания заказа — ведем стандартный обзор
-                    val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
-                    mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
-                        override fun onFinish() {
-                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                        }
-                        override fun onCancel() {
-                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                        }
-                    })
                 }
-            } catch (e: Exception) {
-                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
             }
+            btnRecenterRoute.visibility = View.GONE
         }
-        btnRecenterRoute.visibility = View.GONE
+
+        if (!isSearchingState) {
+            contentBottomSheet.post { updateSmartLabels() }
+        }
     }
-    
-    if (!isSearchingState) {
-        contentBottomSheet.post { updateSmartLabels() }
-    }
-}
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
     if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
 
@@ -3807,7 +3794,10 @@ if (!cardMask.isNullOrEmpty()) {
     }
 
     private fun restoreOrderOnMap(order: TaxiOrderDto) {
-        if (isRouteMode && activeOrderId == order.id) return // Вже відмальовано
+        if (mMap == null) return // 🛡️ БРОНЯ: Если карты еще нет, выходим сразу и ждем вызова из onMapReady!
+
+        // Проверяем флаг. Дополнительно убедимся, что линии действительно созданы
+        if (isRouteMode && activeOrderId == order.id && polylineMain != null) return // Вже відмальовано
 
         isRouteMode = true
         centerPin.visibility = View.GONE
@@ -3836,7 +3826,7 @@ if (!cardMask.isNullOrEmpty()) {
         currentWaypoints.clear()
         if (!order.stops.isNullOrEmpty()) {
             order.stops.forEach { stop ->
-                // 🔥 ФИКС ТОЧКИ СЛЕВА СНИЗУ: Игнорируем дефолтные нулевые координаты!
+                // ФИКС ТОЧКИ СЛЕВА СНИЗУ: Игнорируем дефолтные нулевые координаты!
                 if (stop.lat != 0.0 && stop.lng != 0.0) {
                     currentWaypoints.add(Pair(LatLng(stop.lat, stop.lng), stop.address))
                 }
@@ -3860,21 +3850,20 @@ if (!cardMask.isNullOrEmpty()) {
                         .position(originPlace!!.latLng!!)
                         .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
                         .anchor(0.5f, 0.5f))
-                    overlayOrigin.visibility = View.VISIBLE
+                    overlayOrigin.visibility = View.GONE
                     overlayOrigin.alpha = 1f
                 }
                 overlayDest.visibility = View.GONE
                 startDriverTracking(order.id)
+                drawStylishRoute(points, s) // 🔥 Передаем точный статус параметром
             } else if (s == "IN_PROGRESS") {
-                // 🔥 ФИКС: Для "IN_PROGRESS" принудительно запускаем отрисовку маршрутной линии и трекинг!
                 startDriverTracking(order.id)
-                drawStylishRoute(points)
+                drawStylishRoute(points, s) // 🔥 Передаем точный статус параметром
             } else {
-                drawStylishRoute(points)
+                drawStylishRoute(points, s) // 🔥 Передаем точный статус параметром (для REQUESTED/OFFERING)
             }
         } else {
-            // 🔥 ЖЕЛЕЗОБЕТОННЫЙ ФИКС ХОЛОДНОГО СТАРТА:
-            // Полилинии нет в DTO активного заказа — принудительно просим ViewModel перезапросить маршрут у Google API
+            // ЖЕЛЕЗОБЕТОННЫЙ ФИКС ХОЛОДНОГО СТАРТА:
             creationPanelCard.visibility = View.GONE
             addressPanel.visibility = View.GONE
 
@@ -3890,8 +3879,8 @@ if (!cardMask.isNullOrEmpty()) {
             val lng = drv.longitude
             if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
                 val initialLoc = TrackingLocationDto(
-                    lat = lat, 
-                    lng = lng, 
+                    lat = lat,
+                    lng = lng,
                     bearing = drv.bearing ?: 0f
                 )
                 updateDriverMarker(initialLoc)
@@ -5190,20 +5179,22 @@ private fun stopWaitingTimer() {
         // ====================================================================
         // 🔥 ШАГ 1: СНАЧАЛА СТРОИМ МАРШРУТ (Он вызовет mMap?.clear() внутри себя)
         // ====================================================================
-        if (polylineMain == null) {
-            val polylineStr = order.googleRoutePolyline ?: viewModel.currentRoutePolyline
-            if (!polylineStr.isNullOrEmpty()) {
-                try {
-                    val mainRoutePoints = com.google.maps.android.PolyUtil.decode(polylineStr)
-                    if (!mainRoutePoints.isNullOrEmpty()) {
-                        decodedRoutePoints = mainRoutePoints
-                        drawStylishRoute(mainRoutePoints)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
+           if (polylineMain == null) {
+               val polylineStr = order.googleRoutePolyline ?: viewModel.currentRoutePolyline
+               if (!polylineStr.isNullOrEmpty()) {
+                   try {
+                       val mainRoutePoints = com.google.maps.android.PolyUtil.decode(polylineStr)
+                       if (!mainRoutePoints.isNullOrEmpty()) {
+                           decodedRoutePoints = mainRoutePoints
+
+                           // 🔥 ОБНОВЛЕНО: Передаем статус напрямую из объекта заказа (order.status)
+                           drawStylishRoute(mainRoutePoints, order.status)
+                       }
+                   } catch (e: Exception) {
+                       e.printStackTrace()
+                   }
+               }
+           }
 
         // ====================================================================
         // 🚗 ШАГ 2: И ТОЛЬКО ТЕПЕРЬ СТАВИМ ВОДИТЕЛЯ (Карта уже чистая, его никто не сотрет)
@@ -5395,7 +5386,7 @@ private fun stopWaitingTimer() {
                             overlayDest.visibility = View.VISIBLE
 
                             // Отрисовываем стильную линию, маркеры и плавно отдаляем камеру, чтобы показать ВЕСЬ маршрут целиком
-                            drawStylishRoute(mainRoutePoints)
+                            drawStylishRoute(mainRoutePoints, order.status)
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
