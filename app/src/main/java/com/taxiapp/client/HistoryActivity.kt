@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.tabs.TabLayout
 import com.taxiapp.client.network.ApiClient
+import com.taxiapp.client.network.dto.CancellationReasonDto
 import com.taxiapp.client.network.dto.TaxiOrderDto
 import com.taxiapp.client.ui.HistoryAdapter
 import com.taxiapp.client.utils.SessionManager
@@ -99,7 +100,7 @@ class HistoryActivity : BaseActivity() {
             },
             onCancelClick = { orderId ->
                 // Вызываем твою старую добрую функцию отмены!
-                cancelOrder(orderId)
+                showCancelReasonDialog(orderId)
             }
         )
         recyclerView.adapter = adapter
@@ -164,17 +165,84 @@ class HistoryActivity : BaseActivity() {
     }
 
     // --- НОВЫЙ МЕТОД: Отмена заказа ---
-    private fun cancelOrder(orderId: Long) {
-        // Мы больше не достаем token вручную!
+    private fun showCancelReasonDialog(orderId: Long) {
+        val dialog = android.app.Dialog(this)
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_cancel_reason)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            android.view.WindowManager.LayoutParams.MATCH_PARENT,
+            android.view.WindowManager.LayoutParams.WRAP_CONTENT
+        )
+
+        val rgReasons = dialog.findViewById<android.widget.RadioGroup>(R.id.rg_cancel_reasons)
+        val btnConfirm = dialog.findViewById<android.widget.Button>(R.id.btn_confirm_cancel)
+
+        // Загружаем актуальные причины с сервера для CLIENT
+        ApiClient.instance.getCancellationReasons("CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
+            override fun onResponse(call: Call<List<CancellationReasonDto>>, response: Response<List<CancellationReasonDto>>) {
+                if (response.isSuccessful) {
+                    val reasons = response.body()?.filter { it.isActive } ?: emptyList()
+                    rgReasons.removeAllViews()
+
+                    // Динамически наполняем RadioGroup причинами
+                    reasons.forEach { reason ->
+                        val radioButton = android.widget.RadioButton(this@HistoryActivity).apply {
+                            id = View.generateViewId()
+                            text = reason.reasonText
+                            tag = reason.reasonText // Сохраняем текст в tag для удобного извлечения
+                            textSize = 16f
+                            setPadding(16, 24, 16, 24)
+                            setTextColor(androidx.core.content.ContextCompat.getColor(this@HistoryActivity, R.color.text_primary))
+
+                            // --- Желтый цвет ---
+                            val taxiYellowStateList = androidx.core.content.ContextCompat.getColorStateList(this@HistoryActivity, R.color.taxi_yellow)
+                            androidx.core.widget.CompoundButtonCompat.setButtonTintList(this, taxiYellowStateList)
+
+                            // --- НОВОЕ: Убираем системный фон/рипл при нажатии ---
+                            background = null
+                            // ----------------------------------------------------
+                        }
+                        rgReasons.addView(radioButton)
+                    }
+                } else {
+                    Toast.makeText(this@HistoryActivity, "Помилка завантаження причин отмени", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
+                Toast.makeText(this@HistoryActivity, "Помилка мережі при завантаженні причин", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        // Обработка кнопки подтверждения отмены
+        btnConfirm.setOnClickListener {
+            val checkedId = rgReasons.checkedRadioButtonId
+            if (checkedId == -1) {
+                Toast.makeText(this, "Будь ласка, виберіть причину скасування", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val selectedRb = rgReasons.findViewById<android.widget.RadioButton>(checkedId)
+            val selectedReasonText = selectedRb.tag as? String
+
+            dialog.dismiss()
+            cancelOrder(orderId, selectedReasonText) // Отправляем заказ на сервер вместе с причиной
+        }
+
+        dialog.show()
+    }
+
+    // --- ОБНОВЛЕННЫЙ МЕТОД: Отмена заказа с передачей причины ---
+    private fun cancelOrder(orderId: Long, reasonText: String? = null) {
         Toast.makeText(this, "Скасування...", Toast.LENGTH_SHORT).show()
 
-        // Вызов очищен: передаем только orderId (без "Bearer $token")
-        ApiClient.instance.cancelOrder(orderId).enqueue(object : Callback<TaxiOrderDto> {
+        // Используем очищенный вызов ApiService с поддержкой reasonText
+        ApiClient.instance.cancelOrder(orderId, reasonText).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
                 if (response.isSuccessful) {
                     Toast.makeText(this@HistoryActivity, "Замовлення скасовано", Toast.LENGTH_SHORT).show()
-                    // Перезагружаем список, чтобы заказ улетел в архив
-                    loadHistory()
+                    loadHistory() // Перезагружаем список поездок
                 } else {
                     val msg = try { response.errorBody()?.string() } catch (e: Exception) { response.message() }
                     Toast.makeText(this@HistoryActivity, "Помилка: $msg", Toast.LENGTH_SHORT).show()

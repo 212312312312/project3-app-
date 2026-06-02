@@ -5,7 +5,11 @@
 
         <item name="android:windowBackground">#222426</item>
         <item name="colorSurface">#2C2E30</item> <item name="colorOnSurface">#F3F4F6</item> <item name="android:statusBarColor">#222426</item>
-        <item name="android:windowLightStatusBar">false</item> </style>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="fontFamily">@font/montserrat</item>
+        <item name="android:fontFamily">@font/montserrat</item>
+    </style>
+
 
     <style name="OtpBox">
         <item name="android:layout_width">0dp</item>

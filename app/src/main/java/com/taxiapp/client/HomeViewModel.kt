@@ -465,7 +465,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         ApiClient.instance.updateOrderPrice(id, addedValue).enqueue(object : Callback<MessageResponseDto> {
             override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                 _isLoading.value = false
-                if (!response.isSuccessful) {
+                if (response.isSuccessful) {
+                    // Мгновенно обновляем локальный объект заказа новой ценой и надбавкой
+                    _activeOrder.value?.let { currentOrder ->
+                        val basePrice = currentOrder.price - currentOrder.addedValue
+                        val newPrice = basePrice + addedValue
+                        _activeOrder.value = currentOrder.copy(
+                            price = newPrice,
+                            addedValue = addedValue
+                        )
+                    }
+                } else {
                     _errorMessage.value = "Помилка зміни ціни"
                 }
             }
