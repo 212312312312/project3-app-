@@ -2,6 +2,10 @@ package com.taxiapp.client
 
 import android.app.Application
 import android.os.Handler
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -128,23 +132,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("WS_ORDER_DEBUG", "🛑 Прекращаем слушать обновления сокетов для заказов")
     }
 
-    private fun checkOrderStatusOnce() {
-        val id = activeOrderId ?: return
-        ApiClient.instance.getOrder(id).enqueue(object : Callback<TaxiOrderDto> {
-            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+    fun checkOrderStatusOnce() {
+        val currentOrder = _activeOrder.value ?: return
+        val orderId = currentOrder.id ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // ИСПРАВЛЕНО: Используем getOrder вместо getOrderById согласно твоей ApiService
+                val response = com.taxiapp.client.network.ApiClient.instance.getOrder(orderId).execute()
+                
                 if (response.isSuccessful && response.body() != null) {
-                    val order = response.body()!!
-                    _activeOrder.value = order
-                    if (order.status == "COMPLETED" || order.status == "CANCELLED") {
-                        stopOrderStatusService(order.id)
-                        clearOrderState()
-                    } else {
-                        updateOrderStatusService(order)
+                    withContext(Dispatchers.Main) {
+                        _activeOrder.value = response.body()
+                        Log.d("HomeViewModel", "Принудительно синхронизирован статус заказа после фона: ${response.body()?.status}")
                     }
                 }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Ошибка проверки статуса заказа: ${e.message}")
             }
-            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {}
-        })
+        }
     }
 
     fun startListeningNearbyDrivers(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
@@ -410,7 +416,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
-    // --- Логика опроса статуса ---
     private fun checkOrderStatus() {
         val id = activeOrderId ?: return
 
@@ -423,11 +428,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
                         // ИСПРАВЛЕНИЕ: Мы НЕ обновляем сервис, если заказ отменен или завершен
                         if (order.status == "COMPLETED" || order.status == "CANCELLED") {
-                            stopOrderStatusService(order.id)
+                            clearOrderState() // 🔥 ФИКС: Тотальный сброс стейта и остановка хендлера
                         } else {
                             // Запускаем/обновляем сервис ТОЛЬКО если заказ в процессе
                             updateOrderStatusService(order)
                         }
+                    }
+                } else {
+                    // 🔥 ЖЕЛЕЗОБЕТОННЫЙ ФИКС: Если сервер вернул 404 (заказа больше нет) — 
+                    // моментально зачищаем стейты, чтобы не ломать логику новых заказов!
+                    if (response.code() == 404) {
+                        Log.d("HomeViewModel", "Заказ $id не найден на сервере (404). Очищаем стейт.")
+                        clearOrderState()
                     }
                 }
             }
@@ -484,6 +496,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _errorMessage.value = "Помилка мережі"
             }
         })
+    }
+
+    fun stopStatusPolling() {
+        statusHandler.removeCallbacks(statusRunnable)
+        Log.d("HomeViewModel", "⏱️ Фоновый опрос статуса заказа успешно остановлен")
     }
 
     // Очистка состояния

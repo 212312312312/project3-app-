@@ -178,6 +178,10 @@ private var lastAddressPickerIntentData: Intent? = null
     private lateinit var ivThemeMoon: ImageView
     private lateinit var tvThemeLabel: TextView
 
+    // --- ДОБАВЛЕНО: Кэш для бесперебойного отображения водителя ---
+    private var lastKnownDriverLatLng: com.google.android.gms.maps.model.LatLng? = null
+    private var lastKnownDriverBearing: Float = 0f
+    // --------------------------------------------------------------
     
     
     private lateinit var btnOpenPromo: CardView
@@ -930,18 +934,24 @@ private fun fetchAddressAtCurrentLocation() {
 
     override fun onResume() {
     super.onResume()
+    
+    // Твой существующий код переподключения сокета
     if (webSocketManager?.isConnected() != true) {
-        Log.d("WS_TAXI_DEBUG", "📱 Приложение проснулось! Сокет мертв, пытаюсь переподключиться...")
-        
-        // Получаем актуальный токен
         val sessionManager = com.taxiapp.client.utils.SessionManager(this)
         val token = sessionManager.fetchAuthToken()
-        
         if (!token.isNullOrEmpty()) {
-            // Переподключаемся
             webSocketManager?.connect(token)
         }
     }
+    webSocketManager?.let { viewModel.startOrderSocketListening(it) }
+
+    // --- ДОБАВЛЕНО: Принудительный запрос статуса, если приложение вернулось из фона в режиме поиска водителя ---
+    val currentStatus = viewModel.activeOrder.value?.status
+    if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
+        // Вызываем без параметров, чисто и безопасно
+        viewModel.checkOrderStatusOnce()
+    }
+    // ---------------------------------------------------------------------------------------------------------
 
     // КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: Включаем реалтайм отслеживание статусов заказов клиента через сокет
     viewModel.startOrderSocketListening(webSocketManager)
@@ -2769,7 +2779,7 @@ class RoundedBackgroundSpan(
             }
         }
 
-        if (!isSearchingState && destinationPlace != null && destinationPlace!!.latLng != null) {
+        if (orderStatus != "IN_PROGRESS" && !isSearchingState && destinationPlace != null && destinationPlace!!.latLng != null) {
             destinationMarker = mMap?.addMarker(MarkerOptions()
                 .position(destinationPlace!!.latLng!!)
                 .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
@@ -3211,9 +3221,34 @@ private fun showDriverHealthDialog(issues: List<String>) {
     val tvIssues = dialog.findViewById<TextView>(R.id.tv_health_issues_list)
     val btnOk = dialog.findViewById<Button>(R.id.btn_understand_health)
 
-    // Красиво форматируем список с буллитами (точками)
-    val formattedIssues = issues.joinToString(separator = "\n") { "• $it" }
-    tvIssues.text = formattedIssues
+    // --- ОБНОВЛЕНО: Форматируем список с висячим отступом прямо здесь ---
+    val builder = android.text.SpannableStringBuilder()
+    // Вычисляем 16dp отступа в пикселях в зависимости от плотности экрана устройства
+    val marginPx = (16 * resources.displayMetrics.density).toInt() 
+
+    issues.forEachIndexed { index, item ->
+        if (item.isNotBlank()) {
+            val start = builder.length
+            builder.append("•  $item") // Строим строку (значок + пробелы + текст особенности)
+            val end = builder.length
+
+            // ХИТРЫЙ ФИКС: Для первой строки отступ 0 (значок прижат к краю), 
+            // а для всех автоматически перенесенных строк — отступ marginPx (встанут ровно под текст)
+            builder.setSpan(
+                android.text.style.LeadingMarginSpan.Standard(0, marginPx),
+                start,
+                end,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+
+            // Разделяем элементы списка обычным переносом строки
+            if (index < issues.lastIndex) {
+                builder.append("\n")
+            }
+        }
+    }
+    tvIssues.text = builder
+    // --------------------------------------------------------------------
 
     btnOk.setOnClickListener {
         dialog.dismiss()
@@ -3720,34 +3755,45 @@ if (!cardMask.isNullOrEmpty()) {
         dialog.show()
     }
 
-    private fun updateDriverMarker(loc: TrackingLocationDto) {
-        val latLng = LatLng(loc.lat, loc.lng)
-        
-        if (driverMarker == null) {
-            val carWidth = 40
-            val carHeight = 40
+    private fun updateDriverMarker(loc: com.taxiapp.client.network.dto.TrackingLocationDto) {
+        val latLng = com.google.android.gms.maps.model.LatLng(loc.lat, loc.lng)
 
-            val carIcon = BitmapHelper.getScaledBitmapDescriptor(
-                this, 
-                R.drawable.ic_car_icon, 
-                carWidth, 
-                carHeight
-            )
-
-            val initialBearing = loc.bearing ?: 0f
-
-            driverMarker = mMap?.addMarker(
-                MarkerOptions()
-                    .position(latLng)
-                    .icon(carIcon)
-                    .flat(true)          
-                    .anchor(0.5f, 0.5f)  
-                    .rotation(initialBearing)
-                    .zIndex(100f) // 🔥 ЖЕСТКИЙ ФИКС: Поднимаем слой машинки на самый верх карты!
-            )
-        } else {
+        // 🛡️ ФИКС МИГАНИЯ: Если маркер есть, проверяем, изменилась ли позиция.
+        // Если водитель стоит на месте, НИЧЕГО не делаем, чтобы не провоцировать перерисовку.
+        if (driverMarker != null) {
+            val oldPos = driverMarker!!.position
+            // Погрешность 0.00001 (около 1 метра) - если сдвинулся меньше, не трогаем маркер
+            if (Math.abs(oldPos.latitude - latLng.latitude) < 0.00001 && 
+                Math.abs(oldPos.longitude - latLng.longitude) < 0.00001) {
+                return 
+            }
+            // Плавная анимация, если сдвинулся
             animateMarker(driverMarker!!, latLng, loc.bearing ?: 0f)
+            return
         }
+
+        // Если маркера нет — создаем его один раз с нужными размерами
+        val carWidth = 40
+        val carHeight = 40
+
+        val carIcon = com.taxiapp.client.utils.BitmapHelper.getScaledBitmapDescriptor(
+            this, 
+            R.drawable.ic_car_icon, 
+            carWidth, 
+            carHeight
+        )
+
+        val initialBearing = loc.bearing ?: 0f
+
+        driverMarker = mMap?.addMarker(
+            com.google.android.gms.maps.model.MarkerOptions()
+                .position(latLng)
+                .icon(carIcon)
+                .flat(true)          
+                .anchor(0.5f, 0.5f)  
+                .rotation(initialBearing)
+                .zIndex(1100f) // 🔥 Поднимаем слой машинки на самый верх
+        )
     }
 
     private fun animateMarker(marker: Marker, toPosition: LatLng, toRotation: Float) {
@@ -3793,7 +3839,7 @@ if (!cardMask.isNullOrEmpty()) {
         statusBlinkAnimator.start()
     }
 
-    private fun restoreOrderOnMap(order: TaxiOrderDto) {
+    private fun restoreOrderOnMap(order: com.taxiapp.client.network.dto.TaxiOrderDto) {
         if (mMap == null) return // 🛡️ БРОНЯ: Если карты еще нет, выходим сразу и ждем вызова из onMapReady!
 
         // Проверяем флаг. Дополнительно убедимся, что линии действительно созданы
@@ -3812,12 +3858,12 @@ if (!cardMask.isNullOrEmpty()) {
         val destLat = order.destLat ?: return
         val destLng = order.destLng ?: return
 
-        val originLoc = LatLng(originLat, originLng)
-        val destLoc = LatLng(destLat, destLng)
+        val originLoc = com.google.android.gms.maps.model.LatLng(originLat, originLng)
+        val destLoc = com.google.android.gms.maps.model.LatLng(destLat, destLng)
 
         // Відновлюємо логіку точок А та Б для правильного фокусу камери
-        originPlace = Place.builder().setName(order.fromAddress).setLatLng(originLoc).build()
-        destinationPlace = Place.builder().setName(order.toAddress).setLatLng(destLoc).build()
+        originPlace = com.google.android.libraries.places.api.model.Place.builder().setName(order.fromAddress).setLatLng(originLoc).build()
+        destinationPlace = com.google.android.libraries.places.api.model.Place.builder().setName(order.toAddress).setLatLng(destLoc).build()
 
         tvOrigin.text = cleanAddress(order.fromAddress ?: "А")
         tvDestination.text = cleanAddress(order.toAddress ?: "Б")
@@ -3828,7 +3874,7 @@ if (!cardMask.isNullOrEmpty()) {
             order.stops.forEach { stop ->
                 // ФИКС ТОЧКИ СЛЕВА СНИЗУ: Игнорируем дефолтные нулевые координаты!
                 if (stop.lat != 0.0 && stop.lng != 0.0) {
-                    currentWaypoints.add(Pair(LatLng(stop.lat, stop.lng), stop.address))
+                    currentWaypoints.add(Pair(com.google.android.gms.maps.model.LatLng(stop.lat, stop.lng), stop.address))
                 }
             }
         }
@@ -3836,32 +3882,54 @@ if (!cardMask.isNullOrEmpty()) {
         val polyline = order.googleRoutePolyline
         if (!polyline.isNullOrEmpty()) {
             viewModel.currentRoutePolyline = polyline
-            val points = PolyUtil.decode(polyline)
+            val points = com.google.maps.android.PolyUtil.decode(polyline)
             decodedRoutePoints = points
 
             creationPanelCard.visibility = View.GONE
             addressPanel.visibility = View.GONE
 
             val s = order.status
-            if (s == "ACCEPTED" || s == "DRIVER_ARRIVED") {
-                mMap?.clear()
-                if (originPlace?.latLng != null) {
-                    originMarker = mMap?.addMarker(MarkerOptions()
-                        .position(originPlace!!.latLng!!)
-                        .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
-                        .anchor(0.5f, 0.5f))
-                    overlayOrigin.visibility = View.GONE
-                    overlayOrigin.alpha = 1f
-                }
-                overlayDest.visibility = View.GONE
-                startDriverTracking(order.id)
-                drawStylishRoute(points, s) // 🔥 Передаем точный статус параметром
-            } else if (s == "IN_PROGRESS") {
-                startDriverTracking(order.id)
-                drawStylishRoute(points, s) // 🔥 Передаем точный статус параметром
-            } else {
-                drawStylishRoute(points, s) // 🔥 Передаем точный статус параметром (для REQUESTED/OFFERING)
+            
+            // Перед перерисовкой сцены полностью очищаем карту
+            mMap?.clear()
+            driverMarker = null
+
+            // 1. НАЧАЛЬНАЯ ТОЧКА (Точка А) — Гарантированно строится ВСЕГДА во всех режимах
+            if (originPlace?.latLng != null) {
+                originMarker = mMap?.addMarker(com.google.android.gms.maps.model.MarkerOptions()
+                    .position(originPlace!!.latLng!!)
+                    .icon(getBitmapDescriptor(R.drawable.ic_marker_base_yellow))
+                    .anchor(0.5f, 0.5f)
+                    .zIndex(1000f))
+                overlayOrigin.visibility = View.GONE
+                overlayOrigin.alpha = 1f
             }
+            overlayDest.visibility = View.GONE
+
+            // --- УТОЧНЕННЫЙ ФИЛЬТР: ACCEPTED и DRIVER_ARRIVED обрабатываются одинаково разгруженно ---
+            if (s == "ACCEPTED" || s == "DRIVER_ARRIVED") {
+                // Включаем трекинг машинки, но маршрутные линии, Точку Б и остановки на карту НЕ выводим!
+                startDriverTracking(order.id)
+            } else {
+                // Для всех остальных активных статусов (например, IN_PROGRESS - в пути):
+
+
+                // 3. Промежуточные Остановки
+                currentWaypoints.forEach { wp ->
+                    mMap?.addMarker(com.google.android.gms.maps.model.MarkerOptions()
+                        .position(wp.first)
+                        .icon(getBitmapDescriptor(R.drawable.ic_marker_waypoint))
+                        .anchor(0.5f, 0.5f)
+                        .zIndex(950f))
+                }
+
+                // 4. Отрисовка линий маршрута
+                if (s == "IN_PROGRESS") {
+                    startDriverTracking(order.id)
+                }
+                drawStylishRoute(points, s)
+            }
+            // ---------------------------------------------------------------------------
         } else {
             // ЖЕЛЕЗОБЕТОННЫЙ ФИКС ХОЛОДНОГО СТАРТА:
             creationPanelCard.visibility = View.GONE
@@ -3874,17 +3942,27 @@ if (!cardMask.isNullOrEmpty()) {
             }
         }
 
-        order.driver?.let { drv ->
+        // --- УПРАВЛЕНИЕ МАРКЕРОМ ВОДИТЕЛЯ С КЭШИРОВАНИЕМ ---
+        val drv = order.driver
+        if (drv != null) {
             val lat = drv.latitude
             val lng = drv.longitude
+            val bearing = drv.bearing ?: 0f
+
             if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-                val initialLoc = TrackingLocationDto(
-                    lat = lat,
-                    lng = lng,
-                    bearing = drv.bearing ?: 0f
-                )
-                updateDriverMarker(initialLoc)
+                lastKnownDriverLatLng = com.google.android.gms.maps.model.LatLng(lat, lng)
+                lastKnownDriverBearing = bearing
             }
+        }
+
+        val finalDriverLatLng = lastKnownDriverLatLng
+        if (finalDriverLatLng != null) {
+            val initialLoc = com.taxiapp.client.network.dto.TrackingLocationDto(
+                lat = finalDriverLatLng.latitude,
+                lng = finalDriverLatLng.longitude,
+                bearing = lastKnownDriverBearing
+            )
+            updateDriverMarker(initialLoc)
         }
     }
 
@@ -5598,7 +5676,11 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
 
 
     private fun showAddressPanel() {
+        mMap?.clear()
         isRouteMode = false
+
+        lastKnownDriverLatLng = null
+        lastKnownDriverBearing = 0f
 
         // 🔥 ФИКС: Сбрасываем флаг поиска, чтобы при следующем заказе приближение сработало идеально
         isCameraFocusedOnSearch = false

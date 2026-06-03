@@ -104,7 +104,14 @@ class HistoryAdapter(
 
             if (order.driver != null) {
                 layoutDriverInfo.visibility = View.VISIBLE
-                tvDriverName.text = order.driver.fullName
+
+                // --- ИСПРАВЛЕНО: Отсекаем всё лишнее и берем только Имя водителя ---
+                val rawName = order.driver.fullName?.trim() ?: ""
+                // Берем первое слово (предполагая формат "Имя Фамилия")
+                val firstName = rawName.substringBefore(" ")
+                tvDriverName.text = firstName
+                // -------------------------------------------------------------------
+
                 tvCarModel.text = "${order.driver.carColor} ${order.driver.carModel} • ${order.driver.carPlateNumber}"
             } else {
                 layoutDriverInfo.visibility = View.GONE

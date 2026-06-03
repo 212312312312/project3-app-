@@ -40,7 +40,13 @@ class HistoryActivity : BaseActivity() {
         sessionManager = SessionManager(this)
 
         initUI()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // --- ДОБАВЛЕНО: Принудительное обновление истории при входе/возврате на экран ---
         loadHistory()
+        // ---------------------------------------------------------------------------------
     }
 
     private fun initUI() {
