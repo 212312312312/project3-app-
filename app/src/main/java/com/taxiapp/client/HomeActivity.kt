@@ -2168,7 +2168,9 @@ btnChangePayment.setOnClickListener {
                 // Если пользователь двигает карту пальцем при построенном маршруте
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     val currentStatus = viewModel.activeOrder.value?.status
-                    if (currentStatus != "ACCEPTED" && currentStatus != "DRIVER_ARRIVED" && currentStatus != "IN_PROGRESS") {
+                    // 🔥 ФИКС: Запрещаем кнопке маршрута активироваться при отмене или завершении заказа
+                    if (currentStatus != "ACCEPTED" && currentStatus != "DRIVER_ARRIVED" && 
+                        currentStatus != "IN_PROGRESS" && currentStatus != "CANCELLED" && currentStatus != "COMPLETED") {
                         btnRecenterRoute.visibility = View.VISIBLE
                     }
                 }
@@ -2709,7 +2711,8 @@ class RoundedBackgroundSpan(
         if (mMap == null || path.isEmpty()) return
 
         val pathHash = path.hashCode()
-        if (pathHash == lastDrawnPathHash && polylineMain != null && routeAnimator?.isRunning == true) {
+        if (pathHash == lastDrawnPathHash && polylineMain != null && routeAnimator?.isRunning == true &&
+            orderStatus != "CANCELLED" && orderStatus != "COMPLETED") {
             return
         }
         lastDrawnPathHash = pathHash
@@ -2891,50 +2894,54 @@ class RoundedBackgroundSpan(
 
     revealAnimator?.cancel()
     revealAnimator = ValueAnimator.ofInt(0, 255)
-        revealAnimator?.duration = 1000 
-        revealAnimator?.addUpdateListener { animator ->
-            val alpha = animator.animatedValue as Int
-            try {
-                val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
-                val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
-                
-                polylineMain?.color = newMainColor
-                polylineBorder?.color = newBorderColor
-            } catch (e: Exception) {}
-        }
+    revealAnimator?.duration = 1000
+    revealAnimator?.addUpdateListener { animator ->
+        val alpha = animator.animatedValue as Int
+        try {
+            val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+            val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
+            
+            polylineMain?.color = newMainColor
+            polylineBorder?.color = newBorderColor
+        } catch (e: Exception) {}
+    }
 
-        markerRevealAnimator?.cancel()
-        markerRevealAnimator = ValueAnimator.ofFloat(0f, 1f)
-        markerRevealAnimator?.duration = 1000
-        markerRevealAnimator?.addUpdateListener { animator ->
-            val alpha = animator.animatedValue as Float
-            try {
-                originMarker?.alpha = alpha
-                destinationMarker?.alpha = alpha
-                waypointMarkers.forEach { it.alpha = alpha }
-            } catch (e: Exception) {}
-        }
+    markerRevealAnimator?.cancel()
+    markerRevealAnimator = ValueAnimator.ofFloat(0f, 1f)
+    markerRevealAnimator?.duration = 1000
+    markerRevealAnimator?.addUpdateListener { animator ->
+        val alpha = animator.animatedValue as Float
+        try {
+            originMarker?.alpha = alpha
+            destinationMarker?.alpha = alpha
+            waypointMarkers.forEach { it.alpha = alpha }
+        } catch (e: Exception) {}
+    }
 
-        overlayOrigin.animate().alpha(1f).setDuration(1000).start()
-        overlayDest.animate().alpha(1f).setDuration(1000).start()
+    overlayOrigin.animate().alpha(1f).setDuration(1000).start()
+    overlayDest.animate().alpha(1f).setDuration(1000).start()
 
-        revealAnimator?.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
-                if (viewModel.currentRoutePolyline != null) {
-                    animateRoute(path)
-                }
+    revealAnimator?.addListener(object : AnimatorListenerAdapter() {
+        override fun onAnimationEnd(animation: Animator) {
+            if (viewModel.currentRoutePolyline != null) {
+                animateRoute(path)
+            }
 
-                // 🔥 ФИКС ХОЛОДНОГО СТАРТА: Маршрут нарисовался, теперь принудительно
-                // обновляем статус UI, чтобы закрепить карту, вернуть 3D, паддинги и запустить радары!
-                viewModel.activeOrder.value?.let { currentOrder ->
+            // 🔥 ФИКС ПОВТОРНОГО ЗАТИРАНИЯ КАРТЫ ПРИ ОТМЕНЕ:
+            // Вызываем автоматический пересчет интерфейса только для АКТИВНЫХ статусов (поиск, в пути и т.д.).
+            // Если заказ уже CANCELLED или COMPLETED, повторно вызывать updateStatusUI нельзя,
+            // иначе сцена сотрется через mMap?.clear() внутри drawStylishRoute!
+            viewModel.activeOrder.value?.let { currentOrder ->
+                if (currentOrder.status != "CANCELLED" && currentOrder.status != "COMPLETED") {
                     updateStatusUI(currentOrder)
                 }
             }
-        })
+        }
+    })
 
-        revealAnimator?.start()
-        markerRevealAnimator?.start()
-    }
+    revealAnimator?.start()
+    markerRevealAnimator?.start()
+}
     
     
 
@@ -3420,7 +3427,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     private fun animateRoute(path: List<LatLng>) {
     if (path.isEmpty() || mMap == null || viewModel.currentRoutePolyline == null) return
 
-    // 🔥 ФИКС МИГАНИЯ: Жестко останавливаем старый аниматор перед запуском нового!
+    // 🔥 Жестко останавливаем старый аниматор перед запуском нового
     routeAnimator?.cancel()
     routeAnimator = null
     
@@ -3432,24 +3439,28 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     val colorBase = ContextCompat.getColor(this, R.color.route_main)
     
     val colorGlow = if (isDark) {
-        Color.rgb(240, 240, 240) 
+        Color.rgb(240, 240, 240)
     } else {
-        Color.rgb(112, 112, 112) 
+        Color.rgb(112, 112, 112)
     }
 
     val animOpts = PolylineOptions()
         .addAll(path)
-        .width(8f) 
-        .color(colorBase) 
-        .zIndex(2.5f) 
+        .width(8f)
+        .color(colorBase)
+        .zIndex(2.5f)
         .startCap(RoundCap())
         .endCap(RoundCap())
-        .jointType(JointType.ROUND) 
+        .jointType(JointType.ROUND)
 
     polylineAnim = mMap?.addPolyline(animOpts)
 
     val totalDurationMs = 5500f
     val argbEvaluator = android.animation.ArgbEvaluator() 
+
+    // Локальные переменные для оптимизации памяти на уровне микро-кадров
+    var lastUpdateTime = 0L
+    var lastColor = 0
 
     routeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
         duration = totalDurationMs.toLong()
@@ -3459,12 +3470,19 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
         addUpdateListener { animator ->
             try {
-                // Защита: если линию стерли извне, гасим аниматор
+                // Защита: если линию стерли извне, мгновенно тушим аниматор
                 if (polylineAnim == null) {
                     animator.cancel()
                     return@addUpdateListener
                 }
                 
+                // 1. FPS ОГРАНИЧИТЕЛЬ: обновляем цвет линии не чаще ~20 раз в секунду
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastUpdateTime < 50) {
+                    return@addUpdateListener
+                }
+                lastUpdateTime = currentTime
+
                 val progress = animator.animatedValue as Float
                 val timeMs = progress * totalDurationMs
                 
@@ -3476,7 +3494,12 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                 }
 
                 val currentColor = argbEvaluator.evaluate(fraction, colorBase, colorGlow) as Int
-                polylineAnim?.color = currentColor
+                
+                // 2. ЗАЩИТА НАТИВНОГО ХИПА: шлем вызов Google Maps только если цвет реально изменился
+                if (currentColor != lastColor) {
+                    lastColor = currentColor
+                    polylineAnim?.color = currentColor
+                }
                 
             } catch (_: Exception) {}
         }
@@ -5398,7 +5421,12 @@ if (timeText != lastDrawnRemainingTime || destinationMarker == null) {
 
             btnCancelOrder.visibility = View.GONE
             btnCancelRideDriver.visibility = View.GONE
+            
+            // 🔥 ФИКС ВЕРСТКИ: Железобетонно гасим кнопку маршрута, возвращаем кнопку "Я" 
+            // и аккуратно привязываем её к верхней грани карточки отмены.
             btnRecenterRoute.visibility = View.GONE
+            btnRecenter.visibility = View.VISIBLE
+            setLocationButtonAnchor(R.id.active_order_card)
 
             stopRadarAnimation()
 
