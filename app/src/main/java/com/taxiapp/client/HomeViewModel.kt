@@ -281,27 +281,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
                     if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
                         val route = response.body()!!.routes[0]
-                        currentRoutePolyline = route.overviewPolyline.points
+                        val polylinePoints = route.overviewPolyline.points
+                        currentRoutePolyline = polylinePoints
 
-                        var dist = 0L
-                        var dur = 0L
-                        route.legs.forEach {
-                            dist += it.distance.meters
-                            dur += it.duration.seconds
+                        // 🔥 ОПТИМИЗАЦИЯ 60 FPS: Уводим тяжелые вычисления и декодирование в фоновый поток
+                        viewModelScope.launch(Dispatchers.Default) {
+                            var dist = 0L
+                            var dur = 0L
+                            route.legs.forEach {
+                                dist += it.distance.meters
+                                dur += it.duration.seconds
+                            }
+
+                            val finalDist = dist.toInt()
+                            val finalDur = dur.toInt()
+
+                            // Метод decode для сложных маршрутов больше не блокирует UI-поток приложения
+                            val decoded = com.google.maps.android.PolyUtil.decode(polylinePoints)
+
+                            // Возвращаемся на главный поток исключительно для безопасной публикации данных в UI
+                            withContext(Dispatchers.Main) {
+                                _routeInfo.value = Pair(finalDist, finalDur)
+                                _decodedRoute.value = decoded
+
+                                // Передаємо кількість проміжних точок (waypoints.size) и автоматически рассчитываем цену
+                                loadTariffsAndCalculatePrice(polylinePoints, finalDist, waypoints.size)
+                            }
                         }
-
-                        val finalDist = dist.toInt()
-                        val finalDur = dur.toInt()
-
-                        // 2. СНАЧАЛА оновлюємо дистанцію в UI (щоб локальний бекап-розрахунок знав точні км)
-                        _routeInfo.value = Pair(finalDist, finalDur)
-                        val decoded = com.google.maps.android.PolyUtil.decode(currentRoutePolyline)
-                        _decodedRoute.value = decoded
-
-                        // --- НОВЕ: Передаємо кількість проміжних точок (waypoints.size) ---
-                        // 3. І ТІЛЬКИ ПОТІМ автоматично запитуємо точну ціну у нашого сервера!
-                        loadTariffsAndCalculatePrice(currentRoutePolyline, finalDist, waypoints.size)
-                        // ------------------------------------------------------------------
                     } else {
                         _errorMessage.value = "Маршрут не знайдено"
                     }

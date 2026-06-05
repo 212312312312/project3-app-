@@ -1,5 +1,7 @@
 package com.taxiapp.client.network
 
+import android.content.Context
+import android.os.PowerManager
 import com.taxiapp.client.TaxiApplication
 import com.taxiapp.client.utils.SessionManager
 import okhttp3.Interceptor
@@ -21,20 +23,36 @@ object ApiClient {
         try {
             val response = chain.proceed(chain.request())
             if (response.code == 502 || response.code == 503) {
-                ServerStatusBus.triggerServerError()
+                // Если сервер явно ответил ошибкой 502/503, проверяем, интерактивен ли экран
+                if (isDeviceInteractive()) {
+                    ServerStatusBus.triggerServerError()
+                }
             } else if (response.isSuccessful) {
                 ServerStatusBus.resetServerError()
             }
             response
         } catch (e: Exception) {
             if (e is ConnectException || e is SocketTimeoutException) {
-                if (TaxiApplication.isAppInForeground) {
-                    println(">>> NETWORK: Timeout. App is in FOREGROUND. Triggering error.")
+                // Триггерим ошибку сервера по таймауту ТОЛЬКО если приложение в Foreground
+                // И экран устройства физически активен (горит) перед глазами пользователя
+                if (TaxiApplication.isAppInForeground && isDeviceInteractive()) {
+                    println(">>> NETWORK: Timeout. App is in FOREGROUND and Screen is ON. Triggering error.")
                     ServerStatusBus.triggerServerError()
+                } else {
+                    println(">>> NETWORK: Timeout ignored. App in background or screen is OFF.")
                 }
             }
             throw e
         }
+    }
+
+    /**
+     * Проверяет, включен ли экран устройства в данный момент.
+     */
+    private fun isDeviceInteractive(): Boolean {
+        val context = TaxiApplication.instance?.applicationContext ?: return false
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        return powerManager?.isInteractive ?: false
     }
 
     // Чистый клиент только для /refresh (без AuthInterceptor)
@@ -51,7 +69,7 @@ object ApiClient {
 
     private val authService = cleanRetrofit.create(ApiService::class.java)
 
-    // Идеальный перехватчик токенов
+    // Перехватчик токенов
     private val authInterceptor = Interceptor { chain ->
         val sm = sessionManager
         val originalRequest = chain.request()

@@ -6,6 +6,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import android.view.Window
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
@@ -17,6 +20,7 @@ import kotlin.system.exitProcess
 open class BaseActivity : AppCompatActivity() {
 
     private var maintenanceDialog: Dialog? = null
+    private var lastScreenOnTime: Long = 0
 
     override fun attachBaseContext(newBase: Context) {
         val sessionManager = SessionManager(newBase)
@@ -26,6 +30,9 @@ open class BaseActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Фиксируем время создания/восстановления активности
+        lastScreenOnTime = System.currentTimeMillis()
 
         // 1. Слушаем событие "Сессия истекла"
         ServerStatusBus.sessionExpired.observe(this) { isExpired ->
@@ -38,12 +45,45 @@ open class BaseActivity : AppCompatActivity() {
         // 2. Слушаем ошибки сервера (502/503/Timeout)
         ServerStatusBus.serverError.observe(this) { hasError ->
             if (hasError) {
-                showMaintenanceDialog()
+                if (shouldIgnoreServerError()) {
+                    // Если экран выключен или только включился — гасим ложный триггер в шине
+                    ServerStatusBus.resetServerError()
+                } else {
+                    showMaintenanceDialog()
+                }
             } else {
-                // НОВОЕ: Если ApiClient успешно достучался до сервера, прячем диалог!
                 hideMaintenanceDialog()
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Фиксируем время, когда приложение выходит на передний план после включения экрана
+        lastScreenOnTime = System.currentTimeMillis()
+    }
+
+    /**
+     * Проверяет, нужно ли игнорировать сетевую ошибку на основе состояния экрана.
+     */
+    private fun shouldIgnoreServerError(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+
+        // 1. Если экран физически выключен (устройство спит) — игнорируем ошибку сокетов/HTTP в фоне
+        if (powerManager != null && !powerManager.isInteractive) {
+            println(">>> MAINTENANCE_DEBUG: Screen is OFF. Ignoring server error.")
+            return true
+        }
+
+        // 2. Буфер вежливости: если экран зажгли менее 3 секунд назад, сеть могла не успеть подняться.
+        // Даем WebSocketManager и ApiClient время на авто-переподключение.
+        val timeSinceScreenOn = System.currentTimeMillis() - lastScreenOnTime
+        if (timeSinceScreenOn < 3000) {
+            println(">>> MAINTENANCE_DEBUG: Screen just turned ON ($timeSinceScreenOn ms ago). Postponing error check.")
+            return true
+        }
+
+        return false
     }
 
     private fun handleSessionExpired() {
@@ -82,7 +122,6 @@ open class BaseActivity : AppCompatActivity() {
         maintenanceDialog?.show()
     }
 
-    // НОВОЕ: Метод для автоматического скрытия диалога
     private fun hideMaintenanceDialog() {
         if (maintenanceDialog?.isShowing == true) {
             maintenanceDialog?.dismiss()

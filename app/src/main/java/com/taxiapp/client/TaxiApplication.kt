@@ -12,6 +12,10 @@ class TaxiApplication : Application() {
     companion object {
         // Железный флаг: видно ли приложение сейчас на экране пользователю
         var isAppInForeground = false
+
+        // НОВОЕ: Глобальная ссылка на контекст приложения для сетевого слоя
+        lateinit var instance: TaxiApplication
+            private set
     }
 
     // Счетчик запущенных Activity
@@ -19,6 +23,9 @@ class TaxiApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // НОВОЕ: Запоминаем инстанс сразу при старте приложения
+        instance = this
+
         ApiClient.sessionManager = SessionManager(this)
 
         // Встроенный в Android SDK трекер жизненного цикла экранов

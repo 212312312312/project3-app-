@@ -1748,7 +1748,7 @@ btnChangePayment.setOnClickListener {
     private fun toggleOrderDetails() {
         isOrderDetailsExpanded = !isOrderDetailsExpanded
 
-        // 1. Анімація самої картки
+        // 1. Анімація самої картки (остается плавной через TransitionManager)
         val autoTransition = AutoTransition()
         autoTransition.duration = 250 
         TransitionManager.beginDelayedTransition(activeOrderCard as ViewGroup, autoTransition)
@@ -1756,17 +1756,12 @@ btnChangePayment.setOnClickListener {
         // 2. Зміна видимості деталей
         layoutExpandableDetails.visibility = if (isOrderDetailsExpanded) View.VISIBLE else View.GONE
 
-        // 3. Плавна анімація логотипу Google (замість жорсткого Handler)
-        val paddingAnimator = ValueAnimator.ofFloat(0f, 1f)
-        paddingAnimator.duration = 250
-        paddingAnimator.addUpdateListener {
-            // Цей блок викликається на кожному мікро-кадрі анімації
-            if (!isDestroyed && !isFinishing) {
-                // activeOrderCard плавно змінює висоту, а updateMapPadding бере цю висоту в реальному часі!
-                updateMapPadding(activeOrderCard, 0f, 20f)
-            }
+        // 🔥 КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ: Полностью удален покадровый ValueAnimator, 
+        // который вызывал updateMapPadding на каждом микро-кадре. 
+        // Вместо этого один раз статично обновляем паддинг для новой высоты.
+        if (!isDestroyed && !isFinishing) {
+            updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
         }
-        paddingAnimator.start()
     }
 
     private fun setDestination(place: Place) {
@@ -2717,7 +2712,6 @@ class RoundedBackgroundSpan(
         }
         lastDrawnPathHash = pathHash
 
-        // ИСПОЛЬЗУЕМ СТАТУС ИЗ ПАРАМЕТРА — теперь рассинхронизация при перезаходе невозможна!
         val isSearchingState = (orderStatus == "REQUESTED" || orderStatus == "OFFERING")
 
         try {
@@ -2805,11 +2799,9 @@ class RoundedBackgroundSpan(
             overlayDest.visibility = View.VISIBLE
         }
 
-        // Промежуточные остановки (Скрыты в режиме поиска)
         if (!isSearchingState) {
             val waypointIcon = BitmapHelper.vectorToBitmapDescriptor(this, R.drawable.ic_waypoint_dot)
             for (wpPair in currentWaypoints) {
-                // Жесткая защита от улета маркера в координаты (0,0)
                 if (wpPair.first.latitude != 0.0 && wpPair.first.longitude != 0.0) {
                     val marker = mMap?.addMarker(MarkerOptions()
                         .position(wpPair.first)
@@ -2823,7 +2815,6 @@ class RoundedBackgroundSpan(
             }
         }
 
-        // Логика управления 3D/2D камерой
         if (isSearchingState) {
             btnRecenterRoute.visibility = View.GONE
             btnRecenter.visibility = View.GONE
@@ -2856,21 +2847,34 @@ class RoundedBackgroundSpan(
                     val paddingSide = convertDpToPixel(80f).toInt()
 
                     if (orderStatus != "CANCELLED") {
-    mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom)
-}
+                        mMap?.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom)
+                    }
 
                     if (orderStatus == "ACCEPTED" || orderStatus == "DRIVER_ARRIVED" || orderStatus == "IN_PROGRESS") {
                         runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
                     } else {
-                        val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
-                        mMap?.animateCamera(cameraUpdate, 800, object : GoogleMap.CancelableCallback {
-                            override fun onFinish() {
-                                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                        // 🔥 ОПТИМИЗАЦИЯ 60 FPS: Гасим накладывающиеся анимации камеры
+                        mMap?.stopAnimation()
+
+                        // 🔥 ТАЙМ-ЧЕЙНИНГ: Даем 200 мс, чтобы клавиатура закрылась, а панели встали на места.
+                        // UI-поток полностью освобождается, обеспечивая масляно-плавный полет карты.
+                        visibleBottomPanel.postDelayed({
+                            if (!isFinishing && !isDestroyed && mMap != null) {
+                                try {
+                                    val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
+                                    mMap?.animateCamera(cameraUpdate, 500, object : GoogleMap.CancelableCallback {
+                                        override fun onFinish() {
+                                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                                        }
+                                        override fun onCancel() {
+                                            runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                                        }
+                                    })
+                                } catch (e: Exception) {
+                                    runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
+                                }
                             }
-                            override fun onCancel() {
-                                runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
-                            }
-                        })
+                        }, 200)
                     }
                 } catch (e: Exception) {
                     runOnUiThread { startRouteRevealAnimation(colorMain, colorBorder, path) }
@@ -3425,88 +3429,81 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun animateRoute(path: List<LatLng>) {
-    if (path.isEmpty() || mMap == null || viewModel.currentRoutePolyline == null) return
+        if (path.isEmpty() || mMap == null || viewModel.currentRoutePolyline == null) return
 
-    // 🔥 Жестко останавливаем старый аниматор перед запуском нового
-    routeAnimator?.cancel()
-    routeAnimator = null
-    
-    // Удаляем старую анимационную линию, если она осталась в памяти
-    polylineAnim?.remove()
-    polylineAnim = null
+        // Жестко останавливаем старый аниматор перед запуском нового
+        routeAnimator?.cancel()
+        routeAnimator = null
+        
+        // Удаляем старую анимационную линию, если она осталась в памяти
+        polylineAnim?.remove()
+        polylineAnim = null
 
-    val isDark = sessionManager.isDarkMode()
-    val colorBase = ContextCompat.getColor(this, R.color.route_main)
-    
-    val colorGlow = if (isDark) {
-        Color.rgb(240, 240, 240)
-    } else {
-        Color.rgb(112, 112, 112)
-    }
-
-    val animOpts = PolylineOptions()
-        .addAll(path)
-        .width(8f)
-        .color(colorBase)
-        .zIndex(2.5f)
-        .startCap(RoundCap())
-        .endCap(RoundCap())
-        .jointType(JointType.ROUND)
-
-    polylineAnim = mMap?.addPolyline(animOpts)
-
-    val totalDurationMs = 5500f
-    val argbEvaluator = android.animation.ArgbEvaluator() 
-
-    // Локальные переменные для оптимизации памяти на уровне микро-кадров
-    var lastUpdateTime = 0L
-    var lastColor = 0
-
-    routeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-        duration = totalDurationMs.toLong()
-        interpolator = LinearInterpolator()
-        repeatCount = ValueAnimator.INFINITE
-        repeatMode = ValueAnimator.RESTART
-
-        addUpdateListener { animator ->
-            try {
-                // Защита: если линию стерли извне, мгновенно тушим аниматор
-                if (polylineAnim == null) {
-                    animator.cancel()
-                    return@addUpdateListener
-                }
-                
-                // 1. FPS ОГРАНИЧИТЕЛЬ: обновляем цвет линии не чаще ~20 раз в секунду
-                val currentTime = System.currentTimeMillis()
-                if (currentTime - lastUpdateTime < 50) {
-                    return@addUpdateListener
-                }
-                lastUpdateTime = currentTime
-
-                val progress = animator.animatedValue as Float
-                val timeMs = progress * totalDurationMs
-                
-                val fraction = when {
-                    timeMs <= 750f -> timeMs / 750f
-                    timeMs <= 1250f -> 1f
-                    timeMs <= 3750f -> 1f - ((timeMs - 1250f) / 2500f)
-                    else -> 0f
-                }
-
-                val currentColor = argbEvaluator.evaluate(fraction, colorBase, colorGlow) as Int
-                
-                // 2. ЗАЩИТА НАТИВНОГО ХИПА: шлем вызов Google Maps только если цвет реально изменился
-                if (currentColor != lastColor) {
-                    lastColor = currentColor
-                    polylineAnim?.color = currentColor
-                }
-                
-            } catch (_: Exception) {}
+        val isDark = sessionManager.isDarkMode()
+        val colorBase = ContextCompat.getColor(this, R.color.route_main)
+        
+        val colorGlow = if (isDark) {
+            Color.rgb(240, 240, 240)
+        } else {
+            Color.rgb(112, 112, 112)
         }
+
+        val animOpts = PolylineOptions()
+            .addAll(path)
+            .width(8f)
+            .color(colorBase)
+            .zIndex(2.5f)
+            .startCap(RoundCap())
+            .endCap(RoundCap())
+            .jointType(JointType.ROUND)
+
+        polylineAnim = mMap?.addPolyline(animOpts)
+
+        val totalDurationMs = 5500f
+        val argbEvaluator = android.animation.ArgbEvaluator() 
+
+        var lastColor = 0
+
+        routeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = totalDurationMs.toLong()
+            interpolator = LinearInterpolator()
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+
+            addUpdateListener { animator ->
+                try {
+                    if (polylineAnim == null) {
+                        animator.cancel()
+                        return@addUpdateListener
+                    }
+                    
+                    // 🔥 ОПТИМИЗАЦИЯ 60 FPS: Ограничитель в 50мс полностью удален!
+                    // Цвет плавно пересчитывается на каждом кадре дисплея,
+                    // создавая дорогой и мягкий эффект "дыхания" линии маршрута.
+                    val progress = animator.animatedValue as Float
+                    val timeMs = progress * totalDurationMs
+                    
+                    val fraction = when {
+                        timeMs <= 750f -> timeMs / 750f
+                        timeMs <= 1250f -> 1f
+                        timeMs <= 3750f -> 1f - ((timeMs - 1250f) / 2500f)
+                        else -> 0f
+                    }
+
+                    val currentColor = argbEvaluator.evaluate(fraction, colorBase, colorGlow) as Int
+                    
+                    // Защита нативного хипа: шлем вызов Google Maps только если цвет реально изменился
+                    if (currentColor != lastColor) {
+                        lastColor = currentColor
+                        polylineAnim?.color = currentColor
+                    }
+                    
+                } catch (_: Exception) {}
+            }
+        }
+        
+        routeAnimator?.start()
     }
-    
-    routeAnimator?.start()
-}
 
     private fun showChangePaymentDialog() {
         // Создаем красивый BottomSheetDialog
@@ -5809,43 +5806,34 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
     }
 
     private fun animateMapPadding(fromHeight: Int, toHeight: Int, recenterMap: Boolean) {
-    val params = activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams
-    val marginBottom = params?.bottomMargin ?: 0
-    val sideMargin = params?.leftMargin ?: 0
-    val extraBuffer = convertDpToPixel(4f).toInt() // 4dp достаточно, чтобы логотип не лип вплотную
-    val topPadding = convertDpToPixel(0f).toInt()
+        val params = activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams
+        val marginBottom = params?.bottomMargin ?: 0
+        val sideMargin = params?.leftMargin ?: 0
+        val extraBuffer = convertDpToPixel(4f).toInt() 
+        val topPadding = convertDpToPixel(0f).toInt()
 
-    ValueAnimator.ofInt(fromHeight, toHeight).apply {
-        duration = 300
-        interpolator = android.view.animation.AccelerateDecelerateInterpolator()
-        addUpdateListener { animator ->
-            val animatedHeight = animator.animatedValue as Int
-            // Вычисляем отступ для карты на текущем микро-кадре анимации
-            val totalBottomPadding = animatedHeight + marginBottom + extraBuffer
-            mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
-        }
-        addListener(object : android.animation.AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: android.animation.Animator) {
-                // Центрируем карту по границам маршрута только для финальных статусов
-                if (recenterMap && viewModel.currentRoutePolyline != null) {
-                    try {
-                        val boundsBuilder = LatLngBounds.Builder()
-                        if (originPlace != null && destinationPlace != null) {
-                            boundsBuilder.include(originPlace!!.latLng!!)
-                            boundsBuilder.include(destinationPlace!!.latLng!!)
-                            currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                            decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+        // 🔥 КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ 60 FPS: Тотально удален покадровый ValueAnimator!
+        // Выставляем целевой паддинг сразу, чтобы кнопки Google Maps мгновенно заняли позиции без фризов.
+        val totalBottomPadding = toHeight + marginBottom + extraBuffer
+        mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
 
-                            val labelSafePadding = convertDpToPixel(80f).toInt()
-                            mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
-                        }
-                    } catch (e: Exception) {}
+        // Плавное центрирование карты по границам маршрута средствами встроенного аппаратного движка
+        if (recenterMap && viewModel.currentRoutePolyline != null) {
+            try {
+                mMap?.stopAnimation() // Сбрасываем стек накладывающихся анимаций
+                val boundsBuilder = LatLngBounds.Builder()
+                if (originPlace != null && destinationPlace != null) {
+                    boundsBuilder.include(originPlace!!.latLng!!)
+                    boundsBuilder.include(destinationPlace!!.latLng!!)
+                    currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                    decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+
+                    val labelSafePadding = convertDpToPixel(80f).toInt()
+                    mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
                 }
-            }
-        })
-        start()
+            } catch (e: Exception) {}
+        }
     }
-}
     
     private fun resetUI() {
         tariffCustomPrices.clear()
