@@ -5029,82 +5029,86 @@ val fromHeight = if (wasInSearchMode) {
         }
 
         "REQUESTED", "OFFERING" -> {
-    updateOrderProgress(0)
-    orderStatusText.text = getString(R.string.status_searching_driver)
-    startStatusBlinking()
+            updateOrderProgress(0)
+            orderStatusText.text = getString(R.string.status_searching_driver)
+            startStatusBlinking()
 
-    layoutSearchControls.visibility = View.VISIBLE
-    layoutDriverFoundState.visibility = View.GONE
+            layoutSearchControls.visibility = View.VISIBLE
+            layoutDriverFoundState.visibility = View.GONE
 
-    layoutSearchDetails.visibility = View.VISIBLE
-    findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE
-    layoutDriverDetails.visibility = View.GONE
-    layoutPaymentCompleted.visibility = View.GONE
+            layoutSearchDetails.visibility = View.VISIBLE
+            findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE
+            layoutDriverDetails.visibility = View.GONE
+            layoutPaymentCompleted.visibility = View.GONE
 
-    btnCancelOrder.visibility = View.VISIBLE
-    btnCancelRideDriver.visibility = View.GONE
+            btnCancelOrder.visibility = View.VISIBLE
+            btnCancelRideDriver.visibility = View.GONE
 
-    overlayOrigin.visibility = View.GONE
-    overlayDest.visibility = View.GONE
+            overlayOrigin.visibility = View.GONE
+            overlayDest.visibility = View.GONE
 
-    stopDriverTracking()
-    stopWaitingTimer()
+            stopDriverTracking()
+            stopWaitingTimer()
 
-    btnRecenterRoute.visibility = View.GONE
-    btnRecenter.visibility = View.GONE
+            btnRecenterRoute.visibility = View.GONE
+            btnRecenter.visibility = View.GONE
 
-    // Блокируем жесты, чтобы пользователь случайно не увёл камеру от радара
-    mMap?.uiSettings?.isScrollGesturesEnabled = false
-    mMap?.uiSettings?.isZoomGesturesEnabled = false
+            // Блокируем жесты, чтобы пользователь случайно не увёл камеру от радара
+            mMap?.uiSettings?.isScrollGesturesEnabled = false
+            mMap?.uiSettings?.isZoomGesturesEnabled = false
 
-    // 🔥 ИСПРАВЛЕНИЕ ЛОГОТИПА GOOGLE: 
-    // Вместо огромного паддинга выставляем минимальный безопасный зазор (24dp), 
-    // благодаря чему в 3D режиме логотип Google железно остаётся в самом низу экрана.
-    val sideMargin = (activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams)?.leftMargin ?: 0
-    val topPadding = convertDpToPixel(20f).toInt()
-    val bottomPadding = convertDpToPixel(24f).toInt() 
-    mMap?.setPadding(sideMargin, topPadding, sideMargin, bottomPadding)
+            // Выставляем безопасный зазор для логотипа Google
+            val sideMargin = (activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams)?.leftMargin ?: 0
+            val topPadding = convertDpToPixel(20f).toInt()
+            val bottomPadding = convertDpToPixel(24f).toInt()
 
-    val originLoc = originPlace?.latLng ?: com.google.android.gms.maps.model.LatLng(
-        order.originLat ?: 0.0, 
-        order.originLng ?: 0.0
-    )
-    
-    if (!isRadarAnimationRunning) {
-        startRadarAnimation(originLoc)
-    }
+            // 🔥 ФИКС 1: Перед установкой новых параметров прерываем любые текущие нативные анимации камеры,
+            // чтобы они не конфликтовали с изменением матрицы проекции
+            mMap?.stopAnimation()
+            mMap?.setPadding(sideMargin, topPadding, sideMargin, bottomPadding)
 
-    if (!isCameraFocusedOnSearch) {
-        isCameraFocusedOnSearch = true
+            val originLoc = originPlace?.latLng ?: com.google.android.gms.maps.model.LatLng(
+                order.originLat ?: 0.0,
+                order.originLng ?: 0.0
+            )
 
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            if (!isDestroyed && !isFinishing && mMap != null) {
-                
-                // 🔥 ИСПРАВЛЕНИЕ ПОЗИЦИИ МАРКЕРА НА ЭКРАНЕ:
-                // Географически смещаем центр камеры чуть южнее по широте. 
-                // Это заставит Точку А подняться на экране вверх, и карточка её не перекроет!
-                // ЗАМЕНИ НА ЭТОТ ВАРИАНТ:
-                val shiftedSearchTarget = com.google.android.gms.maps.model.LatLng(
-                    originLoc.latitude - 0.0002, // Уменьшили сдвиг, чтобы вернуть маркер к центру экрана
-                    originLoc.longitude
-                )
-
-                val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
-                    .target(shiftedSearchTarget) // Наводимся на смещенную координату
-                    .zoom(17.8f)      
-                    .tilt(50f) // Наш 3D режим       
-                    .bearing(0f)
-                    .build()
-
-                mMap?.animateCamera(
-                    com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition),
-                    1400,
-                    null
-                )
+            if (!isRadarAnimationRunning) {
+                startRadarAnimation(originLoc)
             }
-        }, 180)
-    }
-}
+
+            if (!isCameraFocusedOnSearch) {
+                isCameraFocusedOnSearch = true
+
+                // 🔥 ФИКС 2: Увеличиваем задержку до 320 мс (время 1.5-2 кадров дисплея).
+                // Это дает железную гарантию, что движок карт успеет перестроить матрицу координат
+                // после изменения setPadding() даже на «холодном» старте приложения.
+                activeOrderCard.postDelayed({
+                    if (!isFinishing && !isDestroyed && mMap != null) {
+
+                        // 🔥 ФИКС 3: Оптимизируем сдвиг. Корректируем шаг по широте в зависимости от зума,
+                        // чтобы маркер всегда оставался в идеальной верхней трети экрана (не улетая за границы).
+                        val shiftedSearchTarget = com.google.android.gms.maps.model.LatLng(
+                            originLoc.latitude - 0.00035, // Идеально выверенное смещение для зума 17.5
+                            originLoc.longitude
+                        )
+
+                        val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                            .target(shiftedSearchTarget)
+                            .zoom(17.5f) // Чуть-чуть уменьшаем зум (с 17.8), чтобы дать Точке А больше воздуха сверху
+                            .tilt(45f)   // Мягкий угол наклона для 3D режима (45 вместо 50 снижает искажение проекции)
+                            .bearing(0f)
+                            .build()
+
+                        // Запускаем плавную анимацию полета
+                        mMap?.animateCamera(
+                            com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition),
+                            1200, // Комфортное время полета в мс
+                            null
+                        )
+                    }
+                }, 320) // Безопасный тайминг для синхронизации потоков
+            }
+        }
 
         "ACCEPTED" -> {
             isCameraFocusedOnSearch = false 
