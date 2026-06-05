@@ -69,14 +69,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     var currentCity: CityData? = null
     var currentRoutePolyline: String? = null
 
-    // Таймер для опроса статуса
-    private val statusHandler = Handler(Looper.getMainLooper())
-    private val statusRunnable = object : Runnable {
-        override fun run() {
-            checkOrderStatus()
-            statusHandler.postDelayed(this, 3000)
-        }
-    }
+    
 
     init {
         // При старте проверяем, есть ли активный заказ
@@ -422,40 +415,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
-    private fun checkOrderStatus() {
-        val id = activeOrderId ?: return
-
-        ApiClient.instance.getOrder(id).enqueue(object : Callback<TaxiOrderDto> {
-            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
-                if (response.isSuccessful) {
-                    val order = response.body()
-                    if (order != null) {
-                        _activeOrder.value = order
-
-                        // ИСПРАВЛЕНИЕ: Мы НЕ обновляем сервис, если заказ отменен или завершен
-                        if (order.status == "COMPLETED" || order.status == "CANCELLED") {
-                            clearOrderState() // 🔥 ФИКС: Тотальный сброс стейта и остановка хендлера
-                        } else {
-                            // Запускаем/обновляем сервис ТОЛЬКО если заказ в процессе
-                            updateOrderStatusService(order)
-                        }
-                    }
-                } else {
-                    // 🔥 ЖЕЛЕЗОБЕТОННЫЙ ФИКС: Если сервер вернул 404 (заказа больше нет) — 
-                    // моментально зачищаем стейты, чтобы не ломать логику новых заказов!
-                    if (response.code() == 404) {
-                        Log.d("HomeViewModel", "Заказ $id не найден на сервере (404). Очищаем стейт.")
-                        clearOrderState()
-                    }
-                }
-            }
-            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {}
-        })
-    }
+    
 
     fun startStatusPolling() {
-        statusHandler.removeCallbacks(statusRunnable)
-        statusHandler.post(statusRunnable)
+    
     }
 
     // --- API: Смена типа оплаты "на лету" ---
@@ -505,8 +468,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopStatusPolling() {
-        statusHandler.removeCallbacks(statusRunnable)
-        Log.d("HomeViewModel", "⏱️ Фоновый опрос статуса заказа успешно остановлен")
     }
 
     // Очистка состояния
