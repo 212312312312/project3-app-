@@ -19,6 +19,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.LocationServices
@@ -42,9 +44,8 @@ import java.util.Locale
 class AddressPickerActivity : BaseActivity() {
 
     companion object {
-
-        const val RESULT_TARGET_TYPE = "result_target_type" // Тип поля (A, B или Waypoint)
-        const val RESULT_WAYPOINT_INDEX = "result_waypoint_index" // Индекс остановки
+        const val RESULT_TARGET_TYPE = "result_target_type"
+        const val RESULT_WAYPOINT_INDEX = "result_waypoint_index"
 
         const val TARGET_ORIGIN = "target_origin"
         const val TARGET_DESTINATION = "target_destination"
@@ -76,11 +77,9 @@ class AddressPickerActivity : BaseActivity() {
 
     private var isOrigin: Boolean = false
 
-    // cityLat/Lng - центр области поиска
     private var cityLat: Double = 50.4501
     private var cityLng: Double = 30.5234
 
-    // userLatLng - РЕАЛЬНОЕ положение пользователя (для сортировки по расстоянию)
     private var userLatLng: LatLng? = null
 
     private lateinit var placesClient: PlacesClient
@@ -109,8 +108,6 @@ class AddressPickerActivity : BaseActivity() {
 
     private val searchHandler = Handler(Looper.getMainLooper())
     private var searchRunnable: Runnable? = null
-
-    // ЛАУНЧЕР ДЛЯ MAP PICKER ВИДАЛЕНО, ТЕПЕР МИ ПРОСТО ПОВЕРТАЄМОСЬ НАЗАД
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -145,6 +142,27 @@ class AddressPickerActivity : BaseActivity() {
         }
 
         initUI(isOrigin, shouldHideLocation, currentAddressA, currentLatA, currentLngA)
+
+        // Обработка Insets для плавного прижатия кнопки к клавиатуре
+        val keyboardAccessory = findViewById<View>(R.id.layout_keyboard_accessory)
+        ViewCompat.setOnApplyWindowInsetsListener(keyboardAccessory) { view, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+
+            val bottomPadding = if (imeInsets.bottom > 0) {
+                imeInsets.bottom
+            } else {
+                systemBarsInsets.bottom
+            }
+
+            view.setPadding(
+                view.paddingLeft,
+                view.paddingTop,
+                view.paddingRight,
+                bottomPadding
+            )
+            insets
+        }
     }
 
     private fun initUI(isOriginMode: Boolean, hideMyLocation: Boolean, currentAddressA: String?, currentLatA: Double, currentLngA: Double) {
@@ -194,13 +212,11 @@ class AddressPickerActivity : BaseActivity() {
         }
 
         btnMyLocation.setOnClickListener { detectMyLocation() }
-        
-        // НОВА ЛОГІКА ДЛЯ КНОПКИ "ВИБРАТИ НА КАРТІ"
+
         btnPickOnMap.setOnClickListener {
             val intent = Intent()
             intent.putExtra(RESULT_ACTION, "map_click")
 
-            // 1. СОХРАНЯЕМ ОТКУДА
             val originLatLng = fieldCoordinates[etOrigin]
             if (originLatLng != null) {
                 intent.putExtra(RESULT_ORIGIN_NAME, etOrigin.text.toString())
@@ -208,7 +224,6 @@ class AddressPickerActivity : BaseActivity() {
                 intent.putExtra(RESULT_ORIGIN_LNG, originLatLng.longitude)
             }
 
-            // 2. СОХРАНЯЕМ КУДА
             val destLatLng = fieldCoordinates[etDestination]
             if (destLatLng != null) {
                 intent.putExtra(RESULT_NAME, etDestination.text.toString())
@@ -216,7 +231,6 @@ class AddressPickerActivity : BaseActivity() {
                 intent.putExtra(RESULT_LNG, destLatLng.longitude)
             }
 
-            // 3. СОХРАНЯЕМ ЗУПИНКИ (ФИКС: Сохраняем всегда, даже если поля пустые!)
             if (waypointViews.isNotEmpty()) {
                 val wLats = DoubleArray(waypointViews.size)
                 val wLngs = DoubleArray(waypointViews.size)
@@ -242,7 +256,6 @@ class AddressPickerActivity : BaseActivity() {
                 intent.putStringArrayListExtra(RESULT_WAYPOINTS_NAMES, wNames)
             }
 
-            // Определяем цель
             val targetType = when (activeEditText?.id) {
                 R.id.et_origin -> TARGET_ORIGIN
                 R.id.et_destination -> TARGET_DESTINATION
@@ -278,7 +291,6 @@ class AddressPickerActivity : BaseActivity() {
         activeEditText = targetEt
         targetEt.hint = hint
 
-        // Жорстко переносимо курсор в кінець, якщо там вже є текст
         targetEt.requestFocus()
         if (targetEt.text.isNotEmpty()) {
             targetEt.setSelection(targetEt.text.length)
@@ -293,10 +305,8 @@ class AddressPickerActivity : BaseActivity() {
 
     private fun configureStandardMode(isOriginMode: Boolean, currentAddressA: String?, latA: Double, lngA: Double) {
         if (isOriginMode) {
-            // --- РЕЖИМ ВИБОРУ ТОЧКИ А (ЗВІДКИ) ---
             activeEditText = etOrigin
 
-            // 1. Спочатку встановлюємо текст
             val addressText = if (!currentAddressA.isNullOrEmpty()) {
                 AddressUtils.formatAddress(currentAddressA)
             } else {
@@ -308,7 +318,6 @@ class AddressPickerActivity : BaseActivity() {
                 fieldCoordinates[etOrigin] = LatLng(latA, lngA)
             }
 
-            // 2. ТІЛЬКИ ПОТІМ запитуємо фокус і жорстко ставимо курсор в кінець
             etOrigin.requestFocus()
             if (etOrigin.text.isNotEmpty()) {
                 etOrigin.setSelection(etOrigin.text.length)
@@ -319,10 +328,8 @@ class AddressPickerActivity : BaseActivity() {
             rowDestination.visibility = View.GONE
             containerWaypoints.visibility = View.GONE
         } else {
-            // --- РЕЖИМ ВИБОРУ ТОЧКИ Б АБО ЗУПИНОК ---
             activeEditText = etDestination
 
-            // 1. Встановлюємо точку А (вона завжди передається як база)
             val originText = AddressUtils.formatAddress(currentAddressA ?: "Поточне місце")
             etOrigin.setText(originText)
             if (latA != 0.0 && lngA != 0.0) {
@@ -338,7 +345,6 @@ class AddressPickerActivity : BaseActivity() {
             rowDestination.visibility = View.VISIBLE
             containerWaypoints.visibility = View.VISIBLE
 
-            // 2. Відновлюємо точку Б (Куди)
             val prefillDestName = intent.getStringExtra("prefill_dest_name")
             if (!prefillDestName.isNullOrEmpty()) {
                 val lat = intent.getDoubleExtra("prefill_dest_lat", 0.0)
@@ -349,7 +355,6 @@ class AddressPickerActivity : BaseActivity() {
                 }
             }
 
-            // 3. Відновлюємо зупинки (Waypoints)
             val wLats = intent.getDoubleArrayExtra("prefill_waypoints_lats")
             val wLngs = intent.getDoubleArrayExtra("prefill_waypoints_lngs")
             val wNames = intent.getStringArrayListExtra("prefill_waypoints_names")
@@ -379,13 +384,13 @@ class AddressPickerActivity : BaseActivity() {
                 }
             }
 
-            // 4. ТІЛЬКИ ПОТІМ запитуємо фокус для поля "Куди" і ставимо курсор в кінець
             etDestination.requestFocus()
             if (etDestination.text.isNotEmpty()) {
                 etDestination.setSelection(etDestination.text.length)
             }
         }
     }
+
     private fun performSearch(query: String) {
         val searchBiasCenter = LatLng(cityLat, cityLng)
         val radiusKm = 50.0
@@ -470,15 +475,19 @@ class AddressPickerActivity : BaseActivity() {
                     val query = s.toString()
                     fieldCoordinates.remove(editText)
 
+                    // Вызываем единую функцию управления видимостью
+                    updateButtonsVisibility(intent.getBooleanExtra(EXTRA_HIDE_MY_LOCATION, false))
+
                     if (query.isEmpty()) {
-                        updateButtonsVisibility(intent.getBooleanExtra(EXTRA_HIDE_MY_LOCATION, false))
                         adapter.submitList(emptyList())
                     } else {
-                        layoutQuickActions.visibility = View.GONE
                         if (query.length >= 2) {
                             searchRunnable?.let { searchHandler.removeCallbacks(it) }
                             searchRunnable = Runnable { performSearch(query) }
                             searchHandler.postDelayed(searchRunnable!!, 300)
+                        } else {
+                            // Если ввели 1 символ, очищаем старый список, чтобы не висел
+                            adapter.submitList(emptyList())
                         }
                     }
                 }
@@ -487,17 +496,25 @@ class AddressPickerActivity : BaseActivity() {
     }
 
     private fun updateButtonsVisibility(hideMyLocation: Boolean) {
-        if (activeEditText?.text.isNullOrEmpty()) {
+        val isEmpty = activeEditText?.text.isNullOrEmpty()
+
+        if (isEmpty) {
+            // Если поле пустое, показываем быстрые действия
             layoutQuickActions.visibility = View.VISIBLE
             if (isOrigin && activeEditText == etOrigin && !hideMyLocation) {
                 btnMyLocation.visibility = View.VISIBLE
             } else {
                 btnMyLocation.visibility = View.GONE
             }
-            btnPickOnMap.visibility = View.VISIBLE
         } else {
+            // Текст пошел — скрываем быстрые действия,
+            // но чтобы верхняя панель не «прыгала», мы можем использовать View.INVISIBLE вместо GONE,
+            // либо зафиксировать высоту. Давай сделаем GONE, но зафиксируем поведение в инпуте.
             layoutQuickActions.visibility = View.GONE
         }
+
+        // Нижняя кнопка "Указать на карте" всегда активна и видна
+        btnPickOnMap.visibility = View.VISIBLE
     }
 
     private fun addWaypointInput() {
@@ -512,8 +529,6 @@ class AddressPickerActivity : BaseActivity() {
             waypointViews.remove(view)
             checkAddButtonState()
 
-            // НОВАЯ ЛОГИКА: Если мы удалили пустую остановку, а конечный адрес
-            // и другие остановки уже заполнены -> завершаем экран и строим маршрут
             if (!isOrigin && isFinishConditionMet()) {
                 returnResultData()
             }
@@ -570,26 +585,18 @@ class AddressPickerActivity : BaseActivity() {
 
     private fun isFinishConditionMet(): Boolean {
         if (isOrigin) {
-            // Если выбираем откуда, достаточно проверить, что введено это поле
             return fieldCoordinates.containsKey(etOrigin)
         } else {
-            // Если выбираем куда/остановки:
-
-            // 1. Конечный адрес обязателен
             if (!fieldCoordinates.containsKey(etDestination)) {
                 return false
             }
 
-            // 2. Проверяем все добавленные поля остановок
             for (view in waypointViews) {
                 val etWaypoint = view.findViewById<EditText>(R.id.et_waypoint)
                 if (!fieldCoordinates.containsKey(etWaypoint)) {
-                    // Нашли пустую остановку (без координат) — остаемся на экране!
                     return false
                 }
             }
-
-            // Если есть конечный адрес и все добавленные остановки заполнены:
             return true
         }
     }
