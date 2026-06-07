@@ -2242,10 +2242,6 @@ btnChangePayment.setOnClickListener {
         mMap?.setOnMapLoadedCallback {
             revealInterface()
         }
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            revealInterface()
-        }, 2500)
     }
 
     private var isInterfaceRevealed = false
