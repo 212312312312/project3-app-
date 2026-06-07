@@ -423,21 +423,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- API: Смена типа оплаты "на лету" ---
     fun updateActiveOrderPaymentMethod(method: String) {
-        val id = activeOrderId ?: return
-        _isLoading.value = true
-        ApiClient.instance.updatePaymentMethod(id, method).enqueue(object : Callback<MessageResponseDto> {
-            override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
-                _isLoading.value = false
-                if (!response.isSuccessful) {
-                    _errorMessage.value = "Помилка зміни оплати"
+    val id = activeOrderId ?: return
+    _isLoading.value = true
+    ApiClient.instance.updatePaymentMethod(id, method).enqueue(object : Callback<MessageResponseDto> {
+        override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
+            _isLoading.value = false
+            if (response.isSuccessful) {
+                // 🔥 ФИКС БАГА 1: Мгновенно обновляем локальный объект заказа в LiveData
+                _activeOrder.value?.let { currentOrder ->
+                    _activeOrder.value = currentOrder.copy(paymentMethod = method)
                 }
+            } else {
+                _errorMessage.value = "Помилка зміни оплати"
             }
-            override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
-                _isLoading.value = false
-                _errorMessage.value = "Помилка мережі"
-            }
-        })
-    }
+        }
+        override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
+            _isLoading.value = false
+            _errorMessage.value = "Помилка мережі"
+        }
+    })
+}
 
     // --- API: Изменение цены "на лету" ---
     fun updateActiveOrderPrice(addedValue: Double) {
