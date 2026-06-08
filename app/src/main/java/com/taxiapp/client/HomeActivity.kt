@@ -5421,8 +5421,6 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
             "CANCELLED" -> {
                 isCameraFocusedOnSearch = false
-                mMap?.uiSettings?.isScrollGesturesEnabled = true
-                mMap?.uiSettings?.isZoomGesturesEnabled = true
                 stopStatusBlinking()
                 resetOrderDetailsState()
                 orderStatusText.text = getString(R.string.status_cancelled)
@@ -5430,7 +5428,6 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.GONE
-
                 layoutSearchDetails.visibility = View.GONE
                 findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.GONE
                 layoutDriverDetails.visibility = View.GONE
@@ -5438,53 +5435,46 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.GONE
-
                 btnRecenterRoute.visibility = View.GONE
                 btnRecenter.visibility = View.VISIBLE
                 setLocationButtonAnchor(R.id.active_order_card)
 
                 stopRadarAnimation()
-
-                val polylineStr = order.googleRoutePolyline ?: viewModel.currentRoutePolyline
-                if (!polylineStr.isNullOrEmpty()) {
-                    try {
-                        val mainRoutePoints = PolyUtil.decode(polylineStr)
-                        if (!mainRoutePoints.isNullOrEmpty()) {
-                            decodedRoutePoints = mainRoutePoints
-
-                            if (originPlace == null) {
-                                originPlace = Place.builder()
-                                    .setName(order.fromAddress ?: "А")
-                                    .setLatLng(LatLng(order.originLat ?: 0.0, order.originLng ?: 0.0))
-                                    .build()
-                            }
-                            if (destinationPlace == null) {
-                                destinationPlace = Place.builder()
-                                    .setName(order.toAddress ?: "Б")
-                                    .setLatLng(LatLng(order.destLat ?: 0.0, order.destLng ?: 0.0))
-                                    .build()
-                            }
-
-                            currentWaypoints.clear()
-                            order.stops?.forEach { stop ->
-                                currentWaypoints.add(Pair(LatLng(stop.lat, stop.lng), stop.address))
-                            }
-
-                            overlayOrigin.visibility = View.VISIBLE
-                            overlayDest.visibility = View.VISIBLE
-
-                            drawStylishRoute(mainRoutePoints, order.status)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-
                 stopDriverTracking()
                 stopWaitingTimer()
 
+                // 🔥 МГНОВЕННАЯ ОЧИСТКА ГРАФИКИ: убираем старый кэш прямо сейчас
+                mMap?.clear() 
+                polylineMain?.remove()
+                polylineMain = null
+                polylineBorder?.remove()
+                polylineBorder = null
+                polylineAnim?.remove()
+                polylineAnim = null
+                
+                destinationMarker = null
+                originMarker = null
+                driverMarker = null
+                waypointMarkers.clear()
+                currentWaypoints.clear()
+
+                isRouteMode = false
+                viewModel.currentRoutePolyline = null
+                decodedRoutePoints = null
+
+                // Возвращаем пин-маркер в центр экрана
+                centerPin.translationY = 0f
+                centerPin.animate().cancel()
+                centerPin.alpha = 1f
+                centerPin.visibility = View.VISIBLE
+                try { pinShadow.visibility = View.VISIBLE } catch (e: Exception) {}
+
+                // 🔥 ОДИН ПЛАВНЫЙ ПЕРЕЛЕТ: включаем панель поиска и сразу наводим на пользователя
+                showAddressPanel()
+                recenterMapOnUser() 
+
+                // В самом конце обнуляем стейт во ViewModel
                 viewModel.clearOrderState()
-                Handler(Looper.getMainLooper()).postDelayed({ showAddressPanel() }, 3000)
             }
         }
 
@@ -5510,10 +5500,10 @@ ivMenuIcon.setColorFilter(adaptiveColor)
         }
 
         val status = order.status
-        // Включаем статусы поиска в обработку изменения размеров панелей
-        val recenterMap = (status == "SCHEDULED" || status == "COMPLETED" || status == "CANCELLED" || status == "REQUESTED" || status == "OFFERING")
+        // 🔥 ФИКС: Убрали CANCELLED из этого списка
+        val recenterMap = (status == "SCHEDULED" || status == "COMPLETED" || status == "REQUESTED" || status == "OFFERING")
 
-        // Анимация изменения паддингов
+        // Запускаем плавное следование паддингов
         animateMapPadding(fromHeight, toHeight, recenterMap)
     }
     
