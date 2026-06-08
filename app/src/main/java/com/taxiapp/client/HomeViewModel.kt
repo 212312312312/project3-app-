@@ -125,19 +125,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("WS_ORDER_DEBUG", "🛑 Прекращаем слушать обновления сокетов для заказов")
     }
 
-    fun checkOrderStatusOnce() {
-        val currentOrder = _activeOrder.value ?: return
-        val orderId = currentOrder.id ?: return
+    // 🔥 СИНХРОНИЗАЦИЯ: Полностью рабочий метод без блокировки холодного старта
+    fun checkOrderStatusOnce(forcedOrderId: Long? = null) {
+        val orderId = forcedOrderId 
+            ?: _activeOrder.value?.id 
+            ?: activeOrderId 
+            ?: return
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // ИСПРАВЛЕНО: Используем getOrder вместо getOrderById согласно твоей ApiService
                 val response = com.taxiapp.client.network.ApiClient.instance.getOrder(orderId).execute()
                 
                 if (response.isSuccessful && response.body() != null) {
                     withContext(Dispatchers.Main) {
-                        _activeOrder.value = response.body()
-                        Log.d("HomeViewModel", "Принудительно синхронизирован статус заказа после фона: ${response.body()?.status}")
+                        val loadedOrder = response.body()
+                        activeOrderId = loadedOrder?.id
+                        _activeOrder.value = loadedOrder
+                        Log.d("HomeViewModel", "Принудительно синхронизирован статус заказа после перезапуска (ID: $orderId): ${loadedOrder?.status}")
                     }
                 }
             } catch (e: Exception) {

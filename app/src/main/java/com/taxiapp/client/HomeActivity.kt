@@ -676,16 +676,18 @@ private fun fetchAddressAtCurrentLocation() {
         // 3. Якщо показана картка активного замовлення (ТУТ НАШЕ ОНОВЛЕННЯ)
         else if (activeOrderCard.visibility == View.VISIBLE) {
             if (isOrderDetailsExpanded) {
-                // Якщо панель витягнута вгору (карта закрита фоном) — просто опускаємо її
                 animateOrderDetailsToState(false)
             } else {
-                // Якщо панель вже згорнута внизу — ховаємо замовлення як і раніше
-                // (очищаємо UI та зупиняємо полінг, але НЕ скасовуємо саме замовлення)
                 sessionManager.clearActiveOrderId()
                 viewModel.clearOrderState()
+                
+                // 🔥 БЕЗОПАСНЫЙ ФИКС: Указываем контекст класса HomeActivity, 
+                // так как мы находимся внутри анонимного OnBackPressedCallback
+                this@HomeActivity.activeOrderId = null 
+                
                 showAddressPanel()
             }
-        } 
+        }
         // 4. Якщо ми на екрані вибору тарифів
         else if (tariffsPanel.visibility == View.VISIBLE) {
             // Повертаємося до повноекранної карти з адресами
@@ -773,13 +775,16 @@ private fun fetchAddressAtCurrentLocation() {
                 if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                     unreadChatMessages = 0
                     updateChatBadgeUI()
-                    // Статус обработается внутри updateStatusUI
                 } else {
-                    // ВІДНОВЛЮЄМО МАРШРУТ ПЕРЕД ПОКАЗОМ ПАНЕЛІ
                     restoreOrderOnMap(order) 
                     showActiveOrderPanel(order)
                 }
                 updateStatusUI(order)
+            } else {
+                // 🔥 КРИТИЧЕСКИЙ ФИКС: Если заказ удален/завершен — полностью очищаем UI
+                activeOrderId = null
+                showAddressPanel() // Переключает UI обратно на режим ввода адресов
+                mMap?.clear() // Чистим карту от старых маркеров водителя/маршрута
             }
         }
 
@@ -800,22 +805,20 @@ private fun fetchAddressAtCurrentLocation() {
             }
         }
 
-        // 4. Ошибки и загрузка
         viewModel.isLoading.observe(this) { loading ->
-    setButtonsLoadingState(loading)
-    if (loading) {
-        // НОВАЯ ЛОГИКА (ИСПРАВЛЕНИЕ БАГА):
-        // Проверяем: если мы прямо сейчас отправляем заказ (кнопка пишет "Обробка..."), 
-        // то скелет тарифов показывать НЕ нужно, оставляем выбранный тариф на экране.
-        if (btnOrderTaxi.text.toString() != "Обробка...") {
-            tariffsRecyclerView.visibility = View.GONE
-            tariffsShimmer.visibility = View.VISIBLE
-            tariffsShimmer.startShimmer()
+            setButtonsLoadingState(loading)
+            if (loading) {
+                // 🔥 ФИКС: Вместо хардкода текста проверяем, создается ли заказ прямо сейчас 
+                // (если активного ID еще нет, значит идет запрос тарифов, показываем шиммер)
+                if (activeOrderId == null) {
+                    tariffsRecyclerView.visibility = View.GONE
+                    tariffsShimmer.visibility = View.VISIBLE
+                    tariffsShimmer.startShimmer()
+                }
+            } else {
+                // Выключение шиммера остается на availableTariffs
+            }
         }
-    } else {
-        // Сами данные выключат шиммер в обсервере availableTariffs
-    }
-}
         viewModel.errorMessage.observe(this) { msg ->
             showToast(msg)
             btnOrderTaxi.isEnabled = true
@@ -2905,6 +2908,7 @@ class RoundedBackgroundSpan(
     }
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
     if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
+    revealInterface()
 
     // 🔥 ФИКС: Гасим пульсацию на время анимации появления (Reveal)
     routeAnimator?.cancel()
@@ -5825,15 +5829,16 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
     }
 }
 
+    // 🔥 СИНХРОНИЗАЦИЯ: Обновляем метод onNewIntent в самом низу файла HomeActivity.kt
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
         
-        // Перевіряємо, чи з'явився новий активний ID (наприклад, після кліку в Історії)
         val savedId = sessionManager.fetchActiveOrderId()
         if (savedId != -1L) {
+            this@HomeActivity.activeOrderId = savedId
             viewModel.activeOrderId = savedId
-            viewModel.startStatusPolling() // Це запустить запит до сервера і розгорне замовлення
+            viewModel.checkOrderStatusOnce(savedId) // Вызываем правильный метод вместо старого поллинга
         }
     }
 
