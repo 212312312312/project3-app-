@@ -776,15 +776,23 @@ private fun fetchAddressAtCurrentLocation() {
                     unreadChatMessages = 0
                     updateChatBadgeUI()
                 } else {
+                    // ВІДНОВЛЮЄМО МАРШРУТ ПЕРЕД ПОКАЗОМ ПАНЕЛІ
                     restoreOrderOnMap(order) 
                     showActiveOrderPanel(order)
+                    
+                    // 🔥 ФИКС ГОНКИ UI: Ждем, пока карточка замерится на экране,
+                    // выставляем правильный нижний отступ карты и принудительно центрируем (recenterMap = true)
+                    activeOrderCard.post {
+                        if (!isDestroyed && !isFinishing) {
+                            updateMapPadding(activeOrderCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = true)
+                        }
+                    }
                 }
                 updateStatusUI(order)
             } else {
-                // 🔥 КРИТИЧЕСКИЙ ФИКС: Если заказ удален/завершен — полностью очищаем UI
                 activeOrderId = null
-                showAddressPanel() // Переключает UI обратно на режим ввода адресов
-                mMap?.clear() // Чистим карту от старых маркеров водителя/маршрута
+                showAddressPanel()
+                mMap?.clear()
             }
         }
 
@@ -2126,13 +2134,19 @@ btnChangePayment.setOnClickListener {
             // Ситуация Б: Приложение восстановилось с активным заказом. Предотвращаем сброс камеры в дефолт!
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 mMap?.isMyLocationEnabled = true
-                updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
             }
 
             // Принудительно восстанавливаем всю графику, так как mMap теперь гарантированно живой!
             restoreOrderOnMap(activeOrder)
             showActiveOrderPanel(activeOrder)
             updateStatusUI(activeOrder)
+            
+            // 🔥 ФИКС ХОЛОДНОГО СТАРТА: Корректно передаем activeOrderCard вместо creationPanelCard
+            activeOrderCard.post {
+                if (!isDestroyed && !isFinishing) {
+                    updateMapPadding(activeOrderCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = true)
+                }
+            }
         }
 
         // 1. ОПТИМИЗИРУЕМ ДВИЖЕНИЕ КАМЕРЫ (убираем микрофризы процессора)
@@ -5079,15 +5093,12 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
                 if (!isCameraFocusedOnSearch) {
                     isCameraFocusedOnSearch = true
-
-                    // Увеличиваем задержку до 350мс, чтобы гарантировать завершение Layout-пасса
                     activeOrderCard.postDelayed({
                         if (!isFinishing && !isDestroyed && mMap != null) {
-                            // 🔥 ВОЗВРАЩЕНО НА МЕСТО: Наклоняем камеру под 45f для правильного 3D вида радара
                             val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
                                 .target(originLoc)
-                                .zoom(16.0f) // Оптимальный масштаб для кругов радара
-                                .tilt(45f)   // 3D-эффект сохранен
+                                .zoom(16.0f) // Идеальный масштаб для анимации радара
+                                .tilt(45f)   // Возвращаем сочный 3D-эффект наклона
                                 .bearing(0f)
                                 .build()
 
@@ -5632,9 +5643,27 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
                 }
             }
 
-            // Центрируем маршрут ТОЛЬКО если recenterMap == true
-            if (recenterMap && viewModel.currentRoutePolyline != null) {
-                try {
+            if (recenterMap) {
+            try {
+                mMap?.stopAnimation() // Сбрасываем стек накладывающихся анимаций
+                
+                val currentStatus = viewModel.activeOrder.value?.status
+                if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
+                    // Для радара поиска принудительно удерживаем фокус в 3D (45°) строго на Точке А
+                    val targetLoc = originPlace?.latLng 
+                        ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                    
+                    if (targetLoc != null) {
+                        val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                            .target(targetLoc)
+                            .zoom(16.0f)
+                            .tilt(45f) // Не даем сбросить наклон при пересчете паддингов!
+                            .bearing(0f)
+                            .build()
+                        mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
+                    }
+                } else if (viewModel.currentRoutePolyline != null) {
+                    // Стандартное 2D-центрирование всего маршрута для остальных статусов (IN_PROGRESS, SCHEDULED и т.д.)
                     val boundsBuilder = LatLngBounds.Builder()
                     if (originPlace != null && destinationPlace != null) {
                         boundsBuilder.include(originPlace!!.latLng!!)
@@ -5643,10 +5672,11 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
                         decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
                         val labelSafePadding = convertDpToPixel(80f).toInt()
-                        mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding))
+                        mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
                     }
-                } catch (e: Exception) {}
-            }
+                }
+            } catch (e: Exception) {}
+        }
         }
     }
 }
