@@ -5060,7 +5060,6 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
                 layoutSearchControls.visibility = View.VISIBLE
                 layoutDriverFoundState.visibility = View.GONE
-
                 layoutSearchDetails.visibility = View.VISIBLE
                 findViewById<TextView>(R.id.tv_order_tariff_title)?.visibility = View.VISIBLE
                 layoutDriverDetails.visibility = View.GONE
@@ -5068,17 +5067,12 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
                 btnCancelOrder.visibility = View.VISIBLE
                 btnCancelRideDriver.visibility = View.GONE
-
                 overlayOrigin.visibility = View.GONE
                 overlayDest.visibility = View.GONE
-
-                stopDriverTracking()
-                stopWaitingTimer()
-
                 btnRecenterRoute.visibility = View.GONE
                 btnRecenter.visibility = View.GONE
 
-                // Блокируем жесты, чтобы радар был строго зафиксирован
+                // 🔥 ЖЕЛЕЗНЫЙ ЗАМОК: Полностью блокируем любые прикосновения и сдвиги карты пользователем
                 mMap?.uiSettings?.isScrollGesturesEnabled = false
                 mMap?.uiSettings?.isZoomGesturesEnabled = false
 
@@ -5087,26 +5081,55 @@ ivMenuIcon.setColorFilter(adaptiveColor)
                     order.originLng ?: 0.0
                 )
 
+                // Анимация радара на Точке А
                 if (!isRadarAnimationRunning) {
                     startRadarAnimation(originLoc)
                 }
 
+                // Конечная точка и остановки просто тихо наносятся на карту (без анимации камеры к ним)
+                val destLat = order.destLat
+                val destLng = order.destLng
+                if (destLat != null && destLng != null && destLat != 0.0 && destLng != 0.0) {
+                    val destLatLng = LatLng(destLat, destLng)
+                    try {
+                        if (destinationMarker == null) {
+                            destinationMarker = mMap?.addMarker(
+                                com.google.android.gms.maps.model.MarkerOptions()
+                                    .position(destLatLng)
+                                    .icon(getBitmapDescriptor(R.drawable.ic_marker_base_white))
+                                    .anchor(0.5f, 1.0f)
+                            )
+                        }
+                    } catch (e: Exception) { e.printStackTrace() }
+                }
+
+                if (waypointMarkers.isEmpty() && !order.stops.isNullOrEmpty()) {
+                    order.stops.forEach { stop ->
+                        if (stop.lat != 0.0 && stop.lng != 0.0) {
+                            val wpMarker = mMap?.addMarker(
+                                com.google.android.gms.maps.model.MarkerOptions()
+                                    .position(LatLng(stop.lat, stop.lng))
+                                    .icon(getBitmapDescriptor(R.drawable.ic_marker_waypoint))
+                                    .anchor(0.5f, 0.5f)
+                            )
+                            if (wpMarker != null) waypointMarkers.add(wpMarker)
+                        }
+                    }
+                }
+
+                // Анимация подлета 3D камеры к Точке А
                 if (!isCameraFocusedOnSearch) {
                     isCameraFocusedOnSearch = true
                     activeOrderCard.postDelayed({
                         if (!isFinishing && !isDestroyed && mMap != null) {
                             val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
                                 .target(originLoc)
-                                .zoom(16.0f) // Идеальный масштаб для анимации радара
-                                .tilt(45f)   // Возвращаем сочный 3D-эффект наклона
+                                .zoom(16.0f)
+                                .tilt(45f) // Наш сочный 3D наклон радара
                                 .bearing(0f)
                                 .build()
 
-                            mMap?.animateCamera(
-                                com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition),
-                                1000,
-                                null
-                            )
+                            mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 1000, null)
                         }
                     }, 350)
                 }
@@ -5487,9 +5510,10 @@ ivMenuIcon.setColorFilter(adaptiveColor)
         }
 
         val status = order.status
-        val recenterMap = (status == "SCHEDULED" || status == "COMPLETED" || status == "CANCELLED")
+        // Включаем статусы поиска в обработку изменения размеров панелей
+        val recenterMap = (status == "SCHEDULED" || status == "COMPLETED" || status == "CANCELLED" || status == "REQUESTED" || status == "OFFERING")
 
-        // Запускаем плавное следование карты за реальной высотой карточки статуса
+        // Анимация изменения паддингов
         animateMapPadding(fromHeight, toHeight, recenterMap)
     }
     
@@ -5644,39 +5668,39 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
             }
 
             if (recenterMap) {
-            try {
-                mMap?.stopAnimation() // Сбрасываем стек накладывающихся анимаций
-                
-                val currentStatus = viewModel.activeOrder.value?.status
-                if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
-                    // Для радара поиска принудительно удерживаем фокус в 3D (45°) строго на Точке А
-                    val targetLoc = originPlace?.latLng 
-                        ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                try {
+                    mMap?.stopAnimation() // Защита от накладывающихся анимаций
                     
-                    if (targetLoc != null) {
-                        val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
-                            .target(targetLoc)
-                            .zoom(16.0f)
-                            .tilt(45f) // Не даем сбросить наклон при пересчете паддингов!
-                            .bearing(0f)
-                            .build()
-                        mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
-                    }
-                } else if (viewModel.currentRoutePolyline != null) {
-                    // Стандартное 2D-центрирование всего маршрута для остальных статусов (IN_PROGRESS, SCHEDULED и т.д.)
-                    val boundsBuilder = LatLngBounds.Builder()
-                    if (originPlace != null && destinationPlace != null) {
-                        boundsBuilder.include(originPlace!!.latLng!!)
-                        boundsBuilder.include(destinationPlace!!.latLng!!)
-                        currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                        decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+                    val currentStatus = viewModel.activeOrder.value?.status
+                    if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
+                        // 🔥 ГЛАВНЫЙ ЩИТ: Если идет поиск, удерживаем фокус в 3D на Точке А
+                        val targetLoc = originPlace?.latLng 
+                            ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                        
+                        if (targetLoc != null) {
+                            val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                                .target(targetLoc)
+                                .zoom(16.0f)
+                                .tilt(45f) // Удерживаем наклон 45 градусов, предотвращая сброс от Google SDK
+                                .bearing(0f)
+                                .build()
+                            mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
+                        }
+                    } else if (viewModel.currentRoutePolyline != null) {
+                        // Стандартное плоское 2D-центрирование всей поездки для остальных состояний (например, в пути или отмене)
+                        val boundsBuilder = LatLngBounds.Builder()
+                        if (originPlace != null && destinationPlace != null) {
+                            boundsBuilder.include(originPlace!!.latLng!!)
+                            boundsBuilder.include(destinationPlace!!.latLng!!)
+                            currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                            decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                        val labelSafePadding = convertDpToPixel(80f).toInt()
-                        mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
+                            val labelSafePadding = convertDpToPixel(80f).toInt()
+                            mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
+                        }
                     }
-                }
-            } catch (e: Exception) {}
-        }
+                } catch (e: Exception) {}
+            }
         }
     }
 }
@@ -5885,20 +5909,41 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
 
         // Плавное центрирование карты по границам маршрута средствами встроенного аппаратного движка
-        if (recenterMap && viewModel.currentRoutePolyline != null) {
+       if (recenterMap && viewModel.currentRoutePolyline != null) {
             try {
-                mMap?.stopAnimation() // Сбрасываем стек накладывающихся анимаций
-                val boundsBuilder = LatLngBounds.Builder()
-                if (originPlace != null && destinationPlace != null) {
-                    boundsBuilder.include(originPlace!!.latLng!!)
-                    boundsBuilder.include(destinationPlace!!.latLng!!)
-                    currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                    decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+                val currentStatus = viewModel.activeOrder.value?.status
+                
+                if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
+                    // 🔥 ЗАЩИТНЫЙ БЛОК: Если идет ПОИСК — пересчитываем паддинг, 
+                    // но камеру удерживаем строго в 3D (45°) с фокусом на Точке А!
+                    val originLoc = originPlace?.latLng 
+                        ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                    
+                    if (originLoc != null) {
+                        val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                            .target(originLoc)
+                            .zoom(16.0f)
+                            .tilt(45f)   // Намертво удерживаем наклон 45 градусов, отсекая 2D-сброс
+                            .bearing(0f)
+                            .build()
+                        mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
+                    }
+                } else {
+                    // Для всех остальных статусов (например, IN_PROGRESS, COMPLETED) — стандартный плоский 2D-вывод всей поездки
+                    val boundsBuilder = LatLngBounds.Builder()
+                    if (originPlace != null && destinationPlace != null) {
+                        boundsBuilder.include(originPlace!!.latLng!!)
+                        boundsBuilder.include(destinationPlace!!.latLng!!)
+                        currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                        decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                    val labelSafePadding = convertDpToPixel(80f).toInt()
-                    mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
+                        val labelSafePadding = convertDpToPixel(80f).toInt()
+                        mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
+                    }
                 }
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
     
