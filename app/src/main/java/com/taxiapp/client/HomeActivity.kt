@@ -982,23 +982,28 @@ private fun fetchAddressAtCurrentLocation() {
 
     radarOverlay?.remove()
 
-    // 🛠️ СТИЛЬ UKLON В БЕЛОМ МИНИМАЛИСТИЧНОМ ЦВЕТЕ
     val sizePx = 256 
     val bitmap = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
 
-    // 1. Рисуем внутреннюю плоскую заливку круга
-    // #15FFFFFF — очень нежная, едва заметная белая дымка внутри
+    // 🔥 АДАПТИВНЫЙ ПОДБОР ЦВЕТОВ НА ОСНОВЕ ТЕМЫ
+    val isDarkTheme = sessionManager.isDarkMode()
+    
+    // Для темной темы — белая дымка, для светлой — аккуратная темная полупрозрачная тень
+    val fillColor = if (isDarkTheme) "#15FFFFFF" else "#12000000"
+    // Для темной темы — яркое белое кольцо, для светлой — четкий графитовый контур
+    val strokeColor = if (isDarkTheme) "#FFFFFFFF" else "#FF2C2D2F"
+
+    // 1. Рисуем внутреннюю плоскую заливку круга (импульс волны)
     paint.style = android.graphics.Paint.Style.FILL
-    paint.color = android.graphics.Color.parseColor("#15FFFFFF")
+    paint.color = android.graphics.Color.parseColor(fillColor)
     canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
 
-    // 2. Поверх рисуем четкий векторный контур белого цвета
-    // #FFFFFFFF — плотный, яркий белый цвет для внешней линии-кольца
+    // 2. Поверх рисуем четкий векторный контур кольца радара
     paint.style = android.graphics.Paint.Style.STROKE
-    paint.strokeWidth = 5f // Толщина кольца радара
-    paint.color = android.graphics.Color.parseColor("#FFFFFFFF")
+    paint.strokeWidth = 5f // Толщина волны
+    paint.color = android.graphics.Color.parseColor(strokeColor)
     
     val strokeRadius = (sizePx / 2f) - 2.5f
     canvas.drawCircle(sizePx / 2f, sizePx / 2f, strokeRadius, paint)
@@ -1025,7 +1030,7 @@ private fun fetchAddressAtCurrentLocation() {
                 val currentSize = fraction * 450f
                 radarOverlay?.setDimensions(currentSize)
 
-                // Элегантное растворение всего белого векторного круга на финише (после 75% пути)
+                // Элегантное растворение круга на финише (после 75% радиуса)
                 val currentTransparency = if (fraction > 0.75f) {
                     ((fraction - 0.75f) / 0.25f)
                 } else {
@@ -5053,7 +5058,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
                             // 🔥 ВОЗВРАЩЕНО НА МЕСТО: Наклоняем камеру под 45f для правильного 3D вида радара
                             val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
                                 .target(originLoc)
-                                .zoom(16.5f) // Оптимальный масштаб для кругов радара
+                                .zoom(16.0f) // Оптимальный масштаб для кругов радара
                                 .tilt(45f)   // 3D-эффект сохранен
                                 .bearing(0f)
                                 .build()
