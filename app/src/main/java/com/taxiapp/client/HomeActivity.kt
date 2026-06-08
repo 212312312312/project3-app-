@@ -187,6 +187,7 @@ private var lastAddressPickerIntentData: Intent? = null
     private lateinit var btnOpenPromo: CardView
     private lateinit var centerPin: ImageView
     private lateinit var pinShadow: ImageView
+    private lateinit var pinContainer: FrameLayout
 
     private var isCameraFocusedOnSearch = false
 
@@ -1086,7 +1087,7 @@ private fun stopRadarAnimation() {
         pinShadow = shadowView ?: centerPin 
         centerPin.alpha = 0f
         try { pinShadow.alpha = 0f } catch (e: Exception) {}
-
+        pinContainer = findViewById(R.id.pin_container)
 
         statusCircle1 = findViewById(R.id.status_circle_1)
 statusIcon1 = findViewById(R.id.status_icon_1)
@@ -1604,6 +1605,11 @@ btnChangePayment.setOnClickListener {
                 startActivity(intent)
             }
         }
+
+
+        
+
+    
     }
 
     private fun setupProfileLogic() {
@@ -2111,11 +2117,13 @@ btnChangePayment.setOnClickListener {
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 mMap?.isMyLocationEnabled = true
                 if (currentCity != null) recenterMapOnUser()
+                updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
             }
         } else {
             // Ситуация Б: Приложение восстановилось с активным заказом. Предотвращаем сброс камеры в дефолт!
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 mMap?.isMyLocationEnabled = true
+                updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
             }
 
             // Принудительно восстанавливаем всю графику, так как mMap теперь гарантированно живой!
@@ -2436,6 +2444,9 @@ private fun showMapPickerMode(isOrigin: Boolean) {
     btnBackMapPicker.visibility = View.VISIBLE
     
     tvMapPickerAddress.text = "Шукаємо адресу..."
+
+    // Принудительно приподнимаем логотип Google над панелью подтверждения адреса на карте
+    updateMapPadding(layoutMapPickerPanel, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
 }
 
 private fun hideMapPickerMode() {
@@ -2450,6 +2461,11 @@ private fun hideMapPickerMode() {
     // Скрываем интерфейс выбора на карте
     layoutMapPickerPanel.visibility = View.GONE
     btnBackMapPicker.visibility = View.GONE
+
+    // Возвращаем аккуратный паддинг обратно на главную панель адресов
+    if (::creationPanelCard.isInitialized) {
+        updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
+    }
 }
 
 private fun confirmMapSelection() {
@@ -2996,7 +3012,15 @@ class RoundedBackgroundSpan(
         originMarker = null 
         destinationMarker = null
         waypointMarkers.clear()
-        mMap?.setPadding(0, 0, 0, 0)
+        
+        // УМНЫЙ СБРОС: Если при очистке маршрута мы вернулись на главный экран, 
+        // вместо обнуления мы сразу возвращаем паддинг для логотипа Google
+        if (::creationPanelCard.isInitialized && creationPanelCard.visibility == View.VISIBLE) {
+            updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
+        } else {
+            mMap?.setPadding(0, 0, 0, 0)
+        }
+
         animHandler.removeCallbacksAndMessages(null)
         btnRecenterRoute.visibility = View.GONE
 
@@ -5521,21 +5545,43 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
     bottomPanel.post {
         if (mMap != null) {
             if (bottomPanel.visibility != View.VISIBLE) {
-                mMap?.setPadding(0, 0, 0, 0)
+                // Если старая панель скрылась, но сейчас на экране уже видна главная панель адресов,
+                // мы не обнуляем карту, а перенаправляем паддинг на главную панель
+                if (::creationPanelCard.isInitialized && creationPanelCard.visibility == View.VISIBLE && bottomPanel.id != creationPanelCard.id) {
+                    updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
+                } else {
+                    mMap?.setPadding(0, 0, 0, 0)
+                    if (::pinContainer.isInitialized) pinContainer.translationY = 0f
+                }
                 return@post
             }
 
             var panelHeight = bottomPanel.height
+            
+            // Если система еще не построила кадр и высота равна 0, принудительно измеряем панель программно
+            if (panelHeight == 0) {
+                val widthSpec = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
+                val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                bottomPanel.measure(widthSpec, heightSpec)
+                panelHeight = bottomPanel.measuredHeight
+            }
+
             if (panelHeight == 0) return@post
 
             // --- НОВАЯ МАГИЯ: Обманываем карту ---
             // Если это панель активного заказа, мы вычитаем высоту выезжающих деталей.
-            // Теперь карта ВСЕГДА будет думать, что панель свернута, и логотип Google 
-            // будет стоять как влитой!
             if (bottomPanel.id == R.id.active_order_card) {
                 val detailsView = bottomPanel.findViewById<View>(R.id.layout_expandable_details)
                 if (detailsView != null && detailsView.visibility == View.VISIBLE) {
-                    panelHeight -= detailsView.height
+                    var detailsHeight = detailsView.height
+                    // ПОДСТРАХОВКА: программно измеряем высоту деталей, если она еще равна 0
+                    if (detailsHeight == 0) {
+                        val widthSpec = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
+                        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                        detailsView.measure(widthSpec, heightSpec)
+                        detailsHeight = detailsView.measuredHeight
+                    }
+                    panelHeight -= detailsHeight
                 }
             }
 
@@ -5552,10 +5598,37 @@ private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topP
             val totalBottomPadding = panelHeight + marginBottom + extraBuffer
             val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
-            // Двигаем элементы Google (логотип, кнопки), чтобы они не перекрывались панелью
-            mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
+            // Двигаем элементы Google (логотип, кнопки), используя очередь отрисовки самой карты,
+            // чтобы полностью обойти внутренний баг Google Maps SDK с игнорированием паддинга для логотипа
+            val mapView = supportFragmentManager.findFragmentById(R.id.map)?.view
+            if (mapView != null) {
+                mapView.post {
+                    mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
+                }
+            } else {
+                mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
+            }
 
-            // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Центрируем маршрут ТОЛЬКО если recenterMap == true ---
+            if (::pinContainer.isInitialized) {
+                if (bottomPanel.id == R.id.bottom_sheet_card || bottomPanel.id == R.id.layout_map_picker_panel) {
+                    val shiftY = (totalBottomPadding - topPadding) / 2f
+                    
+                    // ВМЕСТО МГНОВЕННОГО ПРЫЖКА: запускаем плавное скольжение пина, 
+                    // которое идеально синхронизируется с инерцией карты Google
+                    pinContainer.animate()
+                        .translationY(-shiftY)
+                        .setDuration(200) // Время анимации в миллисекундах
+                        .start()
+                } else {
+                    // Возвращаем пин в геометрический центр экрана при переходе на другие экраны
+                    pinContainer.animate()
+                        .translationY(0f)
+                        .setDuration(200)
+                        .start()
+                }
+            }
+
+            // Центрируем маршрут ТОЛЬКО если recenterMap == true
             if (recenterMap && viewModel.currentRoutePolyline != null) {
                 try {
                     val boundsBuilder = LatLngBounds.Builder()
@@ -5673,19 +5746,16 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         tariffsPanel.visibility = View.GONE
         btnRecenter.visibility = View.VISIBLE
 
+        clearMapForRoute()
+
+        // 2. И только после этого настраиваем панель и выставляем правильный паддинг для главного экрана
         setLocationButtonAnchor(R.id.bottom_sheet_card)
         btnMenu.visibility = View.VISIBLE
-
-        // ДОБАВЛЕНО: Сброс отступов на всю ширину завернут в post, чтобы перекрыть старые расчеты
-        tariffsPanel.post {
-            mMap?.setPadding(0, 0, 0, 0)
-        }
+        
+        updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
 
         try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
-
         ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
-
-        clearMapForRoute()
 
         // --- ВАЖНО: ОСТАНАВЛИВАЕМ И СКРЫВАЕМ ТАЙМЕР ОЖИДАНИЯ ---
         stopWaitingTimer()
