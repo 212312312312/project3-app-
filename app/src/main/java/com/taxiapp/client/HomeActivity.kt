@@ -3418,7 +3418,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         })
     }
 
-    private fun startDriverTracking(orderId: Long) {
+    private fun startDriverTracking(orderId: String) { // <-- ИЗМЕНИЛИ ТИП С Long НА String
         if (isDriverTrackingActive) return
         isDriverTrackingActive = true
 
@@ -4858,7 +4858,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
         }
     }
 
-    private fun showRatingDialog(orderId: Long, driverName: String?) {
+    private fun showRatingDialog(orderId: String, driverName: String?) { // <-- ИЗМЕНИЛИ НА String
     if (isRatingDialogVisible) return
     isRatingDialogVisible = true 
 
@@ -4922,7 +4922,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
     dialog.show()
 }
 
-    private fun sendRating(orderId: Long, score: Int, comment: String, dialog: Dialog) {
+    private fun sendRating(orderId: String, score: Int, comment: String, dialog: Dialog) { // <-- ИЗМЕНИЛИ НА String
         val token = sessionManager.fetchAuthToken()
         if (token == null) {
             showToast("Помилка авторизації")
@@ -5878,12 +5878,12 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        
+
         val savedId = sessionManager.fetchActiveOrderId()
-        if (savedId != -1L) {
+        if (!savedId.isNullOrEmpty()) { // <-- ИЗМЕНИЛИ ПРОВЕРКУ НА СТРОКУ
             this@HomeActivity.activeOrderId = savedId
             viewModel.activeOrderId = savedId
-            viewModel.checkOrderStatusOnce(savedId) // Вызываем правильный метод вместо старого поллинга
+            viewModel.checkOrderStatusOnce(savedId)
         }
     }
 

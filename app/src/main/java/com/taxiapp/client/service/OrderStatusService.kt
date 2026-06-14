@@ -29,16 +29,17 @@ class OrderStatusService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val orderId = intent?.getLongExtra(EXTRA_ORDER_ID, -1L) ?: -1L
+        // Изменили получение ID на getStringExtra, так как теперь передается UUID строка
+        val orderId = intent?.getStringExtra(EXTRA_ORDER_ID) ?: ""
         val status = intent?.getStringExtra(EXTRA_STATUS) ?: ""
         val address = intent?.getStringExtra(EXTRA_ADDRESS) ?: "Кінцева точка"
         val customTitle = intent?.getStringExtra("custom_title")
         val customBody = intent?.getStringExtra("custom_body")
 
-        val notificationId = if (orderId != -1L) orderId.toInt() else 1
+        // Генерируем уникальный Int для шторки уведомлений на основе хэш-кода строки UUID
+        val notificationId = if (orderId.isNotEmpty()) orderId.hashCode() else 1
 
         // 1. ГАРАНТОВАНО викликаємо startForeground якнайшвидше для БУДЬ-ЯКОГО intent!
-        // Це рятує від крашу ForegroundServiceDidNotStartInTimeException
         val notification = buildNotification(orderId, status, address, customTitle, customBody)
         startForeground(notificationId, notification)
 
@@ -46,7 +47,7 @@ class OrderStatusService : Service() {
         if (intent?.action == ACTION_STOP) {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(notificationId)
-            
+
             stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
@@ -55,7 +56,7 @@ class OrderStatusService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun buildNotification(orderId: Long, status: String, address: String, customTitle: String?, customBody: String?): Notification {
+    private fun buildNotification(orderId: String, status: String, address: String, customTitle: String?, customBody: String?): Notification {
         val statusText = when (status) {
             "SCHEDULED" -> "Заплановано"
             "REQUESTED", "OFFERING" -> "Пошук водія..."
@@ -71,7 +72,7 @@ class OrderStatusService : Service() {
         val finalBody = customBody ?: "Статус: $statusText"
 
         val pendingIntent = PendingIntent.getActivity(
-            this, orderId.toInt(),
+            this, orderId.hashCode(), // Используем hashCode строки для уникальности интента
             Intent(this, HomeActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -94,7 +95,7 @@ class OrderStatusService : Service() {
                 "Статус замовлення",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Відображає поточний статус вашого таксі в реальному часі"
+                description = "Відображає photoc поточний статус вашого таксі в реальному часі"
                 setSound(null, null)
             }
             val manager = getSystemService(NotificationManager::class.java)
