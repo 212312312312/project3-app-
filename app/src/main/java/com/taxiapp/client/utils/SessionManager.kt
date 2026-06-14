@@ -47,8 +47,6 @@ class SessionManager(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-
-
     // --- TOKENS ---
     fun saveAuthToken(token: String) {
         prefs.edit().putString(USER_TOKEN, token).apply()
@@ -107,13 +105,13 @@ class SessionManager(context: Context) {
         )
     }
 
-    // --- ACTIVE ORDER ---
-    fun saveActiveOrderId(id: Long) {
-        prefs.edit().putLong(ACTIVE_ORDER_ID, id).apply()
+    // --- ACTIVE ORDER (ИЗМЕНЕНО НА STRING/UUID СОВМЕСТИМОСТЬ) ---
+    fun saveActiveOrderId(id: String) { // <-- Принимаем строку UUID
+        prefs.edit().putString(ACTIVE_ORDER_ID, id).apply()
     }
 
-    fun fetchActiveOrderId(): Long {
-        return prefs.getLong(ACTIVE_ORDER_ID, -1L)
+    fun fetchActiveOrderId(): String? { // <-- Возвращаем String? вместо Long
+        return prefs.getString(ACTIVE_ORDER_ID, null)
     }
 
     fun clearActiveOrderId() {
@@ -176,7 +174,6 @@ class SessionManager(context: Context) {
     }
 
     // --- LOGOUT ---
-    // --- LOGOUT ---
     fun clearSession() {
         prefs.edit().apply {
             remove(USER_TOKEN)
@@ -190,7 +187,7 @@ class SessionManager(context: Context) {
             remove(USER_PHONE)
             remove(KEY_PROMO_DISCOUNT)
             remove(KEY_PROMO_LIMIT)
-            remove(KEY_CARD_MASK) // <-- ДОБАВЛЕНО
+            remove(KEY_CARD_MASK)
             apply()
         }
     }
@@ -237,6 +234,7 @@ class SessionManager(context: Context) {
         if (percent <= 0.0) return null
         return SessionPromoData(percent.toInt(), fetchPromoLimit())
     }
+
     // --- BIND CARD ---
     fun saveCardMask(mask: String?) {
         if (mask == null) {

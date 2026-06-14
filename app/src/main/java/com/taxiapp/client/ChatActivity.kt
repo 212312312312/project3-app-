@@ -26,7 +26,7 @@ import retrofit2.Response
 
 class ChatActivity : BaseActivity() {
 
-    private var orderId: Long = -1L
+    private var orderId: String = ""
     private lateinit var rvChat: RecyclerView
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
@@ -64,8 +64,8 @@ class ChatActivity : BaseActivity() {
             insets
         }
 
-        orderId = intent.getLongExtra("ORDER_ID", -1L)
-        if (orderId == -1L) {
+        orderId = intent.getStringExtra("ORDER_ID") ?: ""
+        if (orderId.isEmpty()) {
             finish()
             return
         }

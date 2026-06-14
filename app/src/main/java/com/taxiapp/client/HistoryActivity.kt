@@ -171,7 +171,7 @@ class HistoryActivity : BaseActivity() {
     }
 
     // --- НОВЫЙ МЕТОД: Отмена заказа ---
-    private fun showCancelReasonDialog(orderId: Long) {
+    private fun showCancelReasonDialog(orderId: String) { // <-- ИЗМЕНИЛИ НА String
         val dialog = android.app.Dialog(this)
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         dialog.setContentView(R.layout.dialog_cancel_reason)
@@ -240,7 +240,7 @@ class HistoryActivity : BaseActivity() {
     }
 
     // --- ОБНОВЛЕННЫЙ МЕТОД: Отмена заказа с передачей причины ---
-    private fun cancelOrder(orderId: Long, reasonText: String? = null) {
+    private fun cancelOrder(orderId: String, reasonText: String? = null) { // <-- ИЗМЕНИЛИ НА String
         Toast.makeText(this, "Скасування...", Toast.LENGTH_SHORT).show()
 
         // Используем очищенный вызов ApiService с поддержкой reasonText

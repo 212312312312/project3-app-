@@ -13,8 +13,8 @@ import com.taxiapp.client.network.dto.TaxiOrderDto
 
 class HistoryAdapter(
     private var orders: List<TaxiOrderDto>,
-    private val onItemClick: ((Long) -> Unit)? = null,
-    private val onCancelClick: ((Long) -> Unit)? = null
+    private val onItemClick: ((String) -> Unit)? = null, // <-- ИЗМЕНИЛИ НА String
+    private val onCancelClick: ((String) -> Unit)? = null // <-- ИЗМЕНИЛИ НА String
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -78,7 +78,7 @@ class HistoryAdapter(
         // Новий контейнер для точок
         private val containerWaypoints: LinearLayout? = itemView.findViewById(R.id.container_waypoints)
 
-        fun bind(order: TaxiOrderDto, onItemClick: ((Long) -> Unit)?, onCancelClick: ((Long) -> Unit)?) {
+        fun bind(order: TaxiOrderDto, onItemClick: ((String) -> Unit)?, onCancelClick: ((String) -> Unit)?) { // <-- ИЗМЕНИЛИ НА String
             tvFrom.text = order.fromAddress
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
@@ -149,7 +149,7 @@ class HistoryAdapter(
         // Новий контейнер для точок
         private val containerWaypoints: LinearLayout? = itemView.findViewById(R.id.container_waypoints)
 
-        fun bind(order: TaxiOrderDto, onItemClick: ((Long) -> Unit)?) {
+        fun bind(order: TaxiOrderDto, onItemClick: ((String) -> Unit)?) { // <-- ИЗМЕНИЛИ НА String
             tvFrom.text = order.fromAddress
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"

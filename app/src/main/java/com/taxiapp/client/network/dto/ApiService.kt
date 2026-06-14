@@ -9,7 +9,7 @@ data class ErrorResponse(val message: String)
 data class MessageResponse(val message: String)
 
 data class RateDriverRequest(
-    val orderId: Long,
+    val orderId: String,
     val score: Int,
     val comment: String?
 )
@@ -76,26 +76,26 @@ interface ApiService {
     fun createOrder(@Body request: CreateOrderRequestDto): Call<TaxiOrderDto>
 
     @GET("client/orders/{id}")
-    fun getOrder(@Path("id") id: Long): Call<TaxiOrderDto>
+    fun getOrder(@Path("id") id: String): Call<TaxiOrderDto> // <-- String
 
     @POST("client/orders/{id}/cancel")
-    fun cancelOrder(@Path("id") orderId: Long): Call<TaxiOrderDto>
+    fun cancelOrder(@Path("id") orderId: String): Call<TaxiOrderDto> // <-- String
 
     @POST("client/orders/{id}/cancel")
     fun cancelOrder(
-        @Path("id") orderId: Long,
+        @Path("id") orderId: String, // <-- String
         @Query("reasonText") reasonText: String? = null
     ): Call<TaxiOrderDto>
 
     @PUT("orders/{id}/price")
     fun updateOrderPrice(
-        @Path("id") orderId: Long,
+        @Path("id") orderId: String, // <-- String
         @Query("addedValue") addedValue: Double
     ): Call<MessageResponseDto>
 
     @PUT("orders/{id}/payment-method")
     fun updatePaymentMethod(
-        @Path("id") orderId: Long,
+        @Path("id") orderId: String, // <-- String
         @Query("method") method: String
     ): Call<MessageResponseDto>
 
@@ -131,11 +131,11 @@ interface ApiService {
     fun getSectors(): Call<List<SectorDto>>
 
     @GET("chat/{orderId}")
-    fun getChatMessages(@Path("orderId") orderId: Long): Call<List<ChatMessageDto>>
+    fun getChatMessages(@Path("orderId") orderId: String): Call<List<ChatMessageDto>> // <-- String
 
     @POST("chat/client/{orderId}")
     fun sendChatMessage(
-        @Path("orderId") orderId: Long,
+        @Path("orderId") orderId: String, // <-- String
         @Body request: SendMessageRequest
     ): Call<ChatMessageDto>
 

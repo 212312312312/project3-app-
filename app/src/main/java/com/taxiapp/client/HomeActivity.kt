@@ -114,7 +114,7 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     private var routeDistanceMeters: Int = 0
     private var routeDurationSeconds: Int = 0
     private var currentRoutePolyline: String? = null
-    private var activeOrderId: Long? = null
+    private var activeOrderId: String? = null // <-- ИЗМЕНИЛИ С Long? НА String?
     private var availableTariffs: List<CarTariffDto> = emptyList()
 
     private lateinit var sessionManager: SessionManager
@@ -3424,8 +3424,9 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
         val token = sessionManager.fetchAuthToken()
         webSocketManager?.connect(token)
-        
-        webSocketManager?.subscribeToDriverLocation(orderId) { locationDto ->
+
+        // Передаем либо текущий id заказа из объекта, либо activeOrderId (они оба теперь String)
+        webSocketManager?.subscribeToDriverLocation(activeOrderId ?: "") { locationDto ->
             runOnUiThread {
                 updateDriverMarker(locationDto)
             }

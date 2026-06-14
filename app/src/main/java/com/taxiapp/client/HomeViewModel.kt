@@ -65,18 +65,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val decodedRoute: LiveData<List<LatLng>> get() = _decodedRoute
 
     // --- Состояние ---
-    var activeOrderId: Long? = null
+    var activeOrderId: String? = null
     var currentCity: CityData? = null
     var currentRoutePolyline: String? = null
 
-    
+
 
     init {
         // При старте проверяем, есть ли активный заказ
         val savedId = sessionManager.fetchActiveOrderId()
-        if (savedId != -1L) {
+        if (!savedId.isNullOrEmpty()) { // <-- ПРОВЕРЯЕМ НА СТРОКУ
             activeOrderId = savedId
-            // Первичный статус подтянем один раз по HTTP, а дальше его будут вести сокеты
             checkOrderStatusOnce()
         }
         currentCity = sessionManager.fetchUserCity()
@@ -125,11 +124,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("WS_ORDER_DEBUG", "🛑 Прекращаем слушать обновления сокетов для заказов")
     }
 
-    // 🔥 СИНХРОНИЗАЦИЯ: Полностью рабочий метод без блокировки холодного старта
-    fun checkOrderStatusOnce(forcedOrderId: Long? = null) {
-        val orderId = forcedOrderId 
-            ?: _activeOrder.value?.id 
-            ?: activeOrderId 
+    fun checkOrderStatusOnce(forcedOrderId: String? = null) { // <-- ИЗМЕНИЛИ С Long? НА String?
+        val orderId = forcedOrderId
+            ?: _activeOrder.value?.id
+            ?: activeOrderId
             ?: return
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -352,7 +350,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
-    private fun stopOrderStatusService(orderId: Long) {
+    private fun stopOrderStatusService(orderId: String) { // <-- ИЗМЕНИЛИ С Long НА String
         val context = getApplication<Application>()
 
         // 1. Прямо і безпечно зупиняємо сам сервіс (це працює навіть з фону)
@@ -361,7 +359,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         // 2. Для 100% надійності примусово прибираємо нотифікацію
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        manager.cancel(orderId.toInt())
+        manager.cancel(orderId.hashCode()) // <-- Превращаем UUID строку в уникальный Int ID для шторки уведомлений
     }
 
     // --- API: Создание заказа ---

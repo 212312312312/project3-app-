@@ -9,7 +9,7 @@ data class OrderServiceDto(
 )
 
 data class TaxiOrderDto(
-    val id: Long,
+    val id: String,
     val client: Any?,
     val driver: OrderDriverDto?,
     val status: String,

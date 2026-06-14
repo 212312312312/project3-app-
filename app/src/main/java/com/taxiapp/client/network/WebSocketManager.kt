@@ -20,7 +20,7 @@ import ua.naiksoftware.stomp.dto.LifecycleEvent
 
 data class OrderSocketMessageDto(
     val action: String,
-    val orderId: Long,
+    val orderId: String,
     val order: TaxiOrderDto?
 )
 
@@ -32,9 +32,8 @@ class WebSocketManager(private val baseUrl: String) {
     private val compositeDisposable = CompositeDisposable()
     private val gson = Gson()
 
-    // --- НОВОЕ: Храним активные подписки для авто-восстановления ---
-    private var currentChatSub: Pair<Long, (ChatMessageDto) -> Unit>? = null
-    private var currentLocationSub: Pair<Long, (TrackingLocationDto) -> Unit>? = null
+    private var currentChatSub: Pair<String, (ChatMessageDto) -> Unit>? = null // <-- ТИП String
+    private var currentLocationSub: Pair<String, (TrackingLocationDto) -> Unit>? = null // <-- ТИП String
     private var currentOrderSub: Pair<Long, (OrderSocketMessageDto) -> Unit>? = null
 
     private var lastKnownToken: String? = null
@@ -175,7 +174,7 @@ class WebSocketManager(private val baseUrl: String) {
         connect(newToken)
     }
 
-    fun subscribeToDriverLocation(orderId: Long, onLocationReceived: (TrackingLocationDto) -> Unit) {
+    fun subscribeToDriverLocation(orderId: String, onLocationReceived: (TrackingLocationDto) -> Unit) { // <-- ТИП String
         currentLocationSub = Pair(orderId, onLocationReceived) // Запоминаем подписку
         val topic = "/topic/order/$orderId/tracking"
 
@@ -198,7 +197,7 @@ class WebSocketManager(private val baseUrl: String) {
     }
 
     @SuppressLint("CheckResult")
-    fun subscribeToChat(orderId: Long, onMessageReceived: (ChatMessageDto) -> Unit) {
+    fun subscribeToChat(orderId: String, onMessageReceived: (ChatMessageDto) -> Unit) { // <-- ТИП String
         currentChatSub = Pair(orderId, onMessageReceived) // Запоминаем подписку
         val topic = "/topic/chat/$orderId"
 
