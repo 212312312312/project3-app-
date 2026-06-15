@@ -8,9 +8,16 @@ data class OrderServiceDto(
     val price: Double
 )
 
+// Специальный DTO для пассажира, чтобы Gson знал, как его парсить
+data class OrderPassengerDto(
+    val id: Long,
+    val fullName: String
+)
+
 data class TaxiOrderDto(
-    val id: String,
-    val client: Any?,
+    val id: String,                  // Публичный UUID от сервера
+    val idLong: Long?,               // Внутренний ID (для совместимости)
+    val client: OrderPassengerDto?,  // ИСПРАВЛЕНО: Вместо Any? теперь четкий класс!
     val driver: OrderDriverDto?,
     val status: String,
     val fromAddress: String,
@@ -41,7 +48,6 @@ data class TaxiOrderDto(
     val waitingPrice: Double = 0.0,
     val freeWaitingMinutes: Int = 3,
     val pricePerWaitingMinute: Double = 0.0,
-
 
     // --- НОВОЕ ПОЛЕ ---
     val scheduledAt: String? = null

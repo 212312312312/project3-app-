@@ -151,8 +151,9 @@ object ApiClient {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(errorInterceptor)
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS) // Время на установку соединения с сервером
+        .readTimeout(20, TimeUnit.SECONDS)    // Время на ожидание данных от сервера
+        .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
     val instance: ApiService by lazy {
