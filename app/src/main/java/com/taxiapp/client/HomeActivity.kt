@@ -816,15 +816,19 @@ private fun fetchAddressAtCurrentLocation() {
         viewModel.isLoading.observe(this) { loading ->
             setButtonsLoadingState(loading)
             if (loading) {
-                // 🔥 ФИКС: Вместо хардкода текста проверяем, создается ли заказ прямо сейчас 
-                // (если активного ID еще нет, значит идет запрос тарифов, показываем шиммер)
-                if (activeOrderId == null) {
+                // 🛡️ Включаем шиммер ТОЛЬКО если тарифов ещё нет в памяти (первичная загрузка)
+                if (activeOrderId == null && availableTariffs.isEmpty()) {
                     tariffsRecyclerView.visibility = View.GONE
                     tariffsShimmer.visibility = View.VISIBLE
                     tariffsShimmer.startShimmer()
                 }
             } else {
-                // Выключение шиммера остается на availableTariffs
+                // 🛡️ Гарантированный сброс шиммера при завершении любой загрузки
+                tariffsShimmer.stopShimmer()
+                tariffsShimmer.visibility = View.GONE
+                if (availableTariffs.isNotEmpty()) {
+                    tariffsRecyclerView.visibility = View.VISIBLE
+                }
             }
         }
         viewModel.errorMessage.observe(this) { msg ->
@@ -834,6 +838,12 @@ private fun fetchAddressAtCurrentLocation() {
             btnCancelOrder.isEnabled = true
             btnCancelOrder.text = "Скасувати замовлення"
 
+            // 🛡️ ЖЕЛЕЗНЫЙ ВОЗВРАТ UI: Гасим зависший шиммер и возвращаем выбранный тариф
+            tariffsShimmer.stopShimmer()
+            tariffsShimmer.visibility = View.GONE
+            if (availableTariffs.isNotEmpty()) {
+                tariffsRecyclerView.visibility = View.VISIBLE
+            }
         }
     }
 

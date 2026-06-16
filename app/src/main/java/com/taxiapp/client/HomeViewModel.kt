@@ -382,7 +382,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         updateOrderStatusService(order)
                     }
                 } else {
-                    // Твой текущий код обработки ошибок оставляем без изменений...
+                    // 🛡️ ЧИТАЕМ СЕРВЕРНУЮ ОШИБКУ ХОЛДИРОВАНИЯ И ВЫВОДИМ В UI
+                    val errorJson = response.errorBody()?.string()
+                    val msg = try {
+                        val jsonObject = com.google.gson.JsonParser.parseString(errorJson).asJsonObject
+                        if (jsonObject.has("message")) {
+                            jsonObject.get("message").asString
+                        } else {
+                            "Не вдалося зарезервувати кошти. Перевірте баланс"
+                        }
+                    } catch (e: Exception) {
+                        "Помилка створення замовлення. Спробуйте інший спосіб оплати"
+                    }
+                    _errorMessage.value = msg
                 }
             }
             override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
