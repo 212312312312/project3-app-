@@ -28,7 +28,6 @@ class SplashActivity : BaseActivity()  {
         val contentWrapper = findViewById<View>(R.id.splash_content_wrapper)
 
         val slideUp = AnimationUtils.loadAnimation(this, R.anim.slide_up)
-
         // Анімуємо тільки контент
         contentWrapper.startAnimation(slideUp)
         // -----------------

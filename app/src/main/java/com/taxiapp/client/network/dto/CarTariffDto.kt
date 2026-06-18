@@ -20,5 +20,6 @@ data class CarTariffDto(
     @SerializedName("imageUrl") val imageUrl: String?,
 
     @SerializedName("calculatedPrice") val calculatedPrice: Double? = null,
-    @SerializedName("description") val description: String? = null
+    @SerializedName("description") val description: String? = null,
+    @SerializedName("oldPrice") val oldPrice: Double? = null // 👈 ДОБАВИТЬ СЮДА
 ) : Serializable

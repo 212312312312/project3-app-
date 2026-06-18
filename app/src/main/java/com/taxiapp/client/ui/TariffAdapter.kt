@@ -23,7 +23,8 @@ data class TariffItem(
     val tariff: CarTariffDto,
     val priceString: String,
     val priceValue: Double,
-    val addedValue: Double = 0.0
+    val addedValue: Double = 0.0,
+    val oldPriceValue: Double? = null // 👈 ДОБАВИТЬ СЮДА
 )
 
 class TariffAdapter(
@@ -102,13 +103,17 @@ class TariffAdapter(
             // -----------------------------
 
             // Знижки
-            if (currentDiscountPercent > 0.0) {
+            // --- УМНАЯ ДИНАМИЧЕСКАЯ ЛОГИКА СКИДОК С СЕРВЕРА ---
+            if (item.oldPriceValue != null && item.oldPriceValue > item.priceValue) {
                 oldPrice.visibility = View.VISIBLE
-                oldPrice.text = "${item.priceValue.roundToInt()} ₴"
+                oldPrice.text = "${item.oldPriceValue.roundToInt()} ₴"
                 oldPrice.paintFlags = oldPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
 
+                // Автоматически вычисляем процент скидки на основе двух цен
+                val calculatedPct = ((item.oldPriceValue - item.priceValue) / item.oldPriceValue * 100).roundToInt()
+
                 discountBadge.visibility = View.VISIBLE
-                discountBadge.text = "-${currentDiscountPercent.toInt()}%"
+                discountBadge.text = "-$calculatedPct%"
 
                 if (isSelected) {
                     discountBadge.setBackgroundResource(R.drawable.bg_discount_filled)
@@ -117,23 +122,15 @@ class TariffAdapter(
                     discountBadge.setBackgroundResource(R.drawable.bg_discount_outline)
                     discountBadge.setTextColor(Color.parseColor("#00E5FF"))
                 }
-
-                val rawDiscount = item.priceValue * (currentDiscountPercent / 100.0)
-                val finalDiscount = if (maxDiscountAmount > 0.0) {
-                    min(rawDiscount, maxDiscountAmount)
-                } else {
-                    rawDiscount
-                }
-
-                val newPrice = item.priceValue - finalDiscount
-                val displayPrice = if (newPrice < 0) 0.0 else newPrice
-
-                price.text = "${displayPrice.roundToInt()} ₴"
             } else {
+                // Если скидки нет, скрываем элементы
                 oldPrice.visibility = View.GONE
                 discountBadge.visibility = View.GONE
-                price.text = "${item.priceValue.roundToInt()} ₴"
             }
+
+            // Вывод текущей актуальной цены (со скидкой или без)
+            price.text = "${item.priceValue.roundToInt()} ₴"
+            // --------------------------------------------------
 
             // --- ЛОГИКА НЕДОСТУПНОГО ТАРИФА (UNAVAILABLE) ---
             if (tariff.isUnavailable) {
@@ -253,7 +250,12 @@ class TariffAdapter(
             val finalPrice = withServices + userAdded
             val priceString = String.format("%.0f", finalPrice)
 
-            TariffItem(tariff, priceString, finalPrice, userAdded)
+            // 🎁 Считаем полную старую цену (база с сервера + доп услуги + наценка клика)
+            val finalOldPrice = if (tariff.oldPrice != null && tariff.oldPrice!! > 0) {
+                tariff.oldPrice!! + currentExtraCost + userAdded
+            } else null
+
+            TariffItem(tariff, priceString, finalPrice, userAdded, finalOldPrice) // 👈 Передаем finalOldPrice
         }
         notifyDataSetChanged()
     }
