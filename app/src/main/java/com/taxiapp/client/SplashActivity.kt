@@ -6,16 +6,23 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.animation.AnimationUtils
-import android.widget.ImageView
-import androidx.appcompat.app.AppCompatActivity
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 
 class SplashActivity : BaseActivity()  {
+
+    // Перемінна для тимчасового збереження маркетингового джерела
+    private var acquisitionSource: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContentView(R.layout.activity_splash)
+
+        // Перехоплюємо маркетингове джерело з Deep Link (наприклад: taxi://open?source=fb_poznyaki)
+        intent?.data?.let { uri ->
+            acquisitionSource = uri.getQueryParameter("source")
+        }
 
         try {
             ViewUtils.makeImmersive(this)
@@ -45,12 +52,18 @@ class SplashActivity : BaseActivity()  {
             if (token != null) {
                 startActivity(Intent(this, HomeActivity::class.java))
             } else {
-                startActivity(Intent(this, MainActivity::class.java))
+                val intent = Intent(this, MainActivity::class.java).apply {
+                    putExtra("EXTRA_ACQUISITION_SOURCE", acquisitionSource)
+                }
+                startActivity(intent)
             }
             finish()
         } catch (e: Exception) {
             e.printStackTrace()
-            startActivity(Intent(this, MainActivity::class.java))
+            val intent = Intent(this, MainActivity::class.java).apply {
+                putExtra("EXTRA_ACQUISITION_SOURCE", acquisitionSource)
+            }
+            startActivity(intent)
             finish()
         }
     }

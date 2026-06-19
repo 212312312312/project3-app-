@@ -23,7 +23,10 @@ data class ClientProfileResponse(
 )
 
 data class TokenRefreshRequestDto(val refreshToken: String)
-data class GoogleAuthRequestDto(val idToken: String)
+data class GoogleAuthRequestDto(
+    val idToken: String,
+    val acquisitionSource: String? = null // Добавили поле трекинга рекламы
+)
 data class InitBindCardResponse(val paymentUrl: String)
 
 interface ApiService {

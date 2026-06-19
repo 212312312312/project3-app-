@@ -43,6 +43,9 @@ class MainActivity : BaseActivity() {
 
     private lateinit var sessionManager: SessionManager
 
+    // Маркетингове джерело установки для аналітики
+    private var marketingSource: String? = null
+
     // UI Секции
     private lateinit var layoutPhone: LinearLayout
     private lateinit var layoutSms: LinearLayout
@@ -109,6 +112,8 @@ class MainActivity : BaseActivity() {
 
         sessionManager = SessionManager(applicationContext)
 
+        // Отримуємо джерело залучення, яке передав SplashActivity
+        marketingSource = intent.getStringExtra("EXTRA_ACQUISITION_SOURCE")
 
         // Если токен ЕСТЬ и телефон ЕСТЬ, пускаем дальше.
         val token = sessionManager.fetchAuthToken()
@@ -178,7 +183,7 @@ class MainActivity : BaseActivity() {
 
     private fun verifyGoogleToken(idToken: String) {
         setLoading(true)
-        val request = GoogleAuthRequestDto(idToken)
+        val request = GoogleAuthRequestDto(idToken, marketingSource)
 
         ApiClient.instance.loginWithGoogle(request).enqueue(object : Callback<LoginResponseDto> {
             override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
@@ -224,7 +229,7 @@ class MainActivity : BaseActivity() {
 
     private fun verifySms(phone: String, code: String) {
         setLoading(true)
-        val request = SmsVerifyDto(phoneNumber = phone, code = code)
+        val request = SmsVerifyDto(phoneNumber = phone, code = code, acquisitionSource = marketingSource)
 
         if (isLinkingPhoneState) {
             // Вызов очищен от ручной передачи токена, Interceptor подхватит его сам
@@ -399,13 +404,11 @@ class MainActivity : BaseActivity() {
     }
 
     private fun updateFcmTokenOnServer() {
-        // Мы проверяем, есть ли токен, но не передаем его вручную в запрос
         val token = sessionManager.fetchAuthToken() ?: return
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) return@addOnCompleteListener
             val fcmToken = task.result
             val body = mapOf("token" to fcmToken)
-            // Вызов очищен от ручной передачи токена
             ApiClient.instance.updateFcmToken(body).enqueue(object : Callback<Void> {
                 override fun onResponse(call: Call<Void>, response: Response<Void>) {}
                 override fun onFailure(call: Call<Void>, t: Throwable) {}
