@@ -52,8 +52,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _scheduledOrderSuccess.value = null
     }
 
-    private var profilePollingHandler = Handler(Looper.getMainLooper())
-    private var profilePollingRunnable: Runnable? = null
+
 
     private val _orderStatus = MutableLiveData<String>()
     val orderStatus: LiveData<String> get() = _orderStatus
@@ -219,39 +218,30 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
-    fun startCheckingCardBinding() {
-        profilePollingRunnable = object : Runnable {
-            override fun run() {
-                // Вызов очищен от ручной передачи токена
-                ApiClient.instance.getClientProfile().enqueue(object : Callback<com.taxiapp.client.network.ClientProfileResponse> {
-                    override fun onResponse(call: Call<com.taxiapp.client.network.ClientProfileResponse>, response: Response<com.taxiapp.client.network.ClientProfileResponse>) {
-                        if (response.isSuccessful) {
-                            val profile = response.body()
-                            // Если сервер получил вебхук от LiqPay и записал маску:
-                            if (profile != null && !profile.cardMask.isNullOrEmpty()) {
-                                sessionManager.saveCardMask(profile.cardMask) // Сохраняем локально
-                                _cardBoundEvent.value = true // Даем сигнал Activity!
-                                stopCheckingCardBinding() // Останавливаем проверку
-                            } else {
-                                // Карты еще нет, ждем 3 сек. ИСПОЛЬЗУЕМ ПЕРЕМЕННУЮ ВМЕСТО this@Runnable
-                                profilePollingRunnable?.let { profilePollingHandler.postDelayed(it, 3000) }
-                            }
-                        } else {
-                            profilePollingRunnable?.let { profilePollingHandler.postDelayed(it, 3000) }
-                        }
-                    }
-                    override fun onFailure(call: Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
-                        profilePollingRunnable?.let { profilePollingHandler.postDelayed(it, 3000) }
-                    }
-                })
+    fun startCheckingCardBinding(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
+        val clientId = sessionManager.fetchUserId()
+        if (clientId == -1L) {
+            Log.e("HomeViewModel", "Cannot subscribe to card bind: clientId is -1")
+            return
+        }
+
+        Log.d("WS_BIND_DEBUG", "🎧 Подписываемся на WebSocket привязки карты для клиента: $clientId")
+        webSocketManager?.subscribeToCardBinding(clientId) { messageDto ->
+            Log.d("WS_BIND_DEBUG", "⚡ Получен сокет-апдейт привязки карты! Status: ${messageDto.status}")
+
+            if (messageDto.status == "SUCCESS" && !messageDto.cardMask.isNullOrEmpty()) {
+                sessionManager.saveCardMask(messageDto.cardMask) // Сохраняем локально в SharedPreferences
+                _cardBoundEvent.postValue(true) // Триггерим UI-событие для закрытия экрана / WebView
+            } else {
+                _errorMessage.postValue(messageDto.message ?: "Помилка прив'язки картки")
             }
         }
-        // Запускаем в первый раз
-        profilePollingHandler.post(profilePollingRunnable!!)
     }
 
     fun stopCheckingCardBinding() {
-        profilePollingRunnable?.let { profilePollingHandler.removeCallbacks(it) }
+        // Теперь сокет-подписка закроется автоматически при общем уничтожении WebSocketManager,
+        // поэтому здесь мы просто логируем остановку процесса.
+        Log.d("WS_BIND_DEBUG", "🛑 Прекращаем ожидать привязку карты")
     }
 
     fun resetCardBoundEvent() {

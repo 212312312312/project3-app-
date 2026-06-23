@@ -23,10 +23,16 @@ data class OrderSocketMessageDto(
     val orderId: String,
     val order: TaxiOrderDto?
 )
-
+data class CardBindSocketMessageDto(
+    val status: String,
+    val cardMask: String?,
+    val message: String?
+)
 class WebSocketManager(private val baseUrl: String) {
 
+    private var currentCardBindSub: Pair<Long, (CardBindSocketMessageDto) -> Unit>? = null
     private var nearbyDriversDisposable: io.reactivex.disposables.Disposable? = null
+    private var driverTrackingDisposable: io.reactivex.disposables.Disposable? = null
     private var currentNearbyDriversSub: Pair<String, (List<DriverLocationDto>) -> Unit>? = null
     private var stompClient: StompClient? = null
     private val compositeDisposable = CompositeDisposable()
@@ -70,6 +76,7 @@ class WebSocketManager(private val baseUrl: String) {
 
         // Наша подписка на машинки
         currentNearbyDriversSub?.let { subscribeToNearbyDrivers(it.first, it.second) }
+        currentCardBindSub?.let { subscribeToCardBinding(it.first, it.second) }
     }
 
 
@@ -174,11 +181,14 @@ class WebSocketManager(private val baseUrl: String) {
         connect(newToken)
     }
 
-    fun subscribeToDriverLocation(orderId: String, onLocationReceived: (TrackingLocationDto) -> Unit) { // <-- ТИП String
-        currentLocationSub = Pair(orderId, onLocationReceived) // Запоминаем подписку
+    fun subscribeToDriverLocation(orderId: String, onLocationReceived: (TrackingLocationDto) -> Unit) {
+        currentLocationSub = Pair(orderId, onLocationReceived)
         val topic = "/topic/order/$orderId/tracking"
 
-        val disp = stompClient?.topic(topic)
+        // Очищаем предыдущую подписку, если она была активна
+        driverTrackingDisposable?.dispose()
+
+        driverTrackingDisposable = stompClient?.topic(topic)
             ?.subscribeOn(Schedulers.io())
             ?.observeOn(AndroidSchedulers.mainThread())
             ?.subscribe({ topicMessage ->
@@ -192,8 +202,13 @@ class WebSocketManager(private val baseUrl: String) {
             }, { throwable ->
                 Log.e("WebSocket", "Subscription Error", throwable)
             })
+    }
 
-        if (disp != null) compositeDisposable.add(disp)
+    fun unsubscribeFromDriverLocation() {
+        driverTrackingDisposable?.dispose()
+        driverTrackingDisposable = null
+        currentLocationSub = null
+        Log.d("WS_TAXI_DEBUG", "🛑 Успешно отписались от трекинга назначенного водителя")
     }
 
     @SuppressLint("CheckResult")
@@ -240,6 +255,28 @@ class WebSocketManager(private val baseUrl: String) {
         if (disp != null) compositeDisposable.add(disp)
     }
 
+    @SuppressLint("CheckResult")
+    fun subscribeToCardBinding(clientId: Long, onCardBindUpdated: (CardBindSocketMessageDto) -> Unit) {
+        currentCardBindSub = Pair(clientId, onCardBindUpdated)
+        val topic = "/topic/clients/$clientId/card-bind"
+
+        val disp = stompClient?.topic(topic)
+            ?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe({ topicMessage ->
+                try {
+                    val message = gson.fromJson(topicMessage.payload, CardBindSocketMessageDto::class.java)
+                    onCardBindUpdated(message)
+                } catch (e: Exception) {
+                    Log.e("WebSocketManager", "Error parsing card bind message: ${e.message}")
+                }
+            }, { error ->
+                Log.e("WebSocketManager", "Card bind subscription error", error)
+            })
+
+        if (disp != null) compositeDisposable.add(disp)
+    }
+
     fun disconnect() {
         stompClient?.disconnect()
         compositeDisposable.clear()
@@ -252,6 +289,9 @@ class WebSocketManager(private val baseUrl: String) {
         currentChatSub = null
         currentLocationSub = null
         currentOrderSub = null
+        currentCardBindSub = null
+        driverTrackingDisposable?.dispose()
+        driverTrackingDisposable = null
     }
 
     // Желательно вызывать при уничтожении компонента, который держит WebSocketManager

@@ -3428,15 +3428,15 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         })
     }
 
-    private fun startDriverTracking(orderId: String) { // <-- ИЗМЕНИЛИ ТИП С Long НА String
+    private fun startDriverTracking(orderId: String) {
         if (isDriverTrackingActive) return
         isDriverTrackingActive = true
 
         val token = sessionManager.fetchAuthToken()
         webSocketManager?.connect(token)
 
-        // Передаем либо текущий id заказа из объекта, либо activeOrderId (они оба теперь String)
-        webSocketManager?.subscribeToDriverLocation(activeOrderId ?: "") { locationDto ->
+        // 🔥 ИСПРАВЛЕНО: Передаем именно orderId, пришедший в параметры метода
+        webSocketManager?.subscribeToDriverLocation(orderId) { locationDto ->
             runOnUiThread {
                 updateDriverMarker(locationDto)
             }
@@ -3470,15 +3470,21 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
         webViewDialog?.show()
 
-        // ЗАПУСКАЕМ НАШ УМНЫЙ ПОЛЛИНГ!
-        viewModel.startCheckingCardBinding()
+        // 🔥 ИСПРАВЛЕНО: Передаем наш экземпляр webSocketManager в метод сокетов
+        viewModel.startCheckingCardBinding(webSocketManager)
     }
 
     private fun stopDriverTracking() {
+        if (!isDriverTrackingActive) return
         isDriverTrackingActive = false
-        webSocketManager?.disconnect()
+
+        // Отписываем сокет от топика трекинга
+        webSocketManager?.unsubscribeFromDriverLocation()
+
+        // Удаляем маркер машины с карты и обнуляем его
         driverMarker?.remove()
         driverMarker = null
+        Log.d("TRACKING_DEBUG", "🏠 Трекинг водителя успешно остановлен, маркер удален.")
     }
 
     private fun animateRoute(path: List<LatLng>) {
