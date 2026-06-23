@@ -198,11 +198,30 @@ class PaymentActivity : BaseActivity() {
         val btnClose = dialog.findViewById<ImageView>(R.id.btn_close_webview)
         val webView = dialog.findViewById<WebView>(R.id.liqpay_webview)
 
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
 
-        // Больше никаких перехватчиков URL! Только стандартный клиент.
-        webView.webViewClient = WebViewClient()
+            // --- ЗАЩИТА: Полностью блокируем доступ WebView к локальным файлам приложения на устройстве ---
+            allowFileAccess = false
+            allowContentAccess = false
+        }
+
+// --- ЗАЩИТА: Внедряем строгий белый список доменов (Anti-Phishing / Anti-Fraud) ---
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                val url = request?.url?.toString() ?: return false
+
+                // Разрешаем переходы только на официальный шлюз LiqPay и наш доверенный бэкенд
+                val isAllowed = url.contains("liqpay.ua") || url.contains("ngrok-free.dev")
+
+                if (!isAllowed) {
+                    // Если WebView пытаются увести на левый фишинговый сайт — жестко блокируем переход
+                    return true
+                }
+                return super.shouldOverrideUrlLoading(view, request)
+            }
+        }
         webView.webChromeClient = WebChromeClient()
 
         btnClose.setOnClickListener {

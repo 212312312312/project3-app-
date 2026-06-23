@@ -153,7 +153,13 @@ class WebSocketManager(private val baseUrl: String) {
             headers.add(ua.naiksoftware.stomp.dto.StompHeader("Authorization", "Bearer $token"))
         }
 
-        stompClient?.connect(headers)
+        val token = ApiClient.sessionManager?.fetchAuthToken() // Достаем свежий токен из EncryptedPrefs
+        if (!token.isNullOrEmpty()) {
+            val authHeaders = listOf(ua.naiksoftware.stomp.dto.StompHeader("Authorization", "Bearer $token"))
+            stompClient?.connect(authHeaders) // Подключаемся с токеном для прохождения валидации на сервере
+        } else {
+            stompClient?.connect() // Фолбэк-коннект (например, для публичных каналов, если применимо)
+        }
 
         val disp = stompClient!!.lifecycle()
             .subscribeOn(Schedulers.io())

@@ -2,6 +2,7 @@ package com.taxiapp.client.network
 
 import android.content.Context
 import android.os.PowerManager
+import android.util.Log
 import com.taxiapp.client.TaxiApplication
 import com.taxiapp.client.utils.SessionManager
 import okhttp3.Interceptor
@@ -14,10 +15,23 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
 
-    const val BASE_URL = "http://192.168.0.107:8080/api/v1/"
+    private const val TAG = "ApiClient_Secure"
+    const val BASE_URL = "https://decorous-tempie-nonsubjugable.ngrok-free.dev/api/v1/"
 
     var sessionManager: SessionManager? = null
     private val refreshLock = Any() // Объект для безопасной блокировки потоков
+
+    // Вспомогательный метод для безопасного логирования только в режиме отладки
+    private fun logDebug(message: String, exception: Throwable? = null) {
+        // Проверяем глобальный флаг отладки Android приложения
+        if (com.taxiapp.client.BuildConfig.DEBUG) {
+            if (exception != null) {
+                Log.d(TAG, message, exception)
+            } else {
+                Log.d(TAG, message)
+            }
+        }
+    }
 
     private val errorInterceptor = Interceptor { chain ->
         try {
@@ -36,10 +50,10 @@ object ApiClient {
                 // Триггерим ошибку сервера по таймауту ТОЛЬКО если приложение в Foreground
                 // И экран устройства физически активен (горит) перед глазами пользователя
                 if (TaxiApplication.isAppInForeground && isDeviceInteractive()) {
-                    println(">>> NETWORK: Timeout. App is in FOREGROUND and Screen is ON. Triggering error.")
+                    logDebug("NETWORK: Timeout. App is in FOREGROUND and Screen is ON. Triggering error.")
                     ServerStatusBus.triggerServerError()
                 } else {
-                    println(">>> NETWORK: Timeout ignored. App in background or screen is OFF.")
+                    logDebug("NETWORK: Timeout ignored. App in background or screen is OFF.")
                 }
             }
             throw e
@@ -85,13 +99,13 @@ object ApiClient {
 
         // 2. Ловим 401 ошибку просроченного токена
         if (response.code == 401 && sm != null) {
-            println(">>> AUTH INTERCEPTOR: Caught 401 Unauthorized for ${originalRequest.url}")
+            logDebug("AUTH INTERCEPTOR: Caught 401 Unauthorized for ${originalRequest.url}")
 
             synchronized(refreshLock) {
                 // 3. Проверка: не обновил ли токен другой поток (чтобы не дублировать запросы)
                 val newToken = sm.fetchAuthToken()
                 if (newToken != null && newToken != currentToken) {
-                    println(">>> AUTH INTERCEPTOR: Token already refreshed. Retrying...")
+                    logDebug("AUTH INTERCEPTOR: Token already refreshed. Retrying...")
                     response.close()
                     val newRequest = originalRequest.newBuilder()
                         .header("Authorization", "Bearer $newToken")
@@ -102,20 +116,20 @@ object ApiClient {
                 // 4. Берем Refresh Token
                 val refreshToken = sm.fetchRefreshToken()
                 if (refreshToken.isNullOrEmpty()) {
-                    println(">>> AUTH INTERCEPTOR: NO REFRESH TOKEN! Throwing to login screen.")
+                    logDebug("AUTH INTERCEPTOR: NO REFRESH TOKEN! Throwing to login screen.")
                     sm.clearSession()
                     ServerStatusBus.triggerSessionExpired()
                     return@Interceptor response
                 }
 
                 try {
-                    println(">>> AUTH INTERCEPTOR: Sending request to /auth/refresh...")
+                    logDebug("AUTH INTERCEPTOR: Sending request to /auth/refresh...")
                     // Выполняем СИНХРОННЫЙ запрос чистым клиентом
                     val refreshCall = authService.refreshToken(TokenRefreshRequestDto(refreshToken))
                     val refreshResponse = refreshCall.execute()
 
                     if (refreshResponse.isSuccessful && refreshResponse.body() != null) {
-                        println(">>> AUTH INTERCEPTOR: SUCCESS! Got new tokens.")
+                        logDebug("AUTH INTERCEPTOR: SUCCESS! Got new tokens.")
                         val loginResponse = refreshResponse.body()!!
 
                         // Сохраняем новые токены
@@ -134,12 +148,12 @@ object ApiClient {
                             .build()
                         response = chain.proceed(retryRequest)
                     } else {
-                        println(">>> AUTH INTERCEPTOR: Refresh FAILED with code ${refreshResponse.code()}")
+                        logDebug("AUTH INTERCEPTOR: Refresh FAILED with code ${refreshResponse.code()}")
                         sm.clearSession()
                         ServerStatusBus.triggerSessionExpired()
                     }
                 } catch (e: Exception) {
-                    println(">>> AUTH INTERCEPTOR: CRASH during refresh: ${e.message}")
+                    logDebug("AUTH INTERCEPTOR: CRASH during refresh", e)
                     sm.clearSession()
                     ServerStatusBus.triggerSessionExpired()
                 }

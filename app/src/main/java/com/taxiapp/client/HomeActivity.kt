@@ -531,7 +531,14 @@ private fun fetchAddressAtCurrentLocation() {
         if (result.resultCode == RESULT_OK && result.data != null) {
             val data = result.data!!
             servicesExtraCost = data.getDoubleExtra("EXTRA_COST", 0.0)
-            selectedServiceIds = data.getSerializableExtra("SELECTED_IDS") as? ArrayList<Long> ?: ArrayList()
+            
+            // --- ЗАЩИТА: Безопасное чтение Serializable с учетом требований Android 13+ (API 33+) ---
+            selectedServiceIds = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                data.getSerializableExtra("SELECTED_IDS", ArrayList::class.java) as? ArrayList<Long>
+            } else {
+                @Suppress("DEPRECATION")
+                data.getSerializableExtra("SELECTED_IDS") as? ArrayList<Long>
+            } ?: ArrayList()
 
             tariffAdapter.updateExtraCost(servicesExtraCost)
 
@@ -579,14 +586,16 @@ private fun fetchAddressAtCurrentLocation() {
             return 
         }
 
+        // Инициализируем глобальное свойство один раз
         sessionManager = SessionManager(applicationContext)
 
         currentActiveLanguage = sessionManager.getLanguage()
 
         webSocketManager = WebSocketManager(ApiClient.BASE_URL)
         fetchCustomCarIcon()
-        val sessionManager = com.taxiapp.client.utils.SessionManager(this)
-        val token = sessionManager.fetchAuthToken() // ИСПРАВЛЕНО ЗДЕСЬ
+        
+        // --- ЗАЩИТА: Локальный дубликат удален, используем уже созданный sessionManager ---
+        val token = sessionManager.fetchAuthToken()
 
         if (!token.isNullOrEmpty()) {
             webSocketManager?.connect(token)
@@ -608,9 +617,9 @@ private fun fetchAddressAtCurrentLocation() {
 
         setupSystemBars(isDark)
 
-        val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI" 
+        // --- ЗАЩИТА: Строковый хардкод полностью вырезан. Ключ подтягивается динамически ---
         if (!Places.isInitialized()) {
-            Places.initialize(applicationContext, myApiKey, Locale("uk", "UA"))
+            Places.initialize(applicationContext, BuildConfig.GOOGLE_PLACES_API_KEY, Locale("uk", "UA"))
         }
 
         currentCity = sessionManager.fetchUserCity()
@@ -936,15 +945,25 @@ private fun fetchAddressAtCurrentLocation() {
 
     private fun applyTheme(isDark: Boolean) {
         try {
+            // --- ЗАЩИТА ОТ OOM: Очищаем старый тяжелый Bitmap из памяти перед созданием нового ---
+            lastScreenshot?.let {
+                if (!it.isRecycled) it.recycle()
+            }
+            
             val rootView = window.decorView.rootView
-            val bitmap = android.graphics.Bitmap.createBitmap(
-                rootView.width, 
-                rootView.height, 
-                android.graphics.Bitmap.Config.ARGB_8888
-            )
-            val canvas = android.graphics.Canvas(bitmap)
-            rootView.draw(canvas)
-            lastScreenshot = bitmap
+            if (rootView.width > 0 && rootView.height > 0) {
+                // Использование Config.RGB_565 экономит в 2 РАЗА больше оперативной памяти смартфона
+                val bitmap = android.graphics.Bitmap.createBitmap(
+                    rootView.width, 
+                    rootView.height, 
+                    android.graphics.Bitmap.Config.RGB_565
+                )
+                val canvas = android.graphics.Canvas(bitmap)
+                rootView.draw(canvas)
+                lastScreenshot = bitmap
+            } else {
+                lastScreenshot = null
+            }
         } catch (e: Exception) {
             lastScreenshot = null
         }
@@ -956,48 +975,46 @@ private fun fetchAddressAtCurrentLocation() {
     }
 
     override fun onResume() {
-    super.onResume()
-    
-    // Твой существующий код переподключения сокета
-    if (webSocketManager?.isConnected() != true) {
-        val sessionManager = com.taxiapp.client.utils.SessionManager(this)
-        val token = sessionManager.fetchAuthToken()
-        if (!token.isNullOrEmpty()) {
-            webSocketManager?.connect(token)
+        super.onResume()
+        
+        // Переподключение сокета (Используем наш глобальный sessionManager без создания дубликатов в памяти)
+        if (webSocketManager?.isConnected() != true) {
+            val token = sessionManager.fetchAuthToken()
+            if (!token.isNullOrEmpty()) {
+                webSocketManager?.connect(token)
+            }
         }
-    }
-    webSocketManager?.let { viewModel.startOrderSocketListening(it) }
 
-    // --- ДОБАВЛЕНО: Принудительный запрос статуса, если приложение вернулось из фона в режиме поиска водителя ---
-    val currentStatus = viewModel.activeOrder.value?.status
-    if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
-        // Вызываем без параметров, чисто и безопасно
-        viewModel.checkOrderStatusOnce()
-    }
-    // ---------------------------------------------------------------------------------------------------------
+        // --- ОПТИМИЗАЦИЯ: Повторный вызов startOrderSocketListening вырезан, оставлен только один главный шлюз ---
+        viewModel.startOrderSocketListening(webSocketManager)
 
-    // КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: Включаем реалтайм отслеживание статусов заказов клиента через сокет
-    viewModel.startOrderSocketListening(webSocketManager)
-
-    val savedLanguage = sessionManager.getLanguage()
-    if (currentActiveLanguage != savedLanguage) {
-        currentActiveLanguage = savedLanguage
-        recreate() // Пересоздаем HomeActivity с новым языком
-        return // Прерываем выполнение старого onResume
-    }
-    updateFavoriteButtonsUI()
-    updateDrawerHeader()
-    updatePaymentMethodFromSession()
-
-    if (tariffsPanel.visibility == View.VISIBLE) {
-        fetchTariffsAndShowPanel()
-    }
-    Handler(Looper.getMainLooper()).postDelayed({
-        if (!isDestroyed && !isFinishing) {
-            fetchClientProfile()
+        val currentStatus = viewModel.activeOrder.value?.status
+        if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
+            viewModel.checkOrderStatusOnce()
         }
-    }, 2000)
-}
+
+        val savedLanguage = sessionManager.getLanguage()
+        if (currentActiveLanguage != savedLanguage) {
+            currentActiveLanguage = savedLanguage
+            recreate() 
+            return 
+        }
+        
+        updateFavoriteButtonsUI()
+        updateDrawerHeader()
+        updatePaymentMethodFromSession()
+
+        if (tariffsPanel.visibility == View.VISIBLE) {
+            fetchTariffsAndShowPanel()
+        }
+        
+        // --- ЗАЩИТА ОТ УТЕЧКИ ПАМЯТИ: Привязываем Handler к жизненному циклу через проверку состояний ---
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!isDestroyed && !isFinishing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                fetchClientProfile()
+            }
+        }, 2000)
+    }
     private fun startRadarAnimation(centerLatLng: LatLng) {
     if (mMap == null || isRadarAnimationRunning) return
     isRadarAnimationRunning = true
@@ -1496,13 +1513,6 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
             } else { showToast("Номер недоступний") }
         }
 
-        btnOrderTaxi.setOnClickListener {
-            if (selectedTariffItem != null) {
-                createOrder(selectedTariffItem!!.tariff, selectedTariffItem!!.priceValue)
-            } else {
-                showToast("Оберіть тариф")
-            }
-        }
 
         btnCancelOrder.setOnClickListener { cancelCurrentOrder() }
 

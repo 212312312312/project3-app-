@@ -7,6 +7,11 @@ plugins {
 
 android {
     namespace 'com.taxiapp.client'
+
+    Properties properties = new Properties()
+    if (project.rootProject.file('local.properties').exists()) {
+        properties.load(project.rootProject.file('local.properties').newDataInputStream())
+    }
     compileSdk 34 // Рекомендую использовать стабильную версию (33 или 34), 36 может быть нестабильной
 
     defaultConfig {
@@ -15,10 +20,14 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+        buildConfigField "String", "GOOGLE_PLACES_API_KEY", "\"${properties.getProperty('GOOGLE_PLACES_API_KEY', '')}\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
     buildTypes {
         release {
             minifyEnabled false
@@ -36,7 +45,8 @@ android {
 
 dependencies {
     // ВАЖНО: Я удалил отсюда строку "classpath ...", она должна быть только в файле проекта!
-
+    // Добавь в dependencies, если еще не добавлено:
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     implementation libs.androidx.core.ktx
     implementation libs.androidx.appcompat

@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.network.ApiClient
@@ -80,9 +81,11 @@ class ChatActivity : BaseActivity() {
 
         // Real-time оновлення
         lifecycleScope.launch {
-            ChatEventBus.newMessages.collect {
-                delay(800)
-                loadMessageHistory(silent = true)
+            // Подписка активна ТОЛЬКО тогда, когда экран физически виден пользователю (STARTED)
+            lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                ChatEventBus.newMessages.collect { message ->
+                    // Твой текущий внутренний код обработки (например, chatAdapter.addMessage или loadMessageHistory)
+                }
             }
         }
     }

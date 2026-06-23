@@ -89,7 +89,11 @@ class TariffAdapter(
                     if (!cleanPath.startsWith("uploads/")) {
                         cleanPath = "uploads/$cleanPath"
                     }
-                    "http://$SERVER_IP:$SERVER_PORT/$cleanPath"
+                    // Автоматически отсекаем "/api/v1/" от нашего защищенного базового URL, чтобы получить чистый корень сервера
+                    val baseUrlRoot = com.taxiapp.client.network.ApiClient.BASE_URL.substringBefore("api/v1/")
+
+                    // Возвращаем строку напрямую в выражение fullUrl
+                    if (cleanPath.startsWith("http")) cleanPath else "${baseUrlRoot}${cleanPath.removePrefix("/")}"
                 }
 
                 Glide.with(itemView.context)
