@@ -342,7 +342,8 @@ class MainActivity : BaseActivity() {
         tvResendCode.isClickable = false
         tvResendCode.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
 
-        resendTimer = object : CountDownTimer(300000, 1000) {
+        // Изменено на 60000 мс (60 секунд)
+        resendTimer = object : CountDownTimer(60000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 val seconds = millisUntilFinished / 1000
                 tvResendCode.text = "Відправити повторно через $seconds"
