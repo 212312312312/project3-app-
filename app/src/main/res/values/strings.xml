@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Client-App</string>
+    <string name="app_name">Unit</string>
 
     <string name="privacy_disclaimer">Ти погоджуєшся на отримання повідомлень і на передачу персональних даних бізнес-партнерам відповідно до <a href="https://rate-taxi.com/privacy-client.html">Політики приватності</a>. Відмовитися від повідомлень можна в налаштуваннях профілю.</string>
 

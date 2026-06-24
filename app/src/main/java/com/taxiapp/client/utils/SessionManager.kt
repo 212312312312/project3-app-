@@ -3,6 +3,8 @@ package com.taxiapp.client.utils
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.android.gms.maps.model.LatLng
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.google.android.libraries.places.api.model.Place
 
 // Допоміжний клас для передачі даних про знижку
@@ -44,7 +46,25 @@ class SessionManager(context: Context) {
     }
 
     init {
-        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        try {
+            // Создаем аппаратно защищенный мастер-ключ AES-256
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            // Инициализируем зашифрованное хранилище
+            prefs = EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // Железный фолбэк: если на старом/кастомном устройстве сбоит Keystore,
+            // откатываемся на обычныеPrefs, чтобы приложение гарантированно НЕ упало
+            prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        }
     }
 
     // --- TOKENS ---

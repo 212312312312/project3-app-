@@ -27,7 +27,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI" />
+            android:value="${mapsApiKeyPlaceholder}" />
 
         <activity
             android:name=".SplashActivity"
@@ -70,6 +70,7 @@
         <activity
             android:name=".ChatActivity"
             android:screenOrientation="portrait"
+            android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
@@ -128,10 +129,12 @@
 
         <activity
             android:name=".PaymentActivity"
+            android:exported="false"
             android:screenOrientation="portrait" />
 
         <activity
             android:name=".ServicesActivity"
+            android:exported="false"
             android:screenOrientation="portrait" />
 
         <activity

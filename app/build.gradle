@@ -12,7 +12,7 @@ android {
     if (project.rootProject.file('local.properties').exists()) {
         properties.load(project.rootProject.file('local.properties').newDataInputStream())
     }
-    compileSdk 34 // Рекомендую использовать стабильную версию (33 или 34), 36 может быть нестабильной
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.taxiapp.client"
@@ -21,6 +21,11 @@ android {
         versionCode 1
         versionName "1.0"
         buildConfigField "String", "GOOGLE_PLACES_API_KEY", "\"${properties.getProperty('GOOGLE_PLACES_API_KEY', '')}\""
+
+        buildConfigField "String", "BASE_URL", "\"https://decorous-tempie-nonsubjugable.ngrok-free.dev/\""
+
+        // 🔥 ДОБАВЛЯЕМ СЮДА: Читаем ключ карт из свойств и пробрасываем в Манифест
+        manifestPlaceholders = [mapsApiKeyPlaceholder: properties.getProperty("MAPS_API_KEY", "")]
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

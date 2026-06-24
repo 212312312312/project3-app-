@@ -5,6 +5,9 @@ import android.os.PowerManager
 import android.util.Log
 import com.taxiapp.client.TaxiApplication
 import com.taxiapp.client.utils.SessionManager
+// 🔥 КРИТИЧЕСКИЙ ИМПОРТ: Подключаем ApiService и все DTO из подпапки dto
+import com.taxiapp.client.network.dto.*
+import okhttp3.CertificatePinner
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -16,14 +19,15 @@ import java.util.concurrent.TimeUnit
 object ApiClient {
 
     private const val TAG = "ApiClient_Secure"
-    const val BASE_URL = "https://decorous-tempie-nonsubjugable.ngrok-free.dev/api/v1/"
+
+    // Динамический URL: подгружает базовый адрес из build.gradle
+    val BASE_URL = com.taxiapp.client.BuildConfig.BASE_URL + "api/v1/"
 
     var sessionManager: SessionManager? = null
-    private val refreshLock = Any() // Объект для безопасной блокировки потоков
+    private val refreshLock = Any() // Объект для безопасной блокировки потоков при обновлении токена
 
     // Вспомогательный метод для безопасного логирования только в режиме отладки
     private fun logDebug(message: String, exception: Throwable? = null) {
-        // Проверяем глобальный флаг отладки Android приложения
         if (com.taxiapp.client.BuildConfig.DEBUG) {
             if (exception != null) {
                 Log.d(TAG, message, exception)
@@ -33,12 +37,13 @@ object ApiClient {
         }
     }
 
+    // Перехватчик серверных ошибок (502/503) и таймаутов
     private val errorInterceptor = Interceptor { chain ->
         try {
             val response = chain.proceed(chain.request())
             if (response.code == 502 || response.code == 503) {
-                // Если сервер явно ответил ошибкой 502/503, проверяем, интерактивен ли экран
-                if (isDeviceInteractive()) {
+                // Проверяем Foreground, чтобы серверный сбой не генерировал ложные триггеры, когда приложение свернуто
+                if (TaxiApplication.isAppInForeground && isDeviceInteractive()) {
                     ServerStatusBus.triggerServerError()
                 }
             } else if (response.isSuccessful) {
@@ -47,8 +52,7 @@ object ApiClient {
             response
         } catch (e: Exception) {
             if (e is ConnectException || e is SocketTimeoutException) {
-                // Триггерим ошибку сервера по таймауту ТОЛЬКО если приложение в Foreground
-                // И экран устройства физически активен (горит) перед глазами пользователя
+                // Триггерим ошибку сервера по таймауту ТОЛЬКО если приложение открыто на экране
                 if (TaxiApplication.isAppInForeground && isDeviceInteractive()) {
                     logDebug("NETWORK: Timeout. App is in FOREGROUND and Screen is ON. Triggering error.")
                     ServerStatusBus.triggerServerError()
@@ -83,7 +87,7 @@ object ApiClient {
 
     private val authService = cleanRetrofit.create(ApiService::class.java)
 
-    // Перехватчик токенов
+    // Перехватчик токенов (Авто-Refresh сессии)
     private val authInterceptor = Interceptor { chain ->
         val sm = sessionManager
         val originalRequest = chain.request()
@@ -165,9 +169,23 @@ object ApiClient {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(errorInterceptor)
-        .connectTimeout(20, TimeUnit.SECONDS) // Время на установку соединения с сервером
-        .readTimeout(20, TimeUnit.SECONDS)    // Время на ожидание данных от сервера
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(20, TimeUnit.SECONDS)
+        .apply {
+            // Certificate Pinning для защиты трафика пассажиров от перехвата в публичных Wi-Fi сетях
+            if (!com.taxiapp.client.BuildConfig.DEBUG) {
+                val uri = android.net.Uri.parse(BASE_URL)
+                val host = uri.host
+                if (host != null) {
+                    val certificatePinner = CertificatePinner.Builder()
+                        .add(host, "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+                        .add(host, "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=")
+                        .build()
+                    certificatePinner(certificatePinner)
+                }
+            }
+        }
         .build()
 
     val instance: ApiService by lazy {

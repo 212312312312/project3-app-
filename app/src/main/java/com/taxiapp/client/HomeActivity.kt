@@ -4,6 +4,10 @@ import android.Manifest
 import android.view.Window
 import android.text.Spannable
 import android.view.MotionEvent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.transition.AutoTransition
 import android.transition.TransitionManager
 import com.facebook.shimmer.ShimmerFrameLayout
@@ -1970,6 +1974,9 @@ btnChangePayment.setOnClickListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        // 🔥 УМНАЯ ОЧИСТКА ПАМЯТИ: Тормозим таймер ожидания, убирая Runnable из очереди Handler
+        stopWaitingTimer() 
+        
         stopDriverTracking()
         viewModel.stopOrderSocketListening()
     }
@@ -2640,27 +2647,30 @@ private fun returnToAddressPicker() {
     addressPickerLauncher.launch(intent)
 }
 
-// Перенесенная функция геокодинга (если у тебя ее еще нет в HomeActivity)
 private fun getAddressFromLocation(latLng: LatLng, callback: (String?) -> Unit) {
-    Thread {
-        try {
-            val geocoder = android.location.Geocoder(this, java.util.Locale("uk", "UA"))
+    // Используем lifecycleScope: корутина автоматически умрет вместе с Activity
+    lifecycleScope.launch(Dispatchers.IO) {
+        val result = try {
+            val geocoder = android.location.Geocoder(this@HomeActivity, java.util.Locale("uk", "UA"))
             val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-            var result: String? = null
             
             if (!addresses.isNullOrEmpty()) {
                 val addressLine = addresses[0].getAddressLine(0)
-                // Используем твой утилитный класс для очистки (индексы, страны)
-                result = com.taxiapp.client.utils.AddressUtils.formatAddress(addressLine) 
+                // Твоя утилита очистки адреса
+                com.taxiapp.client.utils.AddressUtils.formatAddress(addressLine) 
+            } else {
+                null
             }
-            
-            runOnUiThread { callback(result) }
         } catch (e: Exception) {
-            runOnUiThread { callback(null) }
+            null
         }
-    }.start()
-}
 
+        // Безопасно возвращаемся на Главный поток для вызова коллбека интерфейса
+        withContext(Dispatchers.Main) {
+            callback(result)
+        }
+    }
+}
 class RoundedBackgroundSpan(
     private val backgroundColor: Int,
     private val textColor: Int,
@@ -3410,10 +3420,14 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     private fun fetchCustomCarIcon() {
         ApiClient.instance.getCarIconUrl().enqueue(object : Callback<Map<String, String>> {
             override fun onResponse(call: Call<Map<String, String>>, response: Response<Map<String, String>>) {
+                // Защита от краша: проверяем, жив ли экран в момент асинхронного ответа
+                if (isFinishing || isDestroyed) return 
+                
                 var url = response.body()?.get("url")
                 
                 if (!url.isNullOrEmpty()) {
-                    if (url!!.contains("localhost")) {
+                    // 🔥 БЕЗОПАСНОСТЬ: Подмена на локальный IP работает ТОЛЬКО во время разработки (Debug)
+                    if (BuildConfig.DEBUG && url!!.contains("localhost")) {
                         val myIp = "192.168.0.104"
                         url = url!!.replace("localhost", myIp)
                     }
@@ -3423,6 +3437,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                         .load(url)
                         .into(object : CustomTarget<Bitmap>() {
                             override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
+                                if (isFinishing || isDestroyed) return // Повторная проверка перед отрисовкой
                                 val scaled = Bitmap.createScaledBitmap(resource, 130, 130, false)
                                 customCarIcon = BitmapDescriptorFactory.fromBitmap(scaled)
                                 
@@ -3454,6 +3469,14 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun openLiqPayInApp(url: String) {
+        // 🔥 ЗАЩИТА ОТ ФИШИНГА: Безопасно парсим URL и проверяем, что он ведет на официальный эквайринг LiqPay
+        val uri = android.net.Uri.parse(url)
+        val host = uri.host
+        if (host == null || !host.contains("liqpay.ua", ignoreCase = true)) {
+            showToast("Недозволене посилання для оплати")
+            return
+        }
+
         // Создаем диалог на весь экран
         webViewDialog = Dialog(this, android.R.style.Theme_Light_NoTitleBar_Fullscreen)
         val view = layoutInflater.inflate(R.layout.dialog_liqpay_webview, null)
@@ -3713,15 +3736,16 @@ if (!cardMask.isNullOrEmpty()) {
             call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>,
             response: retrofit2.Response<com.taxiapp.client.network.ClientProfileResponse>
         ) {
+            // 🔥 ЖИЗНЕННЫЙ ЦИКЛ: Если пользователь вышел с экрана до того, как пришел профиль — глушим коллбек
+            if (isFinishing || isDestroyed) return
+
             if (response.isSuccessful && response.body() != null) {
                 val profile = response.body()!!
 
                 // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ СЛЕПОТЫ СОКЕТОВ:
-                // Достаем старый ID, сохраняем новый реальный ID профиля из базы данных
                 val oldId = sessionManager.fetchUserId()
                 sessionManager.saveUserId(profile.id)
 
-                // Твой код синхронизации карты и оплаты
                 sessionManager.saveCardMask(profile.cardMask)
 
                 if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
@@ -3734,19 +3758,17 @@ if (!cardMask.isNullOrEmpty()) {
 
                 updatePaymentIcon()
                 
-                // Если ID обновился с -1 на реальный, принудительно пинаем сокеты заказов!
                 if (oldId == -1L && profile.id != -1L) {
                     Log.d("WS_TAXI_DEBUG", "🔄 ID получен из профиля (${profile.id}), перезапускаем WebSocket подписку!")
                     viewModel.startOrderSocketListening(webSocketManager)
                 }
 
-                // Дополнительно обновляем хедер шторки, раз профиль подгрузился
                 updateDrawerHeader()
             }
         }
 
         override fun onFailure(call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
-            // Игнорируем ошибку сети в фоне, пользователь этого не заметит
+            // Игнорируем ошибку сети в фоне
         }
     })
 }
@@ -4462,23 +4484,32 @@ private fun stopWaitingTimer() {
 
         ApiClient.instance.getCancellationReasons("CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
             override fun onResponse(call: Call<List<CancellationReasonDto>>, response: Response<List<CancellationReasonDto>>) {
+                // 🔥 ЗАЩИТА ЖИЗНЕННОГО ЦИКЛА: Если Activity умирает, прекращаем работу, чтобы не было BadTokenException
+                if (isFinishing || isDestroyed) return
+
                 if (response.isSuccessful) {
                     val reasons = response.body()?.filter { it.isActive } ?: emptyList()
 
                     if (reasons.isNotEmpty()) {
-                        // Викликаємо наш новий красивий кастомний діалог!
+                        // Вызываем наш новый красивый кастомный диалог!
                         showCustomCancelDialog(reasons)
                     } else {
-                        // Якщо список порожній — скасовуємо без причини
+                        // Если список порожній — скасовуємо без причини
                         viewModel.cancelOrder(null)
                     }
                 } else {
-                    android.util.Log.e("CancelOrder", "Failed to load reasons: ${response.code()}")
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.e("CancelOrder", "Failed to load reasons: ${response.code()}")
+                    }
                     viewModel.cancelOrder(null)
                 }
             }
             override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
-                android.util.Log.e("CancelOrder", "Network error", t)
+                if (isFinishing || isDestroyed) return
+                
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.e("CancelOrder", "Network error", t)
+                }
                 viewModel.cancelOrder(null)
             }
         })
@@ -4707,8 +4738,9 @@ ivMenuIcon.setColorFilter(adaptiveColor)
     ivOrderTariffIcon.clearColorFilter()
 
     if (!rawUrl.isNullOrEmpty()) {
-        val SERVER_IP = "192.168.0.107" // Правильный IP сервера!
-        val SERVER_PORT = "8080"
+        // 🔥 УБРАН ХАРДКОД IP: Парсим корень из центрального адреса сетевого клиента
+        val baseUrlUri = android.net.Uri.parse(com.taxiapp.client.network.ApiClient.BASE_URL)
+        val serverRoot = "${baseUrlUri.scheme}://${baseUrlUri.host}${if (baseUrlUri.port != -1) ":${baseUrlUri.port}" else ""}"
 
         val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
             rawUrl
@@ -4720,7 +4752,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
             if (!cleanPath.startsWith("uploads/")) {
                 cleanPath = "uploads/$cleanPath"
             }
-            "http://$SERVER_IP:$SERVER_PORT/$cleanPath"
+            "$serverRoot/$cleanPath"
         }
 
         Glide.with(this)
@@ -4956,11 +4988,14 @@ ivMenuIcon.setColorFilter(adaptiveColor)
             dialog.dismiss()
             return
         }
-        
+
         val request = RateDriverRequest(orderId, score, comment)
 
         ApiClient.instance.rateDriver(request).enqueue(object : Callback<MessageResponse> {
             override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
+                // 🔥 ЖИЗНЕННЫЙ ЦИКЛ: Если экран уничтожен или закрывается — гасим выполнение, спасая от краша
+                if (isFinishing || isDestroyed) return
+
                 fun finishRatingProcess() {
                     showToast("Дякуємо за відгук!")
                     try { dialog.dismiss() } catch (e: Exception) {}
@@ -4995,6 +5030,9 @@ ivMenuIcon.setColorFilter(adaptiveColor)
             }
 
             override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
+                // 🔥 ЖИЗНЕННЫЙ ЦИКЛ: Защита при сбое сети в момент закрытия экрана
+                if (isFinishing || isDestroyed) return
+
                 showToast("Помилка мережі")
                 try {
                     val btn = dialog.findViewById<Button>(R.id.btn_submit_rating)
@@ -5003,7 +5041,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
                 } catch (e: Exception) {}
             }
         })
-    }
+    } // 🔥 ДОБАВЛЕНО: Закрывающая скобка метода sendRating
 
     private fun updateStatusUI(order: TaxiOrderDto) {
         // 1. НАША ПЛАВНАЯ АНИМАЦИЯ (Фиксируем точную высоту ДО изменения контента)
@@ -5562,26 +5600,35 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
             activeOrderCard.tag = drv.phoneNumber
 
-            // Блок мед. предупреждений
+            // Блок мед. предупреждений водителю
             val healthIssues = mutableListOf<String>()
-if (drv.hasMovementIssue) healthIssues.add("Порушення опорно-рухового апарату")
-if (drv.hasHearingIssue) healthIssues.add("Порушення слуху")
-if (drv.isDeaf) healthIssues.add("Водій не чує (глухий)")
-if (drv.hasSpeechIssue) healthIssues.add("Порушення мовлення")
+            if (drv.hasMovementIssue) healthIssues.add("Порушення опорно-рухового апарату")
+            if (drv.hasHearingIssue) healthIssues.add("Порушення слуху")
+            if (drv.isDeaf) healthIssues.add("Водій не чує (глухий)")
+            if (drv.hasSpeechIssue) healthIssues.add("Порушення мовлення")
 
-if (healthIssues.isNotEmpty()) {
-    btnDriverHealthAlert.visibility = View.VISIBLE
-    btnDriverHealthAlert.setOnClickListener {
-        showDriverHealthDialog(healthIssues)
-    }
-} else {
-    btnDriverHealthAlert.visibility = View.GONE
-}
+            if (healthIssues.isNotEmpty()) {
+                btnDriverHealthAlert.visibility = View.VISIBLE
+                btnDriverHealthAlert.setOnClickListener {
+                    showDriverHealthDialog(healthIssues)
+                }
+            } else {
+                btnDriverHealthAlert.visibility = View.GONE
+            }
 
             if (!drv.photoUrl.isNullOrEmpty()) {
                 var finalUrl = drv.photoUrl!!
-                if (finalUrl.contains("localhost")) finalUrl = finalUrl.replace("localhost", "10.0.2.2")
-                if (finalUrl.contains("localhost")) finalUrl = finalUrl.replace("localhost", "192.168.0.104")
+                
+                // 🔥 ФИКС ПРОДАКШЕНА: Динамически парсим корень из BASE_URL вместо хардкода localhost/10.0.2.2
+                val baseUrlUri = android.net.Uri.parse(com.taxiapp.client.network.ApiClient.BASE_URL)
+                val serverRoot = "${baseUrlUri.scheme}://${baseUrlUri.host}${if (baseUrlUri.port != -1) ":${baseUrlUri.port}" else ""}"
+
+                if (finalUrl.startsWith("http://") || finalUrl.startsWith("https://")) {
+                    // Оставляем как есть, если ссылка уже полная
+                } else {
+                    val cleanPath = finalUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
+                    finalUrl = "$serverRoot/$cleanPath"
+                }
 
                 Glide.with(this@HomeActivity)
                     .load(finalUrl)
@@ -5594,140 +5641,136 @@ if (healthIssues.isNotEmpty()) {
         }
     }
     
-    // ДОБАВИЛИ ПАРАМЕТР recenterMap: Boolean = true по умолчанию
-private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f, recenterMap: Boolean = true) {
-    bottomPanel.requestLayout()
+    private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f, recenterMap: Boolean = true) {
+        bottomPanel.requestLayout()
 
-    bottomPanel.post {
-        if (mMap != null) {
-            if (bottomPanel.visibility != View.VISIBLE) {
-                // Если старая панель скрылась, но сейчас на экране уже видна главная панель адресов,
-                // мы не обнуляем карту, а перенаправляем паддинг на главную панель
-                if (::creationPanelCard.isInitialized && creationPanelCard.visibility == View.VISIBLE && bottomPanel.id != creationPanelCard.id) {
-                    updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
-                } else {
-                    mMap?.setPadding(0, 0, 0, 0)
-                    if (::pinContainer.isInitialized) pinContainer.translationY = 0f
-                }
-                return@post
-            }
-
-            var panelHeight = bottomPanel.height
-            
-            // Если система еще не построила кадр и высота равна 0, принудительно измеряем панель программно
-            if (panelHeight == 0) {
-                val widthSpec = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
-                val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-                bottomPanel.measure(widthSpec, heightSpec)
-                panelHeight = bottomPanel.measuredHeight
-            }
-
-            if (panelHeight == 0) return@post
-
-            // --- НОВАЯ МАГИЯ: Обманываем карту ---
-            // Если это панель активного заказа, мы вычитаем высоту выезжающих деталей.
-            if (bottomPanel.id == R.id.active_order_card) {
-                val detailsView = bottomPanel.findViewById<View>(R.id.layout_expandable_details)
-                if (detailsView != null && detailsView.visibility == View.VISIBLE) {
-                    var detailsHeight = detailsView.height
-                    // ПОДСТРАХОВКА: программно измеряем высоту деталей, если она еще равна 0
-                    if (detailsHeight == 0) {
-                        val widthSpec = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
-                        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-                        detailsView.measure(widthSpec, heightSpec)
-                        detailsHeight = detailsView.measuredHeight
+        bottomPanel.post {
+            if (mMap != null) {
+                if (bottomPanel.visibility != View.VISIBLE) {
+                    // Если старая панель скрылась, но сейчас на экране уже видна главная панель адресов,
+                    // мы не обнуляем карту, а перенаправляем паддинг на главную панель
+                    if (::creationPanelCard.isInitialized && creationPanelCard.visibility == View.VISIBLE && bottomPanel.id != creationPanelCard.id) {
+                        updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
+                    } else {
+                        mMap?.setPadding(0, 0, 0, 0)
+                        if (::pinContainer.isInitialized) pinContainer.translationY = 0f
                     }
-                    panelHeight -= detailsHeight
+                    return@post
                 }
-            }
 
-            var marginBottom = 0
-            var sideMargin = 0
+                var panelHeight = bottomPanel.height
+                
+                // Если система еще не построила кадр и высота равна 0, принудительно измеряем панель программно
+                if (panelHeight == 0) {
+                    val widthSpec = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
+                    val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                    bottomPanel.measure(widthSpec, heightSpec)
+                    panelHeight = bottomPanel.measuredHeight
+                }
 
-            val params = bottomPanel.layoutParams
-            if (params is ViewGroup.MarginLayoutParams) {
-                marginBottom = params.bottomMargin
-                sideMargin = params.leftMargin
-            }
+                if (panelHeight == 0) return@post
 
-            val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
-            val totalBottomPadding = panelHeight + marginBottom + extraBuffer
-            val topPadding = convertDpToPixel(topPaddingDp).toInt()
+                // --- НАСТРОЙКА ОБМАНА КАРТЫ ---
+                // Если это панель активного заказа, мы вычитаем высоту выезжающих деталей.
+                if (bottomPanel.id == R.id.active_order_card) {
+                    val detailsView = bottomPanel.findViewById<View>(R.id.layout_expandable_details)
+                    if (detailsView != null && detailsView.visibility == View.VISIBLE) {
+                        var detailsHeight = detailsView.height
+                        // ПОДСТРАХОВКА: программно измеряем высоту деталей, если она еще равна 0
+                        if (detailsHeight == 0) {
+                            val widthSpec = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
+                            val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                            detailsView.measure(widthSpec, heightSpec)
+                            detailsHeight = detailsView.measuredHeight
+                        }
+                        panelHeight -= detailsHeight
+                    }
+                }
 
-            // Двигаем элементы Google (логотип, кнопки), используя очередь отрисовки самой карты,
-            // чтобы полностью обойти внутренний баг Google Maps SDK с игнорированием паддинга для логотипа
-            val mapView = supportFragmentManager.findFragmentById(R.id.map)?.view
-            if (mapView != null) {
-                mapView.post {
+                var marginBottom = 0
+                var sideMargin = 0
+
+                val params = bottomPanel.layoutParams
+                if (params is ViewGroup.MarginLayoutParams) {
+                    marginBottom = params.bottomMargin
+                    sideMargin = params.leftMargin
+                }
+
+                val extraBuffer = convertDpToPixel(extraBottomDp).toInt()
+                val totalBottomPadding = panelHeight + marginBottom + extraBuffer
+                val topPadding = convertDpToPixel(topPaddingDp).toInt()
+
+                // Двигаем элементы Google (логотип, кнопки), используя очередь отрисовки самой карты
+                val mapView = supportFragmentManager.findFragmentById(R.id.map)?.view
+                if (mapView != null) {
+                    mapView.post {
+                        mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
+                    }
+                } else {
                     mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
                 }
-            } else {
-                mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
-            }
 
-            if (::pinContainer.isInitialized) {
-                if (bottomPanel.id == R.id.bottom_sheet_card || bottomPanel.id == R.id.layout_map_picker_panel) {
-                    val shiftY = (totalBottomPadding - topPadding) / 2f
-                    
-                    // ВМЕСТО МГНОВЕННОГО ПРЫЖКА: запускаем плавное скольжение пина, 
-                    // которое идеально синхронизируется с инерцией карты Google
-                    pinContainer.animate()
-                        .translationY(-shiftY)
-                        .setDuration(200) // Время анимации в миллисекундах
-                        .start()
-                } else {
-                    // Возвращаем пин в геометрический центр экрана при переходе на другие экраны
-                    pinContainer.animate()
-                        .translationY(0f)
-                        .setDuration(200)
-                        .start()
-                }
-            }
-
-            if (recenterMap) {
-                try {
-                    mMap?.stopAnimation() // Защита от накладывающихся анимаций
-                    
-                    val currentStatus = viewModel.activeOrder.value?.status
-                    if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
-                        // 🔥 ГЛАВНЫЙ ЩИТ: Если идет поиск, удерживаем фокус в 3D на Точке А
-                        val targetLoc = originPlace?.latLng 
-                            ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                if (::pinContainer.isInitialized) {
+                    if (bottomPanel.id == R.id.bottom_sheet_card || bottomPanel.id == R.id.layout_map_picker_panel) {
+                        val shiftY = (totalBottomPadding - topPadding) / 2f
                         
-                        if (targetLoc != null) {
-                            val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
-                                .target(targetLoc)
-                                .zoom(16.0f)
-                                .tilt(45f) // Удерживаем наклон 45 градусов, предотвращая сброс от Google SDK
-                                .bearing(0f)
-                                .build()
-                            mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
-                        }
-                    } else if (viewModel.currentRoutePolyline != null) {
-                        // Стандартное плоское 2D-центрирование всей поездки для остальных состояний (например, в пути или отмене)
-                        val boundsBuilder = LatLngBounds.Builder()
-                        if (originPlace != null && destinationPlace != null) {
-                            boundsBuilder.include(originPlace!!.latLng!!)
-                            boundsBuilder.include(destinationPlace!!.latLng!!)
-                            currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                            decodedRoutePoints?.forEach { boundsBuilder.include(it) }
-
-                            val labelSafePadding = convertDpToPixel(80f).toInt()
-                            mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
-                        }
+                        // Плавное скольжение пина, которое идеально синхронизируется с инерцией карты Google
+                        pinContainer.animate()
+                            .translationY(-shiftY)
+                            .setDuration(200) 
+                            .start()
+                    } else {
+                        // Возвращаем пин в геометрический центр экрана при переходе на другие экраны
+                        pinContainer.animate()
+                            .translationY(0f)
+                            .setDuration(200)
+                            .start()
                     }
-                } catch (e: Exception) {}
+                }
+
+                if (recenterMap) {
+                    try {
+                        mMap?.stopAnimation() // Защита от накладывающихся анимаций
+                        
+                        val currentStatus = viewModel.activeOrder.value?.status
+                        if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
+                            val targetLoc = originPlace?.latLng 
+                                ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                            
+                            if (targetLoc != null) {
+                                val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
+                                    .target(targetLoc)
+                                    .zoom(16.0f)
+                                    .tilt(45f) // Удерживаем наклон 45 градусов, предотвращая сброс от Google SDK
+                                    .bearing(0f)
+                                    .build()
+                                mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
+                            }
+                        } else if (viewModel.currentRoutePolyline != null) {
+                            // Стандартное плоское 2D-центрирование всей поездки для остальных состояний
+                            val boundsBuilder = LatLngBounds.Builder()
+                            if (originPlace != null && destinationPlace != null) {
+                                boundsBuilder.include(originPlace!!.latLng!!)
+                                boundsBuilder.include(destinationPlace!!.latLng!!)
+                                currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                                decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+
+                                val labelSafePadding = convertDpToPixel(80f).toInt()
+                                mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), labelSafePadding), 400, null)
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
             }
         }
     }
-}
 
-private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
+    private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         if (mMap == null) return
         
         val mapCenter = mMap!!.cameraPosition.target
 
-        // ФИКС БАГА: Если открыт заказ, тарифы ИЛИ режим выбора адреса на карте — тотально чистим маркеры и выходим
+        // Проверка: Если открыт заказ, тарифы или режим выбора адреса — тотально чистим маркеры свободных машин
         if (activeOrderId != null || isRouteMode || viewModel.currentRoutePolyline != null || 
             tariffsPanel.visibility == View.VISIBLE || isMapPickingMode) {
             nearbyDriverMarkers.values.forEach { it.remove() }
@@ -5735,7 +5778,7 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
             return
         }
 
-        // Жесткий фильтр на 0.5 км
+        // Фильтр отображения свободных машин в радиусе 500 метров
         val SEARCH_RADIUS_METERS = 500.0
         val driversInRange = drivers.filter { driver ->
             val driverPos = LatLng(driver.lat, driver.lng)
@@ -5745,7 +5788,7 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
 
         val newDriverIds = driversInRange.map { it.driverId }
         
-        // УДАЛЯЕМ МАРКЕРЫ: Если водитель вышел за радиус 1.5 км или пропал из списка бэкенда — удаляем маркер
+        // УДАЛЯЕМ МАРКЕРЫ: Если водитель вышел за радиус или пропал со связи
         val iterator = nearbyDriverMarkers.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
@@ -5765,7 +5808,6 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
                 val carWidth = 40
                 val carHeight = 40
 
-                // Масштабируем локальный PNG-автомобиль под нужный размер
                 val fallbackIcon = BitmapHelper.getScaledBitmapDescriptor(
                     this, 
                     R.drawable.ic_car_icon, 
@@ -5791,19 +5833,14 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         }
     }
 
-
-
     private fun showAddressPanel() {
         mMap?.clear()
         isRouteMode = false
 
         lastKnownDriverLatLng = null
         lastKnownDriverBearing = 0f
-
-        // 🔥 ФИКС: Сбрасываем флаг поиска, чтобы при следующем заказе приближение сработало идеально
         isCameraFocusedOnSearch = false
 
-        // 🔓 СБРОС 3D И РАЗБЛОКИРОВКА ЖЕСТОВ ДЛЯ СЛЕДУЮЩИХ ЗАКАЗОВ
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
 
@@ -5823,7 +5860,6 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
 
         clearMapForRoute()
 
-        // 2. И только после этого настраиваем панель и выставляем правильный паддинг для главного экрана
         setLocationButtonAnchor(R.id.bottom_sheet_card)
         btnMenu.visibility = View.VISIBLE
         
@@ -5832,7 +5868,6 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
         ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
 
-        // --- ВАЖНО: ОСТАНАВЛИВАЕМ И СКРЫВАЕМ ТАЙМЕР ОЖИДАНИЯ ---
         stopWaitingTimer()
 
         sessionManager.clearActiveOrderId()
@@ -5850,7 +5885,6 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
 
         scheduledDate = null
         try {
-            // Відновлюємо правильний колір або просто скидаємо фільтр (XML tint зробить свою справу)
             btnSchedule.clearColorFilter()
         } catch (e: Exception){}
 
@@ -5860,7 +5894,7 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         destinationPlace = null
 
         centerPin.visibility = View.VISIBLE
-        centerPin.alpha = 1f // ДОБАВЛЕНО: подстраховка прозрачности
+        centerPin.alpha = 1f 
         centerPin.translationY = convertDpToPixel(-48f)
         try {
             pinShadow.visibility = View.VISIBLE
@@ -5890,23 +5924,20 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
     }
 
     private fun updateThemeLabel() {
-    val tvThemeLabel = findViewById<TextView>(R.id.tv_theme_label)
-    
-    if (sessionManager.isDarkMode()) {
-        // Берем строку из ресурсов (она автоматически будет на нужном языке)
-        tvThemeLabel.text = getString(R.string.theme_label_dark)
-    } else {
-        tvThemeLabel.text = getString(R.string.theme_label_light)
+        val tvThemeLabel = findViewById<TextView>(R.id.tv_theme_label)
+        if (sessionManager.isDarkMode()) {
+            tvThemeLabel.text = getString(R.string.theme_label_dark)
+        } else {
+            tvThemeLabel.text = getString(R.string.theme_label_light)
+        }
     }
-}
 
-    // 🔥 СИНХРОНИЗАЦИЯ: Обновляем метод onNewIntent в самом низу файла HomeActivity.kt
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
 
         val savedId = sessionManager.fetchActiveOrderId()
-        if (!savedId.isNullOrEmpty()) { // <-- ИЗМЕНИЛИ ПРОВЕРКУ НА СТРОКУ
+        if (!savedId.isNullOrEmpty()) { 
             this@HomeActivity.activeOrderId = savedId
             viewModel.activeOrderId = savedId
             viewModel.checkOrderStatusOnce(savedId)
@@ -5920,19 +5951,15 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         val extraBuffer = convertDpToPixel(4f).toInt() 
         val topPadding = convertDpToPixel(0f).toInt()
 
-        // 🔥 КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ 60 FPS: Тотально удален покадровый ValueAnimator!
-        // Выставляем целевой паддинг сразу, чтобы кнопки Google Maps мгновенно заняли позиции без фризов.
+        // КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ 60 FPS: Выставляем паддинг сразу, отсекая фризы аниматоров
         val totalBottomPadding = toHeight + marginBottom + extraBuffer
         mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
 
-        // Плавное центрирование карты по границам маршрута средствами встроенного аппаратного движка
-       if (recenterMap && viewModel.currentRoutePolyline != null) {
+        if (recenterMap && viewModel.currentRoutePolyline != null) {
             try {
                 val currentStatus = viewModel.activeOrder.value?.status
                 
                 if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
-                    // 🔥 ЗАЩИТНЫЙ БЛОК: Если идет ПОИСК — пересчитываем паддинг, 
-                    // но камеру удерживаем строго в 3D (45°) с фокусом на Точке А!
                     val originLoc = originPlace?.latLng 
                         ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
                     
@@ -5940,13 +5967,12 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
                         val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
                             .target(originLoc)
                             .zoom(16.0f)
-                            .tilt(45f)   // Намертво удерживаем наклон 45 градусов, отсекая 2D-сброс
+                            .tilt(45f)   
                             .bearing(0f)
                             .build()
                         mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
                     }
                 } else {
-                    // Для всех остальных статусов (например, IN_PROGRESS, COMPLETED) — стандартный плоский 2D-вывод всей поездки
                     val boundsBuilder = LatLngBounds.Builder()
                     if (originPlace != null && destinationPlace != null) {
                         boundsBuilder.include(originPlace!!.latLng!!)
@@ -5968,7 +5994,12 @@ private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
         tariffCustomPrices.clear()
         tariffAdapter.clearCustomPrices()
     }
-    private fun showCitySelectorDialog() { val intent = Intent(this, CityPickerActivity::class.java); cityPickerLauncher.launch(intent) }
+    
+    private fun showCitySelectorDialog() { 
+        val intent = Intent(this, CityPickerActivity::class.java)
+        cityPickerLauncher.launch(intent) 
+    }
+    
     override fun onCreateOptionsMenu(menu: Menu?): Boolean { return true }
     override fun onOptionsItemSelected(item: MenuItem): Boolean { return true }
 }
