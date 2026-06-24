@@ -64,6 +64,7 @@ class HistoryAdapter(
     class ActiveOrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvStatusBadge: TextView = itemView.findViewById(R.id.tv_status_badge)
         private val tvDateTime: TextView = itemView.findViewById(R.id.tv_date)
+        private val tvTime: TextView = itemView.findViewById(R.id.tv_time)
         private val tvFrom: TextView = itemView.findViewById(R.id.tv_from)
         private val tvTo: TextView = itemView.findViewById(R.id.tv_to)
         private val tvPrice: TextView = itemView.findViewById(R.id.tv_price)
@@ -85,11 +86,26 @@ class HistoryAdapter(
 
             layoutCancelContainer.visibility = View.VISIBLE
             tvDateTime.text = "Зараз"
+            tvTime.visibility = View.GONE
 
             when (order.status) {
                 "SCHEDULED" -> {
-                    val timeStr = order.scheduledAt?.replace("T", " ")?.take(16) ?: ""
-                    tvDateTime.text = timeStr
+                    try {
+                        val rawScheduled = order.scheduledAt?.take(19) ?: ""
+                        val inputFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                        val date = inputFormat.parse(rawScheduled)
+
+                        // Раздельные форматы
+                        val dateFormat = java.text.SimpleDateFormat("dd.MM.yy", java.util.Locale.US)
+                        val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+
+                        tvDateTime.text = date?.let { dateFormat.format(it) } ?: rawScheduled
+                        tvTime.text = date?.let { timeFormat.format(it) } ?: ""
+                        tvTime.visibility = View.VISIBLE // Показываем время под датой
+                    } catch (e: Exception) {
+                        tvDateTime.text = order.scheduledAt?.replace("T", " ")?.take(16) ?: ""
+                        tvTime.visibility = View.GONE
+                    }
                     tvStatusBadge.text = "Заплановано"
                 }
                 "REQUESTED", "OFFERING" -> tvStatusBadge.text = "Пошук водія"
