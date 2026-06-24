@@ -259,7 +259,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             "optimize:false|" + waypoints.joinToString("|") { "${it.first.latitude},${it.first.longitude}" }
         } else null
 
-        val myApiKey = "AIzaSyCcKH30fg81bqdUs62QzOBhmpy8hCOHNkI"
+        val myApiKey = BuildConfig.GOOGLE_PLACES_API_KEY
 
         DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
             .enqueue(object : Callback<DirectionsResponse> {
