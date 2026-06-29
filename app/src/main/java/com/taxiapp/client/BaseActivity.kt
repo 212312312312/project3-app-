@@ -22,12 +22,31 @@ open class BaseActivity : AppCompatActivity() {
     private var maintenanceDialog: Dialog? = null
     private var lastScreenOnTime: Long = 0
 
+    private var screenStartTime: Long = 0
+
     override fun attachBaseContext(newBase: Context) {
         val sessionManager = SessionManager(newBase)
         val language = sessionManager.getLanguage()
         super.attachBaseContext(LocaleHelper.setLocale(newBase, language))
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Фиксируем точное время входа пользователя на экран
+        screenStartTime = System.currentTimeMillis()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (screenStartTime > 0) {
+            val durationMs = System.currentTimeMillis() - screenStartTime
+            val durationSec = durationMs / 1000
+            val screenName = this::class.java.simpleName
+
+            // Передаем точное имя Activity и время нахождения на ней в менеджер аналитики
+            com.taxiapp.client.analytics.AnalyticsManager.trackScreenDuration(screenName, durationSec)
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

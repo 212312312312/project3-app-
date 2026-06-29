@@ -127,6 +127,8 @@ interface ApiService {
     @GET("client/news")
     fun getClientNews(): Call<List<NewsDto>>
 
+    @POST("client/analytics/events")
+    fun sendAnalyticsEvents(@Body request: ClientEventBatchRequest): Call<Void>
     @GET("client/services")
     fun getServices(): Call<List<TaxiService>>
 
