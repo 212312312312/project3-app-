@@ -29,6 +29,7 @@ class StatsActivity : BaseActivity()  {
     // DATA
     private var allOrders: List<TaxiOrderDto> = emptyList()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+    private val dateFormatMs = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.getDefault()) // <-- ДОБАВИТЬ
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,9 +111,15 @@ class StatsActivity : BaseActivity()  {
     private fun parseDate(dateString: String?): Date? {
         if (dateString == null) return null
         return try {
+            // Сначала пробуем распарсить стандартный формат
             dateFormat.parse(dateString)
         } catch (e: Exception) {
-            null
+            try {
+                // Если не вышло, пробуем формат с миллисекундами (как присылает сервер в логах)
+                dateFormatMs.parse(dateString)
+            } catch (ex: Exception) {
+                null
+            }
         }
     }
 

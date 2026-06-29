@@ -23,7 +23,7 @@ data class TaxiOrderDto(
     val fromAddress: String,
     val toAddress: String,
     val price: Double,
-    val tariffName: String,
+    val tariffName: String?,
     val originLat: Double?,
     val originLng: Double?,
     val destLat: Double?,
