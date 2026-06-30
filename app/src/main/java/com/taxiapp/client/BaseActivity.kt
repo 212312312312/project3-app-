@@ -45,6 +45,9 @@ open class BaseActivity : AppCompatActivity() {
 
             // Передаем точное имя Activity и время нахождения на ней в менеджер аналитики
             com.taxiapp.client.analytics.AnalyticsManager.trackScreenDuration(screenName, durationSec)
+
+            // ДОБАВЛЯЕМ СТРОКУ НИЖЕ: Принудительно отправляем батч при уходе пользователя с экрана
+            com.taxiapp.client.analytics.AnalyticsManager.flushEvents()
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {

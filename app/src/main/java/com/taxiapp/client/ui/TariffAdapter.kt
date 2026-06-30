@@ -168,6 +168,10 @@ class TariffAdapter(
                 selectedPosition = bindingAdapterPosition
                 notifyItemChanged(prev)
                 notifyItemChanged(selectedPosition)
+
+                // 👉 ДОДАЄМО ТРЕКІНГ ТУТ: фіксуємо назву обраного тарифу
+                com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariff_select", tariff.name)
+
                 onTariffSelected(item)
             }
         }

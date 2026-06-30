@@ -285,6 +285,8 @@ private var mapPickerWaypointIndex = -1
     private lateinit var tvDriverFirstName: TextView
     private lateinit var tvDriverExperience: TextView
     private lateinit var tvDriverRidesCount: TextView
+
+    private var hasTrackedTariffsView = false
     private lateinit var ivDriverPhoto: ImageView
     private lateinit var btnCallDriver: ImageButton
     private lateinit var tvDriverHealthInfo: TextView
@@ -1240,6 +1242,9 @@ btnConfirmMapPicker.setOnClickListener {
         btnOrderTaxi = findViewById(R.id.btn_order_taxi)
         btnOrderTaxi.setOnClickListener {
             if (selectedTariffItem != null) {
+                // 👉 ДОДАЄМО ТРЕКІНГ ТУТ: фіксуємо, який саме тариф відправлено в замовлення
+                com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("click_order", selectedTariffItem!!.tariff.name)
+
                 // Если есть custom price (из ползунка), берем его, иначе из тарифа
                 val finalPrice = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
                 createOrder(selectedTariffItem!!.tariff, finalPrice)
@@ -1271,15 +1276,19 @@ btnConfirmMapPicker.setOnClickListener {
 
         btnSchedule = findViewById(R.id.btn_schedule)
         btnSchedule.setOnClickListener {
+            // 👉 ДОДАЄМО ТРЕКІНГ: замовлення наперед (календар)
+            com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("click_schedule")
             showCustomScheduleDialog()
         }
 
         btnOpenComment = findViewById(R.id.btn_open_comment)
         ivCommentIcon = findViewById(R.id.iv_comment_icon)
-        
+
         btnOpenComment.setOnClickListener {
+            // 👉 ДОДАЄМО ТРЕКІНГ: клік на додавання коментаря
+            com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("click_comment")
             val intent = Intent(this, CommentActivity::class.java)
-            intent.putExtra("EXTRA_COMMENT", orderComment) 
+            intent.putExtra("EXTRA_COMMENT", orderComment)
             commentLauncher.launch(intent)
         }
 
@@ -3133,6 +3142,7 @@ class RoundedBackgroundSpan(
 
     setButtonsLoadingState(true)
     tariffsPanel.visibility = View.VISIBLE
+        hasTrackedTariffsView = false
     
     // ВМЕСТО ProgressBar используем Shimmer
     tariffsRecyclerView.visibility = View.GONE
@@ -4227,7 +4237,7 @@ private fun stopWaitingTimer() {
     waitingTimerRunnable?.let { waitingTimerHandler.removeCallbacks(it) }
     waitingTimerRunnable = null
     cardWaitingTimer.visibility = View.GONE // Скрываем табло
-}    
+}
 
     private fun displayTariffs() {
         if (availableTariffs.isEmpty()) {
@@ -4235,8 +4245,13 @@ private fun stopWaitingTimer() {
             return
         }
 
+        // 👉 ИСПРАВЛЕННЫЙ ТРЕКИНГ С ЗАЩИТОЙ ОТ ДУБЛИРОВАНИЯ:
+        if (!hasTrackedTariffsView) {
+            com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariffs_view", "${availableTariffs.size} тарифи(ів)")
+            hasTrackedTariffsView = true // Блокируем повторные отправки до следующего fetchTariffs
+        }
+
         // 1. Оновлюємо мапу БАЗОВИХ цін (tariffCustomPrices)
-        // Логику расчета "billableKm" можно тоже вынести, но пока оставим здесь как UI-логику
         val INCLUDED_KM = 3.0
         val totalKm = routeDistanceMeters / 1000.0
         val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0

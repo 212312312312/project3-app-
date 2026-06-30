@@ -19,7 +19,7 @@ object AnalyticsManager {
     var utmSource: String? = null
     var utmMedium: String? = null
     var utmCampaign: String? = null
-
+    private val customEventBuffer = mutableListOf<com.taxiapp.client.network.dto.CustomEventDto>()
     private val eventBuffer = mutableListOf<ScreenEventDto>()
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -35,27 +35,37 @@ object AnalyticsManager {
             flushEvents()
         }
     }
+    @Synchronized
+    fun trackCustomEvent(eventName: String, eventValue: String? = null) {
+        customEventBuffer.add(com.taxiapp.client.network.dto.CustomEventDto(eventName, eventValue))
+        Log.d(TAG, "Buffered Custom Event: $eventName -> $eventValue")
+    }
 
     @Synchronized
     fun flushEvents() {
-        if (eventBuffer.isEmpty()) return
+        // Отправляем, если есть ХОТЯ БЫ одно событие экрана или кастомный клик
+        if (eventBuffer.isEmpty() && customEventBuffer.isEmpty()) return
 
         val eventsToSend = ArrayList(eventBuffer)
+        val customEventsToSend = ArrayList(customEventBuffer)
+
         eventBuffer.clear()
+        customEventBuffer.clear()
 
         val request = ClientEventBatchRequest(
             sessionId = sessionId,
             utmSource = utmSource,
             utmMedium = utmMedium,
             utmCampaign = utmCampaign,
-            events = eventsToSend
+            events = eventsToSend,
+            customEvents = customEventsToSend // Прикрепили клики к пакету
         )
 
         scope.launch {
             try {
-                val response = ApiClient.instance.sendAnalyticsEvents(request).execute()
+                val response = com.taxiapp.client.network.ApiClient.instance.sendAnalyticsEvents(request).execute()
                 if (response.isSuccessful) {
-                    Log.d(TAG, "Analytics batch sent successfully. Size: ${eventsToSend.size}")
+                    Log.d(TAG, "Analytics batch sent successfully. Screens: ${eventsToSend.size}, Actions: ${customEventsToSend.size}")
                 } else {
                     Log.e(TAG, "Failed to send analytics: ${response.code()}")
                 }
