@@ -4,6 +4,7 @@ import com.taxiapp.client.network.dto.*
 import com.taxiapp.client.data.model.TaxiService
 import retrofit2.Call
 import retrofit2.http.*
+import retrofit2.Response
 
 data class ErrorResponse(val message: String)
 data class MessageResponse(val message: String)
@@ -79,7 +80,7 @@ interface ApiService {
     fun createOrder(@Body request: CreateOrderRequestDto): Call<TaxiOrderDto>
 
     @GET("client/orders/{id}")
-    fun getOrder(@Path("id") id: String): Call<TaxiOrderDto> // <-- String
+    suspend fun getOrder(@Path("id") id: String): Response<TaxiOrderDto>
 
     @POST("client/orders/{id}/cancel")
     fun cancelOrder(@Path("id") orderId: String): Call<TaxiOrderDto> // <-- String

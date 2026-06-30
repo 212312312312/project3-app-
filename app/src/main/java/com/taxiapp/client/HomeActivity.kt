@@ -586,8 +586,8 @@ private fun fetchAddressAtCurrentLocation() {
         if (!NetworkUtils.isInternetAvailable(this)) {
             val intent = Intent(this, NoInternetActivity::class.java)
             startActivity(intent)
-            finish() 
-            return 
+            finish()
+            return
         }
 
         // Инициализируем глобальное свойство один раз
@@ -595,9 +595,10 @@ private fun fetchAddressAtCurrentLocation() {
 
         currentActiveLanguage = sessionManager.getLanguage()
 
-        webSocketManager = WebSocketManager(ApiClient.BASE_URL)
+        // 🔥 ИСПРАВЛЕНО: Передаем 'this' (текущую Activity) как lifecycleOwner
+        webSocketManager = com.taxiapp.client.network.WebSocketManager(ApiClient.BASE_URL, this)
         fetchCustomCarIcon()
-        
+
         // --- ЗАЩИТА: Локальный дубликат удален, используем уже созданный sessionManager ---
         val token = sessionManager.fetchAuthToken()
 
