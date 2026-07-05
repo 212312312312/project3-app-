@@ -24,16 +24,19 @@ data class TariffItem(
     val priceString: String,
     val priceValue: Double,
     val addedValue: Double = 0.0,
-    val oldPriceValue: Double? = null // 👈 ДОБАВИТЬ СЮДА
+    val oldPriceValue: Double? = null
 )
 
 class TariffAdapter(
-    private val onTariffSelected: (TariffItem) -> Unit
+    private val onTariffSelected: (TariffItem) -> Unit,
+    private val onImagesLoaded: () -> Unit
 ) : RecyclerView.Adapter<TariffAdapter.TariffViewHolder>() {
 
     private var items: List<TariffItem> = emptyList()
     private var selectedPosition: Int = -1
     private var rawTariffs: List<CarTariffDto> = emptyList()
+
+    private var imagesToLoadCount = 0
     private var currentDistanceMeters: Int = 0
     private var currentExtraCost: Double = 0.0
 
@@ -42,7 +45,7 @@ class TariffAdapter(
     private var maxDiscountAmount: Double = 0.0
 
     // НАЛАШТУВАННЯ СЕРВЕРА
-    private val SERVER_IP = "192.168.0.107" // Твій IP
+    private val SERVER_IP = "192.168.0.107"
     private val SERVER_PORT = "8080"
 
     inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -53,7 +56,7 @@ class TariffAdapter(
         val desc: TextView = view.findViewById(R.id.tv_tariff_desc)
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
         val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge)
-        val betaBadge: TextView = view.findViewById(R.id.tv_beta_badge) // <-- ДОБАВЛЕНО
+        val betaBadge: TextView = view.findViewById(R.id.tv_beta_badge)
 
         fun bind(item: TariffItem, isSelected: Boolean) {
             val tariff = item.tariff
@@ -82,28 +85,52 @@ class TariffAdapter(
                 val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
                     rawUrl
                 } else {
-                    var cleanPath = rawUrl.replace("\\", "/")
-                        .replace(Regex("/{2,}"), "/")
-                        .trimStart('/')
-
-                    if (!cleanPath.startsWith("uploads/")) {
-                        cleanPath = "uploads/$cleanPath"
-                    }
-                    // Автоматически отсекаем "/api/v1/" от нашего защищенного базового URL, чтобы получить чистый корень сервера
+                    // Исправлено выражение регулярки на {2,}
+                    val cleanPath = rawUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
                     val baseUrlRoot = com.taxiapp.client.network.ApiClient.BASE_URL.substringBefore("api/v1/")
-
-                    // Возвращаем строку напрямую в выражение fullUrl
-                    if (cleanPath.startsWith("http")) cleanPath else "${baseUrlRoot}${cleanPath.removePrefix("/")}"
+                    "${baseUrlRoot}${cleanPath}"
                 }
 
+                // ⚡️ ЖЕЛЕЗОБЕТОННЫЙ ВАРИАНТ ЧЕРЕЗ CUSTOM_TARGET (Исключает конфликты версий Glide)
                 Glide.with(itemView.context)
                     .load(fullUrl)
                     .placeholder(R.drawable.ic_taxi_model_standard)
                     .error(R.drawable.ic_taxi_model_standard)
-                    .into(image)
+                    .into(object : com.bumptech.glide.request.target.CustomTarget<android.graphics.drawable.Drawable>() {
+                        private fun decrementAndCheck() {
+                            imagesToLoadCount--
+                            if (imagesToLoadCount <= 0) {
+                                onImagesLoaded() // Все картинки загружены или упали в ошибку — скрываем шиммер
+                            }
+                        }
+
+                        override fun onResourceReady(
+                            resource: android.graphics.drawable.Drawable,
+                            transition: com.bumptech.glide.request.transition.Transition<in android.graphics.drawable.Drawable>?
+                        ) {
+                            image.setImageDrawable(resource)
+                            decrementAndCheck()
+                        }
+
+                        override fun onLoadFailed(errorDrawable: android.graphics.drawable.Drawable?) {
+                            super.onLoadFailed(errorDrawable)
+                            if (errorDrawable != null) {
+                                image.setImageDrawable(errorDrawable)
+                            } else {
+                                image.setImageResource(R.drawable.ic_taxi_model_standard)
+                            }
+                            decrementAndCheck()
+                        }
+
+                        override fun onLoadCleared(placeholder: android.graphics.drawable.Drawable?) {
+                            image.setImageDrawable(placeholder)
+                        }
+                    })
             } else {
                 image.setImageResource(R.drawable.ic_taxi_model_standard)
             }
+// -----------------------------
+// -----------------------------
             // -----------------------------
 
             // Знижки
@@ -127,30 +154,33 @@ class TariffAdapter(
                     discountBadge.setTextColor(Color.parseColor("#00E5FF"))
                 }
             } else {
-                // Если скидки нет, скрываем элементы
                 oldPrice.visibility = View.GONE
                 discountBadge.visibility = View.GONE
             }
 
-            // Вывод текущей актуальной цены (со скидкой или без)
+            // Вывод текущей актуальной цены
             price.text = "${item.priceValue.roundToInt()} ₴"
-            // --------------------------------------------------
 
             // --- ЛОГИКА НЕДОСТУПНОГО ТАРИФА (UNAVAILABLE) ---
+            cardView.stateListAnimator = null
+            itemView.clearAnimation()
+            cardView.clearAnimation()
+
             if (tariff.isUnavailable) {
-                // Делаем тусклым, убираем выделение и отключаем клики
+                itemView.alpha = 0.4f
                 cardView.alpha = 0.4f
                 cardView.strokeWidth = 0
                 cardView.cardElevation = 0f
+                cardView.isEnabled = false
                 itemView.isEnabled = false
                 itemView.isClickable = false
             } else {
-                // Возвращаем нормальный вид
+                itemView.alpha = 1.0f
                 cardView.alpha = 1.0f
+                cardView.isEnabled = true
                 itemView.isEnabled = true
                 itemView.isClickable = true
 
-                // Стиль виділення
                 if (isSelected) {
                     cardView.cardElevation = 0f
                     cardView.strokeWidth = 6
@@ -160,18 +190,22 @@ class TariffAdapter(
                     cardView.cardElevation = 0f
                 }
             }
+            // -----------------------------
 
             itemView.setOnClickListener {
-                if (tariff.isUnavailable) return@setOnClickListener // Дополнительная защита
+                if (tariff.isUnavailable) return@setOnClickListener
 
                 val prev = selectedPosition
                 selectedPosition = bindingAdapterPosition
-                notifyItemChanged(prev)
-                notifyItemChanged(selectedPosition)
 
-                // 👉 ДОДАЄМО ТРЕКІНГ ТУТ: фіксуємо назву обраного тарифу
+                if (prev != androidx.recyclerview.widget.RecyclerView.NO_POSITION && prev < items.size) {
+                    notifyItemChanged(prev)
+                }
+                if (selectedPosition != androidx.recyclerview.widget.RecyclerView.NO_POSITION) {
+                    notifyItemChanged(selectedPosition)
+                }
+
                 com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariff_select", tariff.name)
-
                 onTariffSelected(item)
             }
         }
@@ -191,6 +225,15 @@ class TariffAdapter(
     fun submitList(tariffs: List<CarTariffDto>, distanceMeters: Int) {
         this.rawTariffs = tariffs
         this.currentDistanceMeters = distanceMeters
+        // Фиксируем, сколько картинок нам нужно дождаться
+        this.imagesToLoadCount = tariffs.count { !it.imageUrl.isNullOrEmpty() }
+
+        // 👈 ФИКС: Гасим шиммер только если картинок 0 И при этом список тарифов НЕ пустой!
+        // При первичной очистке панели (emptyList()) скелетон продолжит красиво гореть.
+        if (this.imagesToLoadCount == 0 && tariffs.isNotEmpty()) {
+            onImagesLoaded()
+        }
+
         recalculateItems()
     }
 
@@ -209,9 +252,8 @@ class TariffAdapter(
 
     fun setCustomPrice(tariffId: Long, addedValue: Double) {
         customPrices[tariffId] = addedValue
-        recalculateItems() // Этот метод пересчитает цены и обновит список items
+        recalculateItems()
 
-        // НОВЫЙ КОД: Берем обновленный объект тарифа и передаем его обратно в Activity
         val currentSelected = getSelectedTariff()
         if (currentSelected != null && currentSelected.tariff.id == tariffId) {
             onTariffSelected(currentSelected)
@@ -258,12 +300,11 @@ class TariffAdapter(
             val finalPrice = withServices + userAdded
             val priceString = String.format("%.0f", finalPrice)
 
-            // 🎁 Считаем полную старую цену (база с сервера + доп услуги + наценка клика)
             val finalOldPrice = if (tariff.oldPrice != null && tariff.oldPrice!! > 0) {
                 tariff.oldPrice!! + currentExtraCost + userAdded
             } else null
 
-            TariffItem(tariff, priceString, finalPrice, userAdded, finalOldPrice) // 👈 Передаем finalOldPrice
+            TariffItem(tariff, priceString, finalPrice, userAdded, finalOldPrice)
         }
         notifyDataSetChanged()
     }

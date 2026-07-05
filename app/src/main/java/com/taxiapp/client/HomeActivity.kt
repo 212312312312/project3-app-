@@ -758,14 +758,11 @@ private fun fetchAddressAtCurrentLocation() {
         
         // 2. Тарифы
         viewModel.availableTariffs.observe(this) { tariffs ->
-        // Когда пришли данные: выключаем шиммер и показываем список
-        tariffsShimmer.stopShimmer()
-        tariffsShimmer.visibility = View.GONE
-        tariffsRecyclerView.visibility = View.VISIBLE
-        setButtonsLoadingState(false)
-        availableTariffs = tariffs
-        displayTariffs() 
-    }
+            // УДАЛЕНО: моментальное скрытие шиммера tariffsShimmer.visibility = View.GONE
+            // Теперь мы просто отдаем данные в адаптер, а он сам скомандует, когда картинки подгрузятся
+            availableTariffs = tariffs
+            displayTariffs() 
+        }
 
         viewModel.cardBoundEvent.observe(this) { isBound ->
             if (isBound) {
@@ -2074,12 +2071,28 @@ btnChangePayment.setOnClickListener {
     }
 
     private fun setupTariffAdapter() {
-        tariffAdapter = TariffAdapter { item ->
-            selectedTariffItem = item
-            btnOrderTaxi.isEnabled = true
-            btnOrderTaxi.text = "Замовити"
-        }
+        // Передаем вторым параметром коллбек скрытия шиммера
+        tariffAdapter = TariffAdapter(
+            onTariffSelected = { item ->
+                selectedTariffItem = item
+                btnOrderTaxi.isEnabled = true
+                btnOrderTaxi.text = "Замовити"
+            },
+            onImagesLoaded = {
+                // Коллбек от Glide: картинки на месте, теперь можно безопасно гасить скелетон!
+                runOnUiThread {
+                    tariffsShimmer.stopShimmer()
+                    tariffsShimmer.visibility = View.GONE
+                    tariffsRecyclerView.visibility = View.VISIBLE
+                    setButtonsLoadingState(false)
+                }
+            }
+        )
         tariffsRecyclerView.adapter = tariffAdapter
+        
+        // 👈 ДОБАВИТЬ СЮДА: Отключаем аниматор изменений, чтобы он не сбрасывал альфу слоев
+        tariffsRecyclerView.itemAnimator = null 
+        
         tariffsRecyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.VERTICAL, false)
 
         while (tariffsRecyclerView.itemDecorationCount > 0) {
@@ -3134,20 +3147,26 @@ class RoundedBackgroundSpan(
 }
 
     private fun fetchTariffsAndShowPanel() {
+        viewModel.stopListeningNearbyDrivers(webSocketManager)
+        nearbyDriverMarkers.values.forEach { it.remove() }
+        nearbyDriverMarkers.clear()
+        addressPanel.visibility = View.GONE
 
-    viewModel.stopListeningNearbyDrivers(webSocketManager)
-    nearbyDriverMarkers.values.forEach { it.remove() }
-    nearbyDriverMarkers.clear()
-    addressPanel.visibility = View.GONE
+        setButtonsLoadingState(true)
+        
+        // 👈 ФИКС БАГА 2: Задаем геометрию панели ЖЕСТКО ДО её переключения в VISIBLE.
+        // Это прижмет кнопку к нижнему краю экрана, а пустоту займет шиммер-скелетон.
+        val displayMetrics = resources.displayMetrics
+        val maxTariffHeight = (displayMetrics.heightPixels * 0.45).toInt()
+        tariffsPanel.layoutParams.height = maxTariffHeight
 
-    setButtonsLoadingState(true)
-    tariffsPanel.visibility = View.VISIBLE
+        tariffsPanel.visibility = View.VISIBLE
         hasTrackedTariffsView = false
-    
-    // ВМЕСТО ProgressBar используем Shimmer
-    tariffsRecyclerView.visibility = View.GONE
-    tariffsShimmer.visibility = View.VISIBLE
-    tariffsShimmer.startShimmer()
+        
+        // ВМЕСТО ProgressBar используем Shimmer
+        tariffsRecyclerView.visibility = View.GONE
+        tariffsShimmer.visibility = View.VISIBLE
+        tariffsShimmer.startShimmer()
     
     btnRecenter.visibility = View.GONE
     setLocationButtonAnchor(R.id.tariffs_panel)
@@ -3449,7 +3468,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                         .into(object : CustomTarget<Bitmap>() {
                             override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                                 if (isFinishing || isDestroyed) return // Повторная проверка перед отрисовкой
-                                val scaled = Bitmap.createScaledBitmap(resource, 130, 130, false)
+                                val scaled = Bitmap.createScaledBitmap(resource, 180, 180, false)
                                 customCarIcon = BitmapDescriptorFactory.fromBitmap(scaled)
                                 
                                 if (driverMarker != null) {
@@ -4271,6 +4290,9 @@ private fun stopWaitingTimer() {
         // 2. Оновлюємо список в адаптері
         tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
         tariffAdapter.updatePrices(tariffCustomPrices)
+        
+        // 👈 ФИКС БАГА 1: Принудительно сбрасываем скролл тарифов в самый верх
+        tariffsRecyclerView.scrollToPosition(0) 
 
         tariffsPanel.post {
             updateMapPadding(tariffsPanel, 0f, 10f)
