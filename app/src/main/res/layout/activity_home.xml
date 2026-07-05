@@ -504,13 +504,14 @@
     app:strokeWidth="0dp"
     app:cardUseCompatPadding="false"
     app:cardPreventCornerOverlap="false"
+    android:clipToOutline="true"
     android:visibility="gone">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingTop="14dp"
+        android:paddingTop="0dp"
         android:paddingBottom="2dp">
 
         <FrameLayout
@@ -524,6 +525,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
+                android:paddingTop="8dp"
                 android:paddingBottom="20dp" 
                 android:overScrollMode="never"
                 android:fillViewport="true">
@@ -589,36 +591,53 @@
                 android:layout_marginBottom="4dp"
                 android:weightSum="4">
 
-                <FrameLayout
+                <!-- Кнопка: Коментар -->
+                <LinearLayout
                     android:id="@+id/btn_open_comment"
                     android:layout_width="0dp"
-                    android:layout_height="52dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginHorizontal="3dp"
-                    android:background="@drawable/bg_status_pill"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingVertical="8dp"
                     android:clickable="true"
-                    android:focusable="true">
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackgroundBorderless">
                     <ImageView
                         android:id="@+id/iv_comment_icon"
                         android:layout_width="28dp"
                         android:layout_height="28dp"
-                        android:layout_gravity="center"
                         android:src="@drawable/ic_comment"
                         app:tint="@color/text_primary"
                         android:visibility="invisible" />
-                </FrameLayout>
+                    <TextView
+                        android:id="@+id/tv_comment_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/action_comment"
+                        android:textSize="12sp"
+                        android:fontFamily="@font/montserrat_bold"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:singleLine="true"
+                        android:ellipsize="end" />
+                </LinearLayout>
 
+                <!-- Кнопка: Спосіб оплати -->
                 <LinearLayout
                     android:id="@+id/btn_open_payment"
                     android:layout_width="0dp"
-                    android:layout_height="52dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginHorizontal="3dp"
-                    android:background="@drawable/bg_status_pill"
-                    android:gravity="center"
-                    android:orientation="horizontal"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingVertical="8dp"
                     android:clickable="true"
-                    android:focusable="true">
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackgroundBorderless">
                     <ImageView
                         android:id="@+id/iv_payment_icon"
                         android:layout_width="28dp"
@@ -630,52 +649,85 @@
                         android:id="@+id/tv_payment_method_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/action_payment_cash"
                         android:textSize="12sp"
+                        android:fontFamily="@font/montserrat_bold"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary"
-                        android:layout_marginStart="4dp"
-                        android:visibility="gone"
-                        tools:text="*1234"
+                        android:singleLine="true"
+                        android:ellipsize="end"
                         tools:visibility="visible" />
                 </LinearLayout>
 
-                <FrameLayout
+                <!-- Кнопка: Послуги -->
+                <LinearLayout
                     android:id="@+id/btn_open_services"
                     android:layout_width="0dp"
-                    android:layout_height="52dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginHorizontal="3dp"
-                    android:background="@drawable/bg_status_pill"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingVertical="8dp"
                     android:clickable="true"
-                    android:focusable="true">
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackgroundBorderless">
                     <ImageView
                         android:id="@+id/iv_services_icon"
                         android:layout_width="28dp"
                         android:layout_height="28dp"
-                        android:layout_gravity="center"
                         android:src="@drawable/ic_services_new"
                         app:tint="@color/text_primary" 
                         android:visibility="invisible"/>
-                </FrameLayout>
+                    <TextView
+                        android:id="@+id/tv_services_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/action_services"
+                        android:textSize="12sp"
+                        android:fontFamily="@font/montserrat_bold"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:singleLine="true"
+                        android:ellipsize="end" />
+                </LinearLayout>
 
-                <FrameLayout
+                <!-- Кнопка: Чай -->
+                <LinearLayout
                     android:id="@+id/btn_change_price"
                     android:layout_width="0dp"
-                    android:layout_height="52dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginHorizontal="3dp"
-                    android:background="@drawable/bg_status_pill"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingVertical="8dp"
                     android:clickable="true"
-                    android:focusable="true">
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackgroundBorderless">
                     <ImageView
                         android:id="@+id/iv_price_icon"
                         android:layout_width="28dp"
                         android:layout_height="28dp"
-                        android:layout_gravity="center"
                         android:src="@drawable/ic_wallet"
                         app:tint="@color/text_primary"
                         android:visibility="invisible" />
-                </FrameLayout>
+                    <TextView
+                        android:id="@+id/tv_tips_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/action_tips"
+                        android:textSize="12sp"
+                        android:fontFamily="@font/montserrat_bold"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:singleLine="true"
+                        android:ellipsize="end" />
+                </LinearLayout>
+
             </LinearLayout>
         </com.facebook.shimmer.ShimmerFrameLayout>
 

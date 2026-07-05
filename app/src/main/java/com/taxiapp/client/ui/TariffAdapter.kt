@@ -207,7 +207,7 @@ class TariffAdapter(
             }
             // -----------------------------
 
-            itemView.setOnClickListener {
+            cardView.setOnClickListener {
                 if (tariff.isUnavailable) return@setOnClickListener
 
                 val prev = selectedPosition

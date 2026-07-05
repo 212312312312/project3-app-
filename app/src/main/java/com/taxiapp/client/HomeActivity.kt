@@ -320,7 +320,7 @@ private var mapPickerWaypointIndex = -1
     private var polylineAnim: Polyline? = null
     private var webViewDialog: Dialog? = null
     private var routeAnimator: ValueAnimator? = null
-
+    private var isButtonsPanelLoading = false
 
 
 private lateinit var layoutSearchControls: LinearLayout
@@ -758,10 +758,13 @@ private fun fetchAddressAtCurrentLocation() {
         
         // 2. Тарифы
         viewModel.availableTariffs.observe(this) { tariffs ->
-            // УДАЛЕНО: моментальное скрытие шиммера tariffsShimmer.visibility = View.GONE
-            // Теперь мы просто отдаем данные в адаптер, а он сам скомандует, когда картинки подгрузятся
             availableTariffs = tariffs
             displayTariffs() 
+            
+            // Если на экране уже висит активное замовлення, принудительно обновляем его иконку тарифа
+            viewModel.activeOrder.value?.let { order ->
+                updateActiveOrderTariffIcon(order)
+            }
         }
 
         viewModel.cardBoundEvent.observe(this) { isBound ->
@@ -1940,24 +1943,26 @@ btnChangePayment.setOnClickListener {
     }
 
     private fun updatePaymentIcon() {
-    if (!::ivPaymentIcon.isInitialized) return // Защита от краша при старте
+        if (!::ivPaymentIcon.isInitialized || !::tvPaymentMethodText.isInitialized) return 
 
-    val mask = sessionManager.getCardMask()
-    val defaultColor = ContextCompat.getColor(this, R.color.text_primary)
+        val mask = sessionManager.getCardMask()
+        val defaultColor = ContextCompat.getColor(this, R.color.text_primary)
 
-    // В любом случае прячем текст с маской карты
-    tvPaymentMethodText.visibility = View.GONE
+        tvPaymentMethodText.visibility = if (isButtonsPanelLoading) View.INVISIBLE else View.VISIBLE
 
-    if (currentPaymentMethod == "CARD" && !mask.isNullOrEmpty()) {
-        // Устанавливаем иконку карты
-        ivPaymentIcon.setImageResource(R.drawable.ic_card)
-        ivPaymentIcon.setColorFilter(defaultColor)
-    } else {
-        // Устанавливаем иконку наличных
-        ivPaymentIcon.setImageResource(R.drawable.ic_cash)
-        ivPaymentIcon.setColorFilter(defaultColor)
+        if (currentPaymentMethod == "CARD" && !mask.isNullOrEmpty()) {
+            ivPaymentIcon.setImageResource(R.drawable.ic_card)
+            ivPaymentIcon.setColorFilter(defaultColor)
+            
+            // Получаем последние 4 символа и принудительно заменяем звездочку на ноль
+            val cleanMask = mask.takeLast(4).replace("*", "0")
+            tvPaymentMethodText.text = "••$cleanMask"
+        } else {
+            ivPaymentIcon.setImageResource(R.drawable.ic_cash)
+            ivPaymentIcon.setColorFilter(defaultColor)
+            tvPaymentMethodText.text = getString(R.string.action_payment_cash)
+        }
     }
-}
     private fun findClosestCity(lat: Double, lng: Double): String? {
         var closestCity: String? = null
         var minDistance = Float.MAX_VALUE
@@ -3250,6 +3255,24 @@ class RoundedBackgroundSpan(
     // Настраиваем барабан времени
     timePicker.setIs24HourView(true)
 
+    // Высчитываем минимальное время (текущее + 40 минут) для дефолтного отображения
+    val defaultScheduleTime = Calendar.getInstance().apply {
+        add(Calendar.MINUTE, 40)
+    }
+    val defaultHour = defaultScheduleTime.get(Calendar.HOUR_OF_DAY)
+    val defaultMinute = defaultScheduleTime.get(Calendar.MINUTE)
+
+    // Устанавливаем это время в барабан с учетом версии Android устройства
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        timePicker.hour = defaultHour
+        timePicker.minute = defaultMinute
+    } else {
+        @Suppress("DEPRECATION")
+        timePicker.currentHour = defaultHour
+        @Suppress("DEPRECATION")
+        timePicker.currentMinute = defaultMinute
+    }
+
 
     // ==========================================
     // 3. ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК
@@ -4264,42 +4287,33 @@ private fun stopWaitingTimer() {
             return
         }
 
-        // 👉 ИСПРАВЛЕННЫЙ ТРЕКИНГ С ЗАЩИТОЙ ОТ ДУБЛИРОВАНИЯ:
         if (!hasTrackedTariffsView) {
             com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariffs_view", "${availableTariffs.size} тарифи(ів)")
-            hasTrackedTariffsView = true // Блокируем повторные отправки до следующего fetchTariffs
+            hasTrackedTariffsView = true 
         }
 
-        // 1. Оновлюємо мапу БАЗОВИХ цін (tariffCustomPrices)
         val INCLUDED_KM = 3.0
         val totalKm = routeDistanceMeters / 1000.0
         val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
 
         availableTariffs.forEach { tariff ->
-            // ПРІОРИТЕТ 1: Якщо сервер прислав точну ціну
             if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
                 tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
-            } 
-            // ПРІОРИТЕТ 2: Рахуємо самі (Фолбек)
-            else {
+            } else {
                 val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
                 tariffCustomPrices[tariff.id] = ceil(localPrice)
             }
         }
 
-        // 2. Оновлюємо список в адаптері
+        // Заливаем список в адаптер
         tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
         tariffAdapter.updatePrices(tariffCustomPrices)
-        
-        // 👈 ФИКС БАГА 1: Принудительно сбрасываем скролл тарифов в самый верх
-        tariffsRecyclerView.scrollToPosition(0) 
 
-        tariffsPanel.post {
-            updateMapPadding(tariffsPanel, 0f, 10f)
-        }
-
-        // Логіка вибору тарифу за замовчуванням
+        // ЕДИНСТВЕННЫЙ И ЧИСТЫЙ БЛОК ОПРЕДЕЛЕНИЯ СТАТУСА ВЫБОРА
         if (selectedTariffItem == null) {
+            // ПЕРВАЯ ЗАГРУЗКА: скроллим вверх ТОЛЬКО ОДИН РАЗ при открытии панели
+            tariffsRecyclerView.scrollToPosition(0) 
+            
             val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) } 
                 ?: availableTariffs.firstOrNull()
 
@@ -4317,12 +4331,10 @@ private fun stopWaitingTimer() {
                 tariffAdapter.setSelectedTariffId(defaultTariff.id)
                 
                 btnOrderTaxi.isEnabled = true
-                
-                // ВАЖЛИВО: Викликаємо метод оновлення кнопки, щоб врахувати час (календар)
                 updateOrderButtonWithTime()
             }
         } else {
-            // Если тариф уже был выбран, обновляем цену
+            // ОБНОВЛЕНИЕ ЦЕН ИЛИ КЛИК ПОЛЬЗОВАТЕЛЯ: скролл больше НЕ ТРОГАЕМ!
             val item = selectedTariffItem!!
             val newBasePrice = tariffCustomPrices[item.tariff.id]
             
@@ -4333,8 +4345,15 @@ private fun stopWaitingTimer() {
                 )
             }
             
+            // Восстанавливаем подсветку выбранного тарифа в адаптере
+            tariffAdapter.setSelectedTariffId(item.tariff.id)
+            
             btnOrderTaxi.isEnabled = true
             updateOrderButtonWithTime()
+        }
+
+        tariffsPanel.post {
+            updateMapPadding(tariffsPanel, 0f, 10f)
         }
     }
 
@@ -4761,46 +4780,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
     // КОНЕЦ ОБНОВЛЕННОГО БЛОКА
     // ==========================================
 
-    // 3. Тариф и Иконка (Загрузка из диспетчерской)
-    val expandableDetails = findViewById<View>(R.id.layout_expandable_details)
-    val ivOrderTariffIcon = expandableDetails.findViewById<ImageView>(R.id.iv_order_tariff_icon)
-    val tvOrderTariffName = expandableDetails.findViewById<TextView>(R.id.tv_order_tariff_name)
-
-    tvOrderTariffName.text = order.tariffName
-
-    val matchingTariff = availableTariffs.find { it.name == order.tariffName }
-    val rawUrl = matchingTariff?.imageUrl
-
-    // Очищаем фильтры, чтобы Glide нарисовал цветную иконку, а не серую тень
-    ivOrderTariffIcon.imageTintList = null
-    ivOrderTariffIcon.clearColorFilter()
-
-    if (!rawUrl.isNullOrEmpty()) {
-        // 🔥 УБРАН ХАРДКОД IP: Парсим корень из центрального адреса сетевого клиента
-        val baseUrlUri = android.net.Uri.parse(com.taxiapp.client.network.ApiClient.BASE_URL)
-        val serverRoot = "${baseUrlUri.scheme}://${baseUrlUri.host}${if (baseUrlUri.port != -1) ":${baseUrlUri.port}" else ""}"
-
-        val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
-            rawUrl
-        } else {
-            var cleanPath = rawUrl.replace("\\", "/")
-                .replace(Regex("/{2,}"), "/")
-                .trimStart('/')
-
-            if (!cleanPath.startsWith("uploads/")) {
-                cleanPath = "uploads/$cleanPath"
-            }
-            "$serverRoot/$cleanPath"
-        }
-
-        Glide.with(this)
-            .load(fullUrl)
-            .placeholder(R.drawable.ic_taxi_model_standard)
-            .error(R.drawable.ic_taxi_model_standard)
-            .into(ivOrderTariffIcon)
-    } else {
-        ivOrderTariffIcon.setImageResource(R.drawable.ic_taxi_model_standard)
-    }
+    updateActiveOrderTariffIcon(order)
 
     // Доп. услуги
     if (order.services.isNotEmpty()) {
@@ -4826,6 +4806,43 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
     updateStatusUI(order)
 }
+
+private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
+        if (!::layoutExpandableDetails.isInitialized) return
+
+        val ivOrderTariffIcon = layoutExpandableDetails.findViewById<ImageView>(R.id.iv_order_tariff_icon)
+        val tvOrderTariffName = layoutExpandableDetails.findViewById<TextView>(R.id.tv_order_tariff_name)
+
+        if (ivOrderTariffIcon == null || tvOrderTariffName == null) return
+
+        tvOrderTariffName.text = order.tariffName
+
+        // Безопасный поиск без учета регистра символов
+        val matchingTariff = availableTariffs.find { it.name.equals(order.tariffName, ignoreCase = true) }
+        val rawUrl = matchingTariff?.imageUrl
+
+        ivOrderTariffIcon.imageTintList = null
+        ivOrderTariffIcon.clearColorFilter()
+
+        if (!rawUrl.isNullOrEmpty()) {
+            // ОДИН В ОДИН как в TariffAdapter: изящно отсекаем роут API и клеим чистый путь
+            val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+                rawUrl
+            } else {
+                val cleanPath = rawUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
+                val baseUrlRoot = com.taxiapp.client.network.ApiClient.BASE_URL.substringBefore("api/v1/")
+                "${baseUrlRoot}${cleanPath}"
+            }
+
+            Glide.with(this)
+                .load(fullUrl)
+                .placeholder(R.drawable.ic_taxi_model_standard)
+                .error(R.drawable.ic_taxi_model_standard)
+                .into(ivOrderTariffIcon)
+        } else {
+            ivOrderTariffIcon.setImageResource(R.drawable.ic_taxi_model_standard)
+        }
+    }
     
     private fun checkOrderStatus() {
         // Оставлен как заглушка, если вдруг где-то вызывается,
@@ -4833,57 +4850,51 @@ ivMenuIcon.setColorFilter(adaptiveColor)
     }
 
     private fun setButtonsLoadingState(isLoading: Boolean) {
-        // Проверяем, вызвана ли загрузка именно нажатием на кнопку "Замовити"
         val isOrdering = btnOrderTaxi.text.toString() == "Обробка..."
+        // Фиксируем, загружается ли панель прямо сейчас
+        isButtonsPanelLoading = isLoading && !isOrdering
 
-        // 1. Управляем мерцанием самих кнопок
-        // Включаем шиммер ТОЛЬКО если это обычная загрузка (не отправка заказа)
+        // 1. Управляем анимацией шиммера
         if (isLoading && !isOrdering) {
-            buttonsShimmer.showShimmer(true) // Возвращаем маску, если она была скрыта
-            buttonsShimmer.startShimmer()    // Запускаем анимацию
+            buttonsShimmer.showShimmer(true)
+            buttonsShimmer.startShimmer()
         } else {
-            buttonsShimmer.stopShimmer()     // Останавливаем анимацию
-            buttonsShimmer.hideShimmer()     // Полностью удаляем градиент!
+            buttonsShimmer.stopShimmer()
+            buttonsShimmer.hideShimmer()
         }
 
-        // 2. Прячем или показываем иконки
-        // Прячем иконки ТОЛЬКО если это обычная загрузка
-        val iconVisibility = if (isLoading && !isOrdering) View.INVISIBLE else View.VISIBLE
+        // 2. Синхронно скрываем/показываем иконки И текстовые подписи
+        val componentVisibility = if (isLoading && !isOrdering) View.INVISIBLE else View.VISIBLE
         
-        findViewById<View>(R.id.iv_comment_icon).visibility = iconVisibility
-        findViewById<View>(R.id.iv_payment_icon).visibility = iconVisibility
-        findViewById<View>(R.id.iv_services_icon).visibility = iconVisibility
-        findViewById<View>(R.id.iv_price_icon).visibility = iconVisibility
+        // Гасим/проявляем иконки
+        findViewById<View>(R.id.iv_comment_icon).visibility = componentVisibility
+        findViewById<View>(R.id.iv_payment_icon).visibility = componentVisibility
+        findViewById<View>(R.id.iv_services_icon).visibility = componentVisibility
+        findViewById<View>(R.id.iv_price_icon).visibility = componentVisibility
 
-        // 3. БРОНЕБОЙНАЯ логика для текста оплаты
+        // Гасим/проявляем статические текстовые метки кнопок
+        findViewById<View>(R.id.tv_comment_label).visibility = componentVisibility
+        findViewById<View>(R.id.tv_services_label).visibility = componentVisibility
+        findViewById<View>(R.id.tv_tips_label).visibility = componentVisibility
+
+        // 3. Отдельная умная логика для динамического текста метода оплаты
         val paymentText = findViewById<TextView>(R.id.tv_payment_method_text)
         if (isLoading && !isOrdering) {
-            // Если текст сейчас видим, прячем и запоминаем
             if (paymentText.visibility == View.VISIBLE) {
                 paymentText.tag = "was_visible"
                 paymentText.visibility = View.INVISIBLE
             }
         } else {
-            // Загрузка закончилась (ИЛИ мы сейчас отправляем заказ - тогда текст не трогаем)
-            val hasActualText = paymentText.text?.toString()?.isNotBlank() == true
-            
-            if (paymentText.tag == "was_visible" || hasActualText) {
-                paymentText.visibility = View.VISIBLE
-                paymentText.tag = null // очищаем память
-            } else {
-                paymentText.visibility = View.GONE
-            }
+            paymentText.visibility = View.VISIBLE
+            paymentText.tag = null
         }
         
-        // 4. Отключаем кликабельность
-        // ВАЖНО: А вот блокировать кнопки от нажатий мы должны ВСЕГДА, пока идет любая загрузка (isLoading),
-        // чтобы пользователь не начал менять цену или писать комментарий во время отправки заказа на сервер.
+        // 4. Блокируем клики на время загрузки
         findViewById<View>(R.id.btn_open_comment).isEnabled = !isLoading
         findViewById<View>(R.id.btn_open_payment).isEnabled = !isLoading
         findViewById<View>(R.id.btn_open_services).isEnabled = !isLoading
         findViewById<View>(R.id.btn_change_price).isEnabled = !isLoading
     }
-
     private fun getSnapPointAndDistance(rawLocation: LatLng, route: List<LatLng>): Pair<LatLng, Double> {
         if (route.size < 2) return Pair(rawLocation, 0.0)
 

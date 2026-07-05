@@ -7,6 +7,10 @@
     <string name="btn_my_location">My location</string>
     <string name="btn_pick_on_map">Pick on map</string>
 
+    <string name="action_comment">Comment</string>
+    <string name="action_payment_cash">Cash</string>
+    <string name="action_services">Services</string>
+    <string name="action_tips">Tip</string>
 
     <string name="title_add_home">Add Home</string>
     <string name="hint_add_home">Enter home address</string>
