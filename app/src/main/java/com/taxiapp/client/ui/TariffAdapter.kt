@@ -29,8 +29,9 @@ data class TariffItem(
 
 class TariffAdapter(
     private val onTariffSelected: (TariffItem) -> Unit,
-    private val onImagesLoaded: () -> Unit
+    private var onImagesLoaded: (() -> Unit)? = null
 ) : RecyclerView.Adapter<TariffAdapter.TariffViewHolder>() {
+
 
     private var items: List<TariffItem> = emptyList()
     private var selectedPosition: Int = -1
@@ -218,6 +219,10 @@ class TariffAdapter(
 
     override fun onBindViewHolder(holder: TariffViewHolder, position: Int) {
         holder.bind(items[position], position == selectedPosition)
+    }
+
+    fun setOnImagesLoadedListener(listener: () -> Unit) {
+        this.onImagesLoaded = listener
     }
 
     override fun getItemCount(): Int = items.size

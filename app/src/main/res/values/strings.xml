@@ -2,7 +2,7 @@
     <string name="app_name">Unit</string>
 
     <string name="privacy_disclaimer">Ти погоджуєшся на отримання повідомлень і на передачу персональних даних бізнес-партнерам відповідно до <a href="https://sites.google.com/view/unit-technologies/client-privacy-policy">Політики приватності</a>. Відмовитися від повідомлень можна в налаштуваннях профілю.</string>
-
+    <string name="default_web_client_id" translatable="false">359347918144-au70gopljkd5gnfheu3kjbhg96qcbek0.apps.googleusercontent.com</string>
     <string name="agreement_title">Угода користувача та Політика приватності</string>
     <string name="agreement_text">Продовжуючи, ти погоджуєшся з умовами <a href="https://sites.google.com/view/unit-technologies/terms-of-service">Угоди користувача</a> та обробкою ваших персональних даних відповідно до <a href="https://sites.google.com/view/unit-technologies/client-privacy-policy">Політики приватності</a>.</string>
 

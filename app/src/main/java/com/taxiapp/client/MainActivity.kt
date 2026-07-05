@@ -131,7 +131,7 @@ class MainActivity : BaseActivity() {
 
         // НАСТРОЙКА GOOGLE SIGN IN
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken("359347918144-au70gopljkd5gnfheu3kjbhg96qcbek0.apps.googleusercontent.com")
+            .requestIdToken(getString(R.string.default_web_client_id)) // 👈 Теперь берется из ресурсов
             .requestEmail()
             .build()
         googleSignInClient = GoogleSignIn.getClient(this, gso)
