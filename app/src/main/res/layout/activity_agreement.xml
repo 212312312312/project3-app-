@@ -13,7 +13,6 @@
         android:orientation="vertical"
         android:gravity="center">
 
-        <!-- Збільшена іконка з адаптацією під темну тему (app:tint) -->
         <ImageView
             android:layout_width="186dp"
             android:layout_height="176dp"
@@ -44,7 +43,6 @@
 
     </LinearLayout>
 
-    <!-- Нова кнопка в єдиному стилі -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="60dp"

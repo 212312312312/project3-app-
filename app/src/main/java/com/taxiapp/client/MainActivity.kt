@@ -46,6 +46,7 @@ class MainActivity : BaseActivity() {
     // Маркетингове джерело установки для аналітики
     private var marketingSource: String? = null
 
+    private lateinit var tvPrivacyDisclaimer: TextView
     // UI Секции
     private lateinit var layoutPhone: LinearLayout
     private lateinit var layoutSms: LinearLayout
@@ -330,6 +331,11 @@ class MainActivity : BaseActivity() {
         ivToastIcon = findViewById(R.id.iv_toast_icon)
         setupPhoneAutoformat(etPhoneNumber)
         setupPhoneAutoformat(etLinkPhoneNumber)
+        // Внутри метода initUI()
+        tvPrivacyDisclaimer = findViewById(R.id.tv_privacy_disclaimer)
+
+// Делаем ссылки в HTML кликабельными
+        tvPrivacyDisclaimer.movementMethod = android.text.method.LinkMovementMethod.getInstance()
     }
 
     override fun onDestroy() {

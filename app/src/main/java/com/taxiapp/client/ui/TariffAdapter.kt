@@ -36,6 +36,7 @@ class TariffAdapter(
     private var selectedPosition: Int = -1
     private var rawTariffs: List<CarTariffDto> = emptyList()
 
+    private val loadedTariffIds = mutableSetOf<Long>()
     private var imagesToLoadCount = 0
     private var currentDistanceMeters: Int = 0
     private var currentExtraCost: Double = 0.0
@@ -57,6 +58,8 @@ class TariffAdapter(
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
         val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge)
         val betaBadge: TextView = view.findViewById(R.id.tv_beta_badge)
+        // Внутри inner class TariffViewHolder(view: View)
+        val skeletonView: View = view.findViewById(R.id.tariff_skeleton_view)
 
         fun bind(item: TariffItem, isSelected: Boolean) {
             val tariff = item.tariff
@@ -78,6 +81,13 @@ class TariffAdapter(
             }
             // ------------------
 
+            // --- УПРАВЛЕНИЕ ИЗОЛИРОВАННЫМ СКЕЛЕТОНОМ ТАРИФА ---
+            if (loadedTariffIds.contains(tariff.id) || tariff.imageUrl.isNullOrEmpty()) {
+                skeletonView.visibility = View.GONE
+            } else {
+                skeletonView.visibility = View.VISIBLE
+            }
+
             // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
             if (!tariff.imageUrl.isNullOrEmpty()) {
                 val rawUrl = tariff.imageUrl
@@ -85,13 +95,12 @@ class TariffAdapter(
                 val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
                     rawUrl
                 } else {
-                    // Исправлено выражение регулярки на {2,}
+                    // ЧЕТКОЕ ИСПРАВЛЕНИЕ: Никаких пробелов внутри {2,}
                     val cleanPath = rawUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
                     val baseUrlRoot = com.taxiapp.client.network.ApiClient.BASE_URL.substringBefore("api/v1/")
                     "${baseUrlRoot}${cleanPath}"
                 }
 
-                // ⚡️ ЖЕЛЕЗОБЕТОННЫЙ ВАРИАНТ ЧЕРЕЗ CUSTOM_TARGET (Исключает конфликты версий Glide)
                 Glide.with(itemView.context)
                     .load(fullUrl)
                     .placeholder(R.drawable.ic_taxi_model_standard)
@@ -100,7 +109,7 @@ class TariffAdapter(
                         private fun decrementAndCheck() {
                             imagesToLoadCount--
                             if (imagesToLoadCount <= 0) {
-                                onImagesLoaded() // Все картинки загружены или упали в ошибку — скрываем шиммер
+                                onImagesLoaded()
                             }
                         }
 
@@ -109,6 +118,9 @@ class TariffAdapter(
                             transition: com.bumptech.glide.request.transition.Transition<in android.graphics.drawable.Drawable>?
                         ) {
                             image.setImageDrawable(resource)
+                            // Картинка успешно села в ImageView — заносим в кэш и тушим скелетон
+                            loadedTariffIds.add(tariff.id)
+                            skeletonView.visibility = View.GONE
                             decrementAndCheck()
                         }
 
@@ -119,6 +131,9 @@ class TariffAdapter(
                             } else {
                                 image.setImageResource(R.drawable.ic_taxi_model_standard)
                             }
+                            // Картинка упала в ошибку — тоже тушим скелетон, чтобы показать дефолт
+                            loadedTariffIds.add(tariff.id)
+                            skeletonView.visibility = View.GONE
                             decrementAndCheck()
                         }
 
