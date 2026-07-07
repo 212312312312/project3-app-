@@ -4282,28 +4282,29 @@ private fun stopWaitingTimer() {
 }
 
     private fun displayTariffs() {
-        if (availableTariffs.isEmpty()) {
-            showToast("Немає тарифів")
-            return
-        }
+    if (availableTariffs.isEmpty()) {
+        showToast("Немає тарифів")
+        return
+    }
 
-        if (!hasTrackedTariffsView) {
-            com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariffs_view", "${availableTariffs.size} тарифи(ів)")
-            hasTrackedTariffsView = true 
-        }
+    if (!hasTrackedTariffsView) {
+        com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariffs_view", "${availableTariffs.size} тарифи(ів)")
+        hasTrackedTariffsView = true 
+    }
 
-        val INCLUDED_KM = 3.0
-        val totalKm = routeDistanceMeters / 1000.0
-        val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
+    // ВОТ ОН, ТОТ САМЫЙ ХАРДКОД:
+    val INCLUDED_KM = 3.0
+    val totalKm = routeDistanceMeters / 1000.0
+    val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
 
-        availableTariffs.forEach { tariff ->
-            if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
-                tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
-            } else {
-                val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
-                tariffCustomPrices[tariff.id] = ceil(localPrice)
-            }
+    availableTariffs.forEach { tariff ->
+        if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
+            tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
+        } else {
+            val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
+            tariffCustomPrices[tariff.id] = ceil(localPrice)
         }
+    }
 
         // Заливаем список в адаптер
         tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
