@@ -57,10 +57,16 @@ open class BaseActivity : AppCompatActivity() {
         lastScreenOnTime = System.currentTimeMillis()
 
         // 1. Слушаем событие "Сессия истекла"
+        // 1. Слушаем событие "Сессия истекла"
         ServerStatusBus.sessionExpired.observe(this) { isExpired ->
             if (isExpired) {
                 ServerStatusBus.resetSessionExpired()
-                handleSessionExpired()
+
+                // 🔥 ИСПРАВЛЕНО: Если пользователь УЖЕ находится на экране логина или сплеша,
+                // игнорируем панику шины об истекшей сессии, чтобы не прерывать открытие Хрома/Google
+                if (this !is MainActivity && this !is SplashActivity) {
+                    handleSessionExpired()
+                }
             }
         }
 

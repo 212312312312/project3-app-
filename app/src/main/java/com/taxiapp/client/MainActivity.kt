@@ -46,6 +46,7 @@ class MainActivity : BaseActivity() {
     // Маркетингове джерело установки для аналітики
     private var marketingSource: String? = null
 
+    private var lastGoogleClickTime: Long = 0
     private lateinit var tvPrivacyDisclaimer: TextView
     // UI Секции
     private lateinit var layoutPhone: LinearLayout
@@ -94,16 +95,27 @@ class MainActivity : BaseActivity() {
                     showToast("Помилка: Google не повернув токен")
                 }
             } catch (e: ApiException) {
-                Log.e("GoogleAuth", "Помилка входу Google. Код: ${e.statusCode}", e)
-                showToast("Помилка Google: ${e.statusCode}")
+                // 🔥 ИСПРАВЛЕНО: Даже при RESULT_OK проверяем на отмену (редкий системный кейс)
+                if (e.statusCode == 12501) {
+                    Log.d("GoogleAuth", "Вход отменен пользователем (12501)")
+                } else {
+                    Log.e("GoogleAuth", "Помилка входу Google. Код: ${e.statusCode}", e)
+                    showToast("Помилка Google: ${e.statusCode}")
+                }
             }
         } else {
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             try {
                 task.getResult(ApiException::class.java)
             } catch (e: ApiException) {
-                Log.e("GoogleAuth", "Авторизація скасована або помилка. Код: ${e.statusCode}")
-                showToast("Помилка: ${e.statusCode}")
+                // 🔥 ИСПРАВЛЕНО: Если код 12501 (SIGN_IN_CANCELLED), просто пишем в лог для отладки,
+                // но НЕ показываем пользователю раздражающий Toast
+                if (e.statusCode == 12501) {
+                    Log.d("GoogleAuth", "Пользователь закрыл шторку выбора аккаунта Google (12501)")
+                } else {
+                    Log.e("GoogleAuth", "Авторизація скасована або помилка. Код: ${e.statusCode}")
+                    showToast("Помилка: ${e.statusCode}")
+                }
             }
         }
     }
@@ -124,11 +136,19 @@ class MainActivity : BaseActivity() {
             goToHomeActivity()
             return
         } else if (token != null) {
-            sessionManager.clearSession()
+            // 🔥 ИСПРАВЛЕНО: Стираем сессию ТОЛЬКО при холодном старте приложения.
+            // Если это пересоздание экрана (savedInstanceState != null), то сессию НЕ трогаем!
+            if (savedInstanceState == null) {
+                sessionManager.clearSession()
+            }
         }
-
         setContentView(R.layout.activity_main)
-        try { ViewUtils.makeImmersive(this) } catch (e: Exception) { e.printStackTrace() }
+
+        // 🔥 ИСПРАВЛЕНО: Если сокет/экран пересоздался в процессе привязки номера, возвращаем нужный UI
+        if (token != null && phone.isEmpty() && savedInstanceState != null) {
+            showLinkPhoneScreen()
+        }
+        try { ViewUtils.setupEdgeToEdge(this) } catch (e: Exception) { e.printStackTrace() }
 
         // НАСТРОЙКА GOOGLE SIGN IN
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -173,6 +193,10 @@ class MainActivity : BaseActivity() {
         }
 
         btnGoogleSignIn.setOnClickListener {
+            // Предотвращаем дребезг контактов и повторные клики в течение 1.5 сек
+            if (System.currentTimeMillis() - lastGoogleClickTime < 1500) return@setOnClickListener
+            lastGoogleClickTime = System.currentTimeMillis()
+
             val signInIntent = googleSignInClient.signInIntent
             googleSignInLauncher.launch(signInIntent)
         }

@@ -9,6 +9,23 @@ import androidx.core.view.WindowInsetsControllerCompat
 
 object ViewUtils {
 
+    fun setupEdgeToEdge(activity: Activity) {
+        val window = activity.window
+
+        // Разрешаем контенту затекать под вырезы камеры
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+
+        // Включаем edge-to-edge: бары остаются видимыми, но становятся прозрачными
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Делаем системные бары прозрачными (опционально, если стили их красят)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+    }
+
     fun makeImmersive(activity: Activity) {
         val window = activity.window
 

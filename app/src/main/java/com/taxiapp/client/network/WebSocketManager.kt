@@ -30,15 +30,16 @@ data class CardBindSocketMessageDto(
     val message: String?
 )
 
-// ИСПРАВЛЕНО: Добавили LifecycleOwner для безопасной подписки без утечек памяти
 class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: androidx.lifecycle.LifecycleOwner) {
 
     private var currentCardBindSub: Pair<Long, (CardBindSocketMessageDto) -> Unit>? = null
     private var nearbyDriversDisposable: io.reactivex.disposables.Disposable? = null
     private var driverTrackingDisposable: io.reactivex.disposables.Disposable? = null
-
-    // ИСПРАВЛЕНО: Добавили disposable для управления топиком заказов клиента
     private var clientOrdersDisposable: io.reactivex.disposables.Disposable? = null
+
+    // 🔥 ИСПРАВЛЕНО: Выделили персональные disposable, чтобы подписки не копились и не текли
+    private var chatDisposable: io.reactivex.disposables.Disposable? = null
+    private var cardBindDisposable: io.reactivex.disposables.Disposable? = null
 
     private var currentNearbyDriversSub: Pair<String, (List<DriverLocationDto>) -> Unit>? = null
     private var stompClient: StompClient? = null
@@ -59,7 +60,6 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
     }
 
     init {
-        // ИСПРАВЛЕНО: Вместо observeForever привязываемся к реальному жизненному циклу приложения/экрана
         Handler(Looper.getMainLooper()).post {
             ServerStatusBus.tokenRefreshed.observe(lifecycleOwner, tokenObserver)
         }
@@ -186,15 +186,30 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
     @SuppressLint("CheckResult")
     fun subscribeToChat(orderId: String, onMessageReceived: (ChatMessageDto) -> Unit) {
         currentChatSub = Pair(orderId, onMessageReceived)
+
+        // 🔥 ИСПРАВЛЕНО: Закрываем старый поток чата перед открытием нового топика
+        chatDisposable?.dispose()
+
         val topic = "/topic/chat/$orderId"
-        val disp = stompClient?.topic(topic)
+        chatDisposable = stompClient?.topic(topic)
             ?.subscribeOn(Schedulers.io())
             ?.observeOn(AndroidSchedulers.mainThread())
             ?.subscribe({ topicMessage ->
-                val message = gson.fromJson(topicMessage.payload, ChatMessageDto::class.java)
-                onMessageReceived(message)
+                try {
+                    val message = gson.fromJson(topicMessage.payload, ChatMessageDto::class.java)
+                    onMessageReceived(message)
+                } catch (e: Exception) {
+                    Log.e("WebSocketManager", "Error parsing chat message: ${e.message}")
+                }
             }, { Log.e("WebSocketManager", "Chat error", it) })
-        if (disp != null) compositeDisposable.add(disp)
+    }
+
+    // 🔥 ИСПРАВЛЕНО: Добавлен метод ручной отписки от топика чата
+    fun unsubscribeFromChat() {
+        chatDisposable?.dispose()
+        chatDisposable = null
+        currentChatSub = null
+        Log.d("WS_TAXI_DEBUG", "🛑 Успешно отписались от топика чата")
     }
 
     @SuppressLint("CheckResult")
@@ -202,7 +217,6 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
         currentOrderSub = Pair(clientId, onOrderUpdated)
 
         if (stompClient?.isConnected == true) {
-            // ИСПРАВЛЕНО: Перед созданием новой подписки очищаем предыдущую
             clientOrdersDisposable?.dispose()
 
             val topic = "/topic/clients/$clientId/orders"
@@ -222,7 +236,6 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
         }
     }
 
-    // ИСПРАВЛЕНО: Метод для ручной отписки от топика заказов (чтобы не копить темы)
     fun unsubscribeFromClientOrders() {
         clientOrdersDisposable?.dispose()
         clientOrdersDisposable = null
@@ -233,15 +246,30 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
     @SuppressLint("CheckResult")
     fun subscribeToCardBinding(clientId: Long, onCardBindUpdated: (CardBindSocketMessageDto) -> Unit) {
         currentCardBindSub = Pair(clientId, onCardBindUpdated)
+
+        // 🔥 ИСПРАВЛЕНО: Убиваем предыдущую подписку на привязку карты, чтобы избежать дублирования
+        cardBindDisposable?.dispose()
+
         val topic = "/topic/clients/$clientId/card-bind"
-        val disp = stompClient?.topic(topic)
+        cardBindDisposable = stompClient?.topic(topic)
             ?.subscribeOn(Schedulers.io())
             ?.observeOn(AndroidSchedulers.mainThread())
             ?.subscribe({ topicMessage ->
-                val message = gson.fromJson(topicMessage.payload, CardBindSocketMessageDto::class.java)
-                onCardBindUpdated(message)
+                try {
+                    val message = gson.fromJson(topicMessage.payload, CardBindSocketMessageDto::class.java)
+                    onCardBindUpdated(message)
+                } catch (e: Exception) {
+                    Log.e("WebSocketManager", "Error parsing card bind message: ${e.message}")
+                }
             }, { Log.e("WebSocketManager", "Card bind error", it) })
-        if (disp != null) compositeDisposable.add(disp)
+    }
+
+    // 🔥 ИСПРАВЛЕНО: Добавлен метод ручной отписки от привязки карт
+    fun unsubscribeFromCardBinding() {
+        cardBindDisposable?.dispose()
+        cardBindDisposable = null
+        currentCardBindSub = null
+        Log.d("WS_TAXI_DEBUG", "🛑 Успешно отписались от топика привязки карты")
     }
 
     fun disconnect() {
@@ -252,9 +280,15 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
         nearbyDriversDisposable?.dispose()
         nearbyDriversDisposable = null
 
-        // ИСПРАВЛЕНО: Очищаем disposable заказов при общем отключении
         clientOrdersDisposable?.dispose()
         clientOrdersDisposable = null
+
+        // 🔥 ИСПРАВЛЕНО: Тотально зачищаем новые сессионные disposable при общем дисконнекте
+        chatDisposable?.dispose()
+        chatDisposable = null
+
+        cardBindDisposable?.dispose()
+        cardBindDisposable = null
 
         currentChatSub = null
         currentLocationSub = null
@@ -266,6 +300,5 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
 
     fun destroy() {
         disconnect()
-        // Нам больше не нужно принудительно удалять observer, LiveData сделает это сама благодаря LifecycleOwner
     }
 }

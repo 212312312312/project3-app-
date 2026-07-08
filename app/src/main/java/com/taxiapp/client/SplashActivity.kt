@@ -13,6 +13,8 @@ class SplashActivity : BaseActivity()  {
 
     // Перемінна для тимчасового збереження маркетингового джерела
     private var acquisitionSource: String? = null
+    private val navigationHandler = Handler(Looper.getMainLooper())
+    private val navigationRunnable = Runnable { checkSessionAndNavigate() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,9 +41,12 @@ class SplashActivity : BaseActivity()  {
         contentWrapper.startAnimation(slideUp)
         // -----------------
 
-        Handler(Looper.getMainLooper()).postDelayed({
-            checkSessionAndNavigate()
-        }, 2000)
+        navigationHandler.postDelayed(navigationRunnable, 2000)
+    }
+
+    override fun onDestroy() {
+        navigationHandler.removeCallbacks(navigationRunnable)
+        super.onDestroy()
     }
 
     private fun checkSessionAndNavigate() {
