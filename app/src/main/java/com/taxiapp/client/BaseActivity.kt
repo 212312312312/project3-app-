@@ -27,6 +27,15 @@ open class BaseActivity : AppCompatActivity() {
     override fun attachBaseContext(newBase: Context) {
         val sessionManager = SessionManager(newBase)
         val language = sessionManager.getLanguage()
+
+        // 1. Проверяем, настроен ли уже системный Per-App Locale.
+        // Если пустой (например, первый запуск), принудительно инициализируем его сохраненным языком
+        val currentLocales = androidx.appcompat.app.AppCompatDelegate.getApplicationLocales()
+        if (currentLocales.isEmpty && language.isNotEmpty()) {
+            LocaleHelper.applyLanguage(language)
+        }
+
+        // 2. Прокидываем базовый контекст с фиксом конфигурации ресурсов
         super.attachBaseContext(LocaleHelper.setLocale(newBase, language))
     }
 

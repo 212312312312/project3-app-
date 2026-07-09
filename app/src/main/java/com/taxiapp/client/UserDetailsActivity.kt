@@ -22,6 +22,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.MessageResponse
+import com.taxiapp.client.utils.LocaleHelper
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 import retrofit2.Call
@@ -89,7 +90,7 @@ class UserDetailsActivity : BaseActivity() {
         if (currentLang == "en") {
             btnLanguage.setImageResource(R.drawable.ic_flag_en)
         } else {
-            btnLanguage.setImageResource(R.drawable.ic_flag_ua)
+            btnLanguage.setImageResource(R.drawable.ic_flag_ua) // Для всех остальных (uk) ставим UA флаг
         }
 
         // --- ЛОГІКА ДИНАМІЧНОЇ ЗМІНИ ЛІТЕРИ ---
@@ -146,12 +147,16 @@ class UserDetailsActivity : BaseActivity() {
         }
 
         btnSave?.setOnClickListener {
-            val selectedLang = if (rbLangEn?.isChecked == true) "en" else "ua"
+            // 1. ИСПРАВЛЕНО: используем системный код "uk" вместо "ua"
+            val selectedLang = if (rbLangEn?.isChecked == true) "en" else "uk"
 
-            // 2. Зберігаємо нову мову
+            // 2. Зберігаємо нову мову в сессию
             sessionManager.saveLanguage(selectedLang)
 
-            // 3. Оновлюємо іконку в хедері
+            // 🚀 ДОБАВЛЕНО: Принудительно применяем язык на уровне системы для Карт и внешних SDK
+            LocaleHelper.applyLanguage(selectedLang)
+
+            // 3. Оновлюємо іконку в хедері (имена твоих ресурсов drawable остаются прежними)
             if (selectedLang == "en") {
                 btnLanguage.setImageResource(R.drawable.ic_flag_en)
             } else {
@@ -161,7 +166,7 @@ class UserDetailsActivity : BaseActivity() {
             showTopMessage("Мову змінено / Language changed", false)
             dialog.dismiss()
 
-            // 4. Перезапускаємо Activity, щоб нові ресурси strings.xml завантажились
+            // 4. Перезапускаємо Activity, щоб весь UI обновился
             recreate()
         }
 

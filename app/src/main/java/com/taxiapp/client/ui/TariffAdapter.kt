@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
@@ -45,9 +46,8 @@ class TariffAdapter(
     private var currentDiscountPercent: Double = 0.0
     private var maxDiscountAmount: Double = 0.0
 
-    // НАЛАШТУВАННЯ СЕРВЕРА
-    private val SERVER_IP = "192.168.0.107"
-    private val SERVER_PORT = "8080"
+    // Флаг для того, чтобы показать Toast об ошибке просчета только 1 раз за перерасчет
+    private var errorToastShown = false
 
     inner class TariffViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val cardView: MaterialCardView = view.findViewById(R.id.tariff_card)
@@ -58,7 +58,6 @@ class TariffAdapter(
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
         val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge)
         val betaBadge: TextView = view.findViewById(R.id.tv_beta_badge)
-        // Внутри inner class TariffViewHolder(view: View)
         val skeletonView: View = view.findViewById(R.id.tariff_skeleton_view)
 
         fun bind(item: TariffItem, isSelected: Boolean) {
@@ -79,7 +78,6 @@ class TariffAdapter(
             } else {
                 betaBadge.visibility = View.GONE
             }
-            // ------------------
 
             // --- УПРАВЛЕНИЕ ИЗОЛИРОВАННЫМ СКЕЛЕТОНОМ ТАРИФА ---
             if (loadedTariffIds.contains(tariff.id) || tariff.imageUrl.isNullOrEmpty()) {
@@ -95,7 +93,6 @@ class TariffAdapter(
                 val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
                     rawUrl
                 } else {
-                    // ЧЕТКОЕ ИСПРАВЛЕНИЕ: Никаких пробелов внутри {2,}
                     val cleanPath = rawUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
                     val baseUrlRoot = com.taxiapp.client.network.ApiClient.BASE_URL.substringBefore("api/v1/")
                     "${baseUrlRoot}${cleanPath}"
@@ -118,7 +115,6 @@ class TariffAdapter(
                             transition: com.bumptech.glide.request.transition.Transition<in android.graphics.drawable.Drawable>?
                         ) {
                             image.setImageDrawable(resource)
-                            // Картинка успешно села в ImageView — заносим в кэш и тушим скелетон
                             loadedTariffIds.add(tariff.id)
                             skeletonView.visibility = View.GONE
                             decrementAndCheck()
@@ -131,7 +127,6 @@ class TariffAdapter(
                             } else {
                                 image.setImageResource(R.drawable.ic_taxi_model_standard)
                             }
-                            // Картинка упала в ошибку — тоже тушим скелетон, чтобы показать дефолт
                             loadedTariffIds.add(tariff.id)
                             skeletonView.visibility = View.GONE
                             decrementAndCheck()
@@ -144,18 +139,13 @@ class TariffAdapter(
             } else {
                 image.setImageResource(R.drawable.ic_taxi_model_standard)
             }
-// -----------------------------
-// -----------------------------
-            // -----------------------------
 
-            // Знижки
-            // --- УМНАЯ ДИНАМИЧЕСКАЯ ЛОГИКА СКИДОК С СЕРВЕРА ---
-            if (item.oldPriceValue != null && item.oldPriceValue > item.priceValue) {
+            // --- Знижки та Стара ціна ---
+            if (item.oldPriceValue != null && item.oldPriceValue > item.priceValue && item.priceValue > 0) {
                 oldPrice.visibility = View.VISIBLE
                 oldPrice.text = "${item.oldPriceValue.roundToInt()} ₴"
                 oldPrice.paintFlags = oldPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
 
-                // Автоматически вычисляем процент скидки на основе двух цен
                 val calculatedPct = ((item.oldPriceValue - item.priceValue) / item.oldPriceValue * 100).roundToInt()
 
                 discountBadge.visibility = View.VISIBLE
@@ -173,42 +163,66 @@ class TariffAdapter(
                 discountBadge.visibility = View.GONE
             }
 
-            // Вывод текущей актуальной цены
-            price.text = "${item.priceValue.roundToInt()} ₴"
-
-            // --- ЛОГИКА НЕДОСТУПНОГО ТАРИФА (UNAVAILABLE) ---
+            // --- ОБРАБОТКА ОШИБКИ ИЛИ ВЫВОД АКТУАЛЬНОЙ ЦЕНЫ ---
             cardView.stateListAnimator = null
             itemView.clearAnimation()
             cardView.clearAnimation()
 
-            if (tariff.isUnavailable) {
-                itemView.alpha = 0.4f
-                cardView.alpha = 0.4f
+            if (item.priceValue < 0) {
+                // Жесткая блокировка UI при ошибке просчета сервера
+                price.text = "Помилка"
+                price.setTextColor(Color.RED)
+
+                itemView.alpha = 0.5f
+                cardView.alpha = 0.5f
                 cardView.strokeWidth = 0
                 cardView.cardElevation = 0f
                 cardView.isEnabled = false
                 itemView.isEnabled = false
                 itemView.isClickable = false
-            } else {
-                itemView.alpha = 1.0f
-                cardView.alpha = 1.0f
-                cardView.isEnabled = true
-                itemView.isEnabled = true
-                itemView.isClickable = true
 
-                if (isSelected) {
-                    cardView.cardElevation = 0f
-                    cardView.strokeWidth = 6
-                    cardView.strokeColor = ContextCompat.getColor(itemView.context, R.color.taxi_yellow)
-                } else {
+                // Показываем Toast один раз для всей группы тарифов
+                if (!errorToastShown) {
+                    errorToastShown = true
+                    Toast.makeText(
+                        itemView.context,
+                        "Помилка розрахунку вартості. Спробуйте пізніше.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } else {
+                price.text = "${item.priceValue.roundToInt()} ₴"
+                price.setTextColor(ContextCompat.getColor(itemView.context, android.R.color.white))
+
+                // Стандартная логика доступности тарифа
+                if (tariff.isUnavailable) {
+                    itemView.alpha = 0.4f
+                    cardView.alpha = 0.4f
                     cardView.strokeWidth = 0
                     cardView.cardElevation = 0f
+                    cardView.isEnabled = false
+                    itemView.isEnabled = false
+                    itemView.isClickable = false
+                } else {
+                    itemView.alpha = 1.0f
+                    cardView.alpha = 1.0f
+                    cardView.isEnabled = true
+                    itemView.isEnabled = true
+                    itemView.isClickable = true
+
+                    if (isSelected) {
+                        cardView.cardElevation = 0f
+                        cardView.strokeWidth = 6
+                        cardView.strokeColor = ContextCompat.getColor(itemView.context, R.color.taxi_yellow)
+                    } else {
+                        cardView.strokeWidth = 0
+                        cardView.cardElevation = 0f
+                    }
                 }
             }
-            // -----------------------------
 
             cardView.setOnClickListener {
-                if (tariff.isUnavailable) return@setOnClickListener
+                if (tariff.isUnavailable || item.priceValue < 0) return@setOnClickListener
 
                 val prev = selectedPosition
                 selectedPosition = bindingAdapterPosition
@@ -235,22 +249,18 @@ class TariffAdapter(
         holder.bind(items[position], position == selectedPosition)
     }
 
-
-
     override fun getItemCount(): Int = items.size
 
     fun submitList(tariffs: List<CarTariffDto>, distanceMeters: Int) {
         this.rawTariffs = tariffs
         this.currentDistanceMeters = distanceMeters
-        // Фиксируем, сколько картинок нам нужно дождаться
         this.imagesToLoadCount = tariffs.count { !it.imageUrl.isNullOrEmpty() }
 
-        // 👈 ФИКС: Гасим шиммер только если картинок 0 И при этом список тарифов НЕ пустой!
-        // При первичной очистке панели (emptyList()) скелетон продолжит красиво гореть.
         if (this.imagesToLoadCount == 0 && tariffs.isNotEmpty()) {
             onImagesLoaded()
         }
 
+        errorToastShown = false // Сбрасываем флаг тоста при обновлении данных
         recalculateItems()
     }
 
@@ -264,11 +274,13 @@ class TariffAdapter(
 
     fun updateExtraCost(cost: Double) {
         this.currentExtraCost = cost
+        errorToastShown = false
         recalculateItems()
     }
 
     fun setCustomPrice(tariffId: Long, addedValue: Double) {
         customPrices[tariffId] = addedValue
+        errorToastShown = false
         recalculateItems()
 
         val currentSelected = getSelectedTariff()
@@ -279,6 +291,7 @@ class TariffAdapter(
 
     fun clearCustomPrices() {
         customPrices.clear()
+        errorToastShown = false
         recalculateItems()
     }
 
@@ -302,26 +315,30 @@ class TariffAdapter(
 
     private fun recalculateItems() {
         items = rawTariffs.map { tariff ->
+            // ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ: Расчет идет строго на основе данных сервера
             val basePriceForCalc = if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
                 tariff.calculatedPrice!!
+            } else if (currentDistanceMeters > 0) {
+                // Маршрут построен, а сервер цену не прислал -> Критическая ошибка!
+                -1.0
             } else {
-                val totalKm = currentDistanceMeters / 1000.0
-                val INCLUDED_KM = 3.0
-                val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
-                val manualCalc = tariff.basePrice + (billableKm * tariff.pricePerKm)
-                max(ceil(manualCalc), tariff.basePrice)
+                // Стартовое состояние (адреса еще не введены) -> Показываем базовую цену "от..."
+                tariff.basePrice
             }
 
-            val withServices = basePriceForCalc + currentExtraCost
-            val userAdded = customPrices[tariff.id] ?: 0.0
-            val finalPrice = withServices + userAdded
-            val priceString = String.format("%.0f", finalPrice)
+            val finalPrice = if (basePriceForCalc > 0) {
+                basePriceForCalc + currentExtraCost + (customPrices[tariff.id] ?: 0.0)
+            } else {
+                -1.0
+            }
 
-            val finalOldPrice = if (tariff.oldPrice != null && tariff.oldPrice!! > 0) {
-                tariff.oldPrice!! + currentExtraCost + userAdded
+            val priceString = if (finalPrice > 0) String.format("%.0f", finalPrice) else "—"
+
+            val finalOldPrice = if (finalPrice > 0 && tariff.oldPrice != null && tariff.oldPrice!! > 0) {
+                tariff.oldPrice!! + currentExtraCost + (customPrices[tariff.id] ?: 0.0)
             } else null
 
-            TariffItem(tariff, priceString, finalPrice, userAdded, finalOldPrice)
+            TariffItem(tariff, priceString, finalPrice, customPrices[tariff.id] ?: 0.0, finalOldPrice)
         }
         notifyDataSetChanged()
     }
