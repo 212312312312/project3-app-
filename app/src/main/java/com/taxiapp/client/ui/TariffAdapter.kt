@@ -192,7 +192,8 @@ class TariffAdapter(
                 }
             } else {
                 price.text = "${item.priceValue.roundToInt()} ₴"
-                price.setTextColor(ContextCompat.getColor(itemView.context, android.R.color.white))
+
+                price.setTextColor(ContextCompat.getColor(itemView.context, R.color.text_primary))
 
                 // Стандартная логика доступности тарифа
                 if (tariff.isUnavailable) {
