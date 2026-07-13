@@ -132,6 +132,7 @@ object ApiClient {
                     val refreshCall = authService.refreshToken(TokenRefreshRequestDto(refreshToken))
                     val refreshResponse = refreshCall.execute()
 
+                    // === НАЧАЛО ОБНОВЛЕННОГО ФРАГМЕНТА ===
                     if (refreshResponse.isSuccessful && refreshResponse.body() != null) {
                         logDebug("AUTH INTERCEPTOR: SUCCESS! Got new tokens.")
                         val loginResponse = refreshResponse.body()!!
@@ -153,14 +154,30 @@ object ApiClient {
                         response = chain.proceed(retryRequest)
                     } else {
                         logDebug("AUTH INTERCEPTOR: Refresh FAILED with code ${refreshResponse.code()}")
+
+                        // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Выкидываем на регистрацию ТОЛЬКО если сервер явно
+                        // ответил 400 или 401 (значит Refresh Token действительно протух или аннулирован).
+                        // Если сервер лежит (500/503), мы НЕ стираем сессию пользователя!
+                        if (refreshResponse.code() == 400 || refreshResponse.code() == 401) {
+                            sm.clearSession()
+                            ServerStatusBus.triggerSessionExpired()
+                        }
+                    }
+                } catch (e: Exception) {
+                    logDebug("AUTH INTERCEPTOR: Exception during refresh", e)
+
+                    // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если это ошибка сети (таймаут, отвалился Wi-Fi, телефон в Doze Mode),
+                    // мы ОСТАВЛЯЕМ сессию целой. Просто возвращаем исходный 401, чтобы запрос упал по сети,
+                    // но пользователя НЕ выкинуло из его аккаунта.
+                    if (e is java.io.IOException) {
+                        return@Interceptor response
+                    } else {
+                        // Если это какой-то внутренний Crash структуры данных — тогда безопасно сбрасываем
                         sm.clearSession()
                         ServerStatusBus.triggerSessionExpired()
                     }
-                } catch (e: Exception) {
-                    logDebug("AUTH INTERCEPTOR: CRASH during refresh", e)
-                    sm.clearSession()
-                    ServerStatusBus.triggerSessionExpired()
                 }
+// === КОНЕЦ ОБНОВЛЕННОГО ФРАГМЕНТА ===
             }
         }
         response

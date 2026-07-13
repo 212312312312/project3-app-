@@ -61,9 +61,12 @@ class SessionManager(context: Context) {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            // Железный фолбэк: если на старом/кастомном устройстве сбоит Keystore,
-            // откатываемся на обычныеPrefs, чтобы приложение гарантированно НЕ упало
-            prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Меняем имя файла на "${PREFS_NAME}_Plain".
+            
+            // Если при сбое Keystore открыть исходный зашифрованный файл через обычные Prefs,
+            // они попытаются прочитать шифрованный XML как чистый текст, не найдут ключей и вернут null,
+            // что приведёт к моментальному разлогину! Новый файл изолирует фолбэк.
+            prefs = context.getSharedPreferences("${PREFS_NAME}_Plain", Context.MODE_PRIVATE)
         }
     }
 
