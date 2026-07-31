@@ -12,14 +12,14 @@ android {
     if (project.rootProject.file('local.properties').exists()) {
         properties.load(project.rootProject.file('local.properties').newDataInputStream())
     }
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.taxiunit.unitapp"
         minSdk 24
-        targetSdk 35
-        versionCode 4
-        versionName "1.0.3"
+        targetSdk 36
+        versionCode 7
+        versionName "1.0.5"
         buildConfigField "String", "GOOGLE_PLACES_API_KEY", "\"${properties.getProperty('GOOGLE_PLACES_API_KEY', '')}\""
 
         buildConfigField "String", "BASE_URL", "\"http://192.168.0.107:8080/\""
