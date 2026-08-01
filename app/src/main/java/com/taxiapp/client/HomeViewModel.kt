@@ -77,39 +77,57 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             checkOrderStatusOnce()
         }
         currentCity = sessionManager.fetchUserCity()
+
+        // 🟢 Подписываемся на сигналы отмены от FCM Push-сервиса
+        com.taxiapp.client.network.OrderStatusBus.orderCanceledEvent.observeForever { canceledId ->
+            if (!canceledId.isNullOrEmpty()) {
+                val currentOrder = _activeOrder.value
+                val isMatch = canceledId == activeOrderId ||
+                        canceledId == currentOrder?.id ||
+                        canceledId == currentOrder?.idLong?.toString()
+
+                if (isMatch || currentOrder != null) {
+                    Log.d("HomeViewModel", "🔔 Получен Push-сигнал отмены для заказа $canceledId. Очищаем UI.")
+                    clearOrderState()
+                    com.taxiapp.client.network.OrderStatusBus.resetEvent()
+                }
+            }
+        }
     }
 
     fun startOrderSocketListening(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
         val clientId = sessionManager.fetchUserId()
-        if (clientId == -1L) {
-            Log.e("HomeViewModel", "Cannot subscribe to orders: clientId is -1")
-            return
-        }
+        if (clientId == -1L) return
 
-        // Запоминаем ссылку для последующей отписки
         this.observedWebSocketManager = webSocketManager
 
-        Log.d("WS_ORDER_DEBUG", "🎧 Подписываемся на WebSocket топик заказов для клиента: $clientId")
         webSocketManager?.subscribeToClientOrders(clientId) { messageDto ->
-            Log.d("WS_ORDER_DEBUG", "⚡ Получен сокет-апдейт заказа! Action: ${messageDto.action}, Status: ${messageDto.order?.status}")
-
             val order = messageDto.order
             if (order != null) {
-                if (activeOrderId == null || activeOrderId == order.id) {
-                    activeOrderId = order.id
-                    sessionManager.saveActiveOrderId(order.id)
-                    _activeOrder.postValue(order)
-
+                if (activeOrderId == null || activeOrderId == order.id || activeOrderId == order.idLong.toString()) {
                     if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                         stopOrderStatusService(order.id)
-                        sessionManager.clearActiveOrderId()
+                        clearOrderState()
                     } else {
+                        activeOrderId = order.id
+                        sessionManager.saveActiveOrderId(order.id)
+                        _activeOrder.postValue(order)
                         updateOrderStatusService(order)
                     }
                 }
-            } else if (messageDto.action == "REMOVE" && messageDto.orderId == activeOrderId) {
-                activeOrderId?.let { stopOrderStatusService(it) }
-                clearOrderState()
+            } else if (messageDto.action == "REMOVE") {
+                val currentOrder = _activeOrder.value
+                if (currentOrder != null) {
+                    // 🟢 Сравниваем полученный UUID акшена со всеми возможными идентификаторами текущего заказа
+                    val isMatch = messageDto.orderId == activeOrderId ||
+                            messageDto.orderId == currentOrder.id ||
+                            messageDto.orderId == currentOrder.idLong.toString()
+
+                    if (isMatch) {
+                        Log.d("WS_ORDER_DEBUG", "🧹 Удаление заказа через сокет REMOVE (${messageDto.orderId}). Сбрасываем UI.")
+                        clearOrderState()
+                    }
+                }
             }
         }
     }

@@ -47,19 +47,26 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             if (orderIdStr != null && status != null) {
                 val orderId = orderIdStr.toLongOrNull() ?: return
 
-                // Якщо замовлення закрито або скасовано — кажемо сервісу зупинитися
+                // Если заказ закрыт или отменен — останавливаем виджет шторки и очищаем локальную сессию
                 if (status == "COMPLETED" || status == "CANCELLED") {
                     val stopIntent = Intent(this, OrderStatusService::class.java).apply {
                         action = OrderStatusService.ACTION_STOP
                         putExtra(OrderStatusService.EXTRA_ORDER_ID, orderId)
                     }
                     startService(stopIntent)
+
+                    // 🟢 1. Очищаем сохраненную сессию
+                    val sessionManager = com.taxiapp.client.utils.SessionManager(applicationContext)
+                    sessionManager.clearActiveOrderId()
+
+                    // 🟢 2. Передаем сигнал в UI, если приложение открыто на экране
+                    com.taxiapp.client.network.OrderStatusBus.notifyOrderCanceled(orderIdStr)
                 } else {
-                    // Якщо замовлення активне — оновлюємо Foreground Service (старе сповіщення оновиться)
+                    // Если заказ активен — обновляем Foreground Service
                     val updateIntent = Intent(this, OrderStatusService::class.java).apply {
                         putExtra(OrderStatusService.EXTRA_ORDER_ID, orderId)
                         putExtra(OrderStatusService.EXTRA_STATUS, status)
-                        putExtra("custom_title", title) // Передаємо красивий текст із сервера
+                        putExtra("custom_title", title)
                         putExtra("custom_body", body)
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -69,7 +76,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     }
                 }
             }
-            return // Виходимо, щоб не створювати ще одне стандартне сповіщення
+            return
         }
         // =======================================================================
 
