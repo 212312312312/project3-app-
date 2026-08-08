@@ -556,15 +556,18 @@ class AddressPickerActivity : BaseActivity() {
             var fullText = ""
             val name = place.name
             val address = place.address
-            if (!name.isNullOrEmpty()) fullText += name
+
+            // Перевіряємо, чи містить адреса назву місця, щоб уникнути дублювання типу "14А, вул. Дзюби, 14А"
             if (!address.isNullOrEmpty()) {
-                if (name != null && !address.startsWith(name)) {
-                    if (fullText.isNotEmpty()) fullText += ", "
-                    fullText += address
-                } else if (name == null) {
+                if (!name.isNullOrEmpty() && !address.lowercase().contains(name.lowercase())) {
+                    fullText = "$name, $address"
+                } else {
                     fullText = address
                 }
+            } else if (!name.isNullOrEmpty()) {
+                fullText = name
             }
+
             val finalName = AddressUtils.formatAddress(fullText)
 
             if (latLng != null && activeEditText != null) {
