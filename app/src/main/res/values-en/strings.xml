@@ -11,7 +11,11 @@
     <string name="action_payment_cash">Cash</string>
     <string name="action_services">Services</string>
     <string name="action_tips">Tip</string>
-
+    <!-- Payment methods -->
+    <string name="payment_method_cash">Cash</string>
+    <string name="payment_method_card">Card binding</string>
+    <string name="payment_method_driver_card">To driver\'s card</string>
+    <string name="payment_method_card_short">Card</string>
     <string name="title_add_home">Add Home</string>
     <string name="hint_add_home">Enter home address</string>
     <string name="title_add_work">Add Work</string>

@@ -18,8 +18,8 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.InitBindCardResponse
 import com.taxiapp.client.network.ClientProfileResponse
+import com.taxiapp.client.network.InitBindCardResponse
 import com.taxiapp.client.network.dto.MessageResponseDto
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
@@ -35,6 +35,11 @@ class PaymentActivity : BaseActivity() {
     private lateinit var ivUnbindCard: ImageView
     private lateinit var ivCheckCash: ImageView
     private lateinit var ivCheckCard: ImageView
+
+    // Элементы для способа "Водію на картку" и контейнеры кнопок
+    private var ivCheckDriverCard: ImageView? = null
+    private var btnCard: RelativeLayout? = null
+    private var btnDriverCard: RelativeLayout? = null
 
     // --- ПЕРЕМЕННЫЕ ДЛЯ УМНОГО ПОЛЛИНГА ---
     private var pollingHandler = Handler(Looper.getMainLooper())
@@ -54,9 +59,16 @@ class PaymentActivity : BaseActivity() {
         ivCheckCash = findViewById(R.id.iv_check_cash)
         ivCheckCard = findViewById(R.id.iv_check_card)
 
-        findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
+        // Находим элементы нового способа оплаты и кнопки
+        ivCheckDriverCard = findViewById(R.id.iv_check_driver_card)
+        btnCard = findViewById(R.id.btn_card)
+        btnDriverCard = findViewById(R.id.btn_driver_card)
 
-        updateUI()
+        // 🛡️ ЗАЩИТА ОТ МИГАНИЯ: Изначально прячем опциональные способы оплаты
+        btnCard?.visibility = View.GONE
+        btnDriverCard?.visibility = View.GONE
+
+        findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
 
         // Клик по "Наличные"
         findViewById<RelativeLayout>(R.id.btn_cash).setOnClickListener {
@@ -64,8 +76,8 @@ class PaymentActivity : BaseActivity() {
             updateUI()
         }
 
-        // Клик по "Карта"
-        findViewById<RelativeLayout>(R.id.btn_card).setOnClickListener {
+        // Клик по "Привязка карты"
+        btnCard?.setOnClickListener {
             val mask = sessionManager.getCardMask()
             if (mask.isNullOrEmpty()) {
                 bindNewCard()
@@ -75,10 +87,70 @@ class PaymentActivity : BaseActivity() {
             }
         }
 
+        // Клик по "Водію на картку"
+        btnDriverCard?.setOnClickListener {
+            sessionManager.savePaymentMethod("DRIVER_CARD")
+            updateUI()
+        }
+
         // Клик по крестику (Отвязать карту)
         ivUnbindCard.setOnClickListener {
             showUnbindCardDialog()
         }
+
+        // Загружаем настройки способов оплаты с сервера и обновляем UI
+        fetchPaymentSettings()
+        updateUI()
+    }
+
+    private fun fetchPaymentSettings() {
+        ApiClient.instance.getPaymentMethodsSettings().enqueue(object : Callback<Map<String, Boolean>> {
+            override fun onResponse(call: Call<Map<String, Boolean>>, response: Response<Map<String, Boolean>>) {
+                if (response.isSuccessful && response.body() != null) {
+                    val settings = response.body()!!
+                    val isCardEnabled = settings["enable_card_payment"] ?: true
+                    val isDriverCardEnabled = settings["enable_driver_card_payment"] ?: true
+
+                    // Показываем ТОЛЬКО если разрешено сервером
+                    btnCard?.visibility = if (isCardEnabled) View.VISIBLE else View.GONE
+                    btnDriverCard?.visibility = if (isDriverCardEnabled) View.VISIBLE else View.GONE
+
+                    val currentMethod = sessionManager.fetchPaymentMethod()
+                    if ((currentMethod == "CARD" && !isCardEnabled) ||
+                        (currentMethod == "DRIVER_CARD" && !isDriverCardEnabled)) {
+                        sessionManager.savePaymentMethod("CASH")
+                    }
+
+                    updateUI()
+                }
+            }
+
+            override fun onFailure(call: Call<Map<String, Boolean>>, t: Throwable) {
+                t.printStackTrace()
+            }
+        })
+    }
+
+    private fun updateUI() {
+        val mask = sessionManager.getCardMask()
+        val method = sessionManager.fetchPaymentMethod()
+
+        if (!mask.isNullOrEmpty()) {
+            tvCardTitle.text = getString(R.string.saved_card, mask)
+            ivUnbindCard.visibility = View.VISIBLE
+        } else {
+            tvCardTitle.text = getString(R.string.bind_card)
+            ivUnbindCard.visibility = View.GONE
+
+            if (method == "CARD") {
+                sessionManager.savePaymentMethod("CASH")
+            }
+        }
+
+        val currentMethod = sessionManager.fetchPaymentMethod()
+        ivCheckCash.visibility = if (currentMethod == "CASH") View.VISIBLE else View.INVISIBLE
+        ivCheckCard.visibility = if (currentMethod == "CARD" && !mask.isNullOrEmpty()) View.VISIBLE else View.INVISIBLE
+        ivCheckDriverCard?.visibility = if (currentMethod == "DRIVER_CARD") View.VISIBLE else View.INVISIBLE
     }
 
     private fun showUnbindCardDialog() {
@@ -97,7 +169,6 @@ class PaymentActivity : BaseActivity() {
             btnConfirm.isEnabled = false
             btnConfirm.text = "Видалення..."
 
-            // Вызов очищен от ручной передачи токена
             ApiClient.instance.unbindCard().enqueue(object : Callback<MessageResponseDto> {
                 override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                     dialog.dismiss()
@@ -128,11 +199,10 @@ class PaymentActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        stopPolling() // Обязательно останавливаем поллинг при выходе
+        stopPolling()
     }
 
     private fun fetchClientProfile() {
-        // Вызов очищен от ручной передачи токена
         ApiClient.instance.getClientProfile().enqueue(object : Callback<ClientProfileResponse> {
             override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
                 if (response.isSuccessful && response.body() != null) {
@@ -151,29 +221,7 @@ class PaymentActivity : BaseActivity() {
         })
     }
 
-    private fun updateUI() {
-        val mask = sessionManager.getCardMask()
-        val method = sessionManager.fetchPaymentMethod()
-
-        if (!mask.isNullOrEmpty()) {
-            tvCardTitle.text = getString(R.string.saved_card, mask)
-            ivUnbindCard.visibility = View.VISIBLE
-        } else {
-            tvCardTitle.text = getString(R.string.bind_card)
-            ivUnbindCard.visibility = View.GONE
-
-            if (method == "CARD") {
-                sessionManager.savePaymentMethod("CASH")
-            }
-        }
-
-        val currentMethod = sessionManager.fetchPaymentMethod()
-        ivCheckCash.visibility = if (currentMethod == "CASH") View.VISIBLE else View.INVISIBLE
-        ivCheckCard.visibility = if (currentMethod == "CARD" && !mask.isNullOrEmpty()) View.VISIBLE else View.INVISIBLE
-    }
-
     private fun bindNewCard() {
-        // Вызов очищен от ручной передачи токена
         ApiClient.instance.initBindCard().enqueue(object : Callback<InitBindCardResponse> {
             override fun onResponse(call: Call<InitBindCardResponse>, response: Response<InitBindCardResponse>) {
                 if (response.isSuccessful && response.body() != null) {
@@ -201,22 +249,16 @@ class PaymentActivity : BaseActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-
-            // --- ЗАЩИТА: Полностью блокируем доступ WebView к локальным файлам приложения на устройстве ---
             allowFileAccess = false
             allowContentAccess = false
         }
 
-// --- ЗАЩИТА: Внедряем строгий белый список доменов (Anti-Phishing / Anti-Fraud) ---
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
-                val url = request?.url?.toString() ?: return false
-
-                // Разрешаем переходы только на официальный шлюз LiqPay и наш доверенный бэкенд
-                val isAllowed = url.contains("liqpay.ua") || url.contains("ngrok-free.dev")
+                val overrideUrl = request?.url?.toString() ?: return false
+                val isAllowed = overrideUrl.contains("liqpay.ua") || overrideUrl.contains("ngrok-free.dev")
 
                 if (!isAllowed) {
-                    // Если WebView пытаются увести на левый фишинговый сайт — жестко блокируем переход
                     return true
                 }
                 return super.shouldOverrideUrlLoading(view, request)
@@ -228,7 +270,6 @@ class PaymentActivity : BaseActivity() {
             dialog.dismiss()
         }
 
-        // Когда диалог закрывается (по любой причине), останавливаем опрос
         dialog.setOnDismissListener {
             stopPolling()
             fetchClientProfile()
@@ -237,7 +278,6 @@ class PaymentActivity : BaseActivity() {
         webView.loadUrl(url)
         dialog.show()
 
-        // ЗАПУСКАЕМ НАШ УМНЫЙ ПОЛЛИНГ!
         startPollingCardStatus(dialog)
     }
 
@@ -250,33 +290,28 @@ class PaymentActivity : BaseActivity() {
             override fun run() {
                 if (!isPolling) return
 
-                // Вызов очищен от ручной передачи токена
                 ApiClient.instance.getClientProfile().enqueue(object : Callback<ClientProfileResponse> {
                     override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
                         if (response.isSuccessful && response.body() != null) {
                             val profile = response.body()!!
 
-                            // Если сервер вернул маску карты
                             if (!profile.cardMask.isNullOrEmpty()) {
                                 stopPolling()
-
                                 dialog.dismiss()
 
                                 sessionManager.saveCardMask(profile.cardMask)
                                 sessionManager.savePaymentMethod("CARD")
                                 updateUI()
-                                return // Выходим из функции, чтобы таймер точно не запустился снова
+                                return
                             }
                         }
 
-                        // ИСПРАВЛЕНИЕ: Перезапускаем таймер через переменную pollingRunnable
                         if (isPolling) {
                             pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
                         }
                     }
 
                     override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {
-                        // ИСПРАВЛЕНИЕ: Перезапускаем таймер при ошибке сети
                         if (isPolling) {
                             pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
                         }
@@ -285,7 +320,6 @@ class PaymentActivity : BaseActivity() {
             }
         }
 
-        // Запускаем первую проверку
         pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
     }
 

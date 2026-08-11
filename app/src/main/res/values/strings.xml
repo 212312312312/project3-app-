@@ -12,7 +12,11 @@
     <string name="action_payment_cash">Готівка</string>
     <string name="action_services">Послуги</string>
     <string name="action_tips">Чай</string>
-
+    <!-- Способы оплаты -->
+    <string name="payment_method_cash">Готівка</string>
+    <string name="payment_method_card">Прив’язка картки</string>
+    <string name="payment_method_driver_card">Водію на картку</string>
+    <string name="payment_method_card_short">Карткою</string>
     <string name="picker_title_where_to">Куди їдемо?</string>
     <string name="hint_from_where">Звідки?</string>
     <string name="text_current_location">Поточне місце</string>

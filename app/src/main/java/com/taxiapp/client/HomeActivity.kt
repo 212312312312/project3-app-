@@ -1943,24 +1943,36 @@ btnChangePayment.setOnClickListener {
     }
 
     private fun updatePaymentIcon() {
-        if (!::ivPaymentIcon.isInitialized || !::tvPaymentMethodText.isInitialized) return 
+        if (!::ivPaymentIcon.isInitialized || !::tvPaymentMethodText.isInitialized) return
 
         val mask = sessionManager.getCardMask()
         val defaultColor = ContextCompat.getColor(this, R.color.text_primary)
 
         tvPaymentMethodText.visibility = if (isButtonsPanelLoading) View.INVISIBLE else View.VISIBLE
 
-        if (currentPaymentMethod == "CARD" && !mask.isNullOrEmpty()) {
-            ivPaymentIcon.setImageResource(R.drawable.ic_card)
-            ivPaymentIcon.setColorFilter(defaultColor)
-            
-            // Получаем последние 4 символа и принудительно заменяем звездочку на ноль
-            val cleanMask = mask.takeLast(4).replace("*", "0")
-            tvPaymentMethodText.text = "••$cleanMask"
-        } else {
-            ivPaymentIcon.setImageResource(R.drawable.ic_cash)
-            ivPaymentIcon.setColorFilter(defaultColor)
-            tvPaymentMethodText.text = getString(R.string.action_payment_cash)
+        when (currentPaymentMethod) {
+            "CARD" -> {
+                if (!mask.isNullOrEmpty()) {
+                    ivPaymentIcon.setImageResource(R.drawable.ic_card)
+                    ivPaymentIcon.setColorFilter(defaultColor)
+                    val cleanMask = mask.takeLast(4).replace("*", "0")
+                    tvPaymentMethodText.text = "••$cleanMask"
+                } else {
+                    ivPaymentIcon.setImageResource(R.drawable.ic_cash)
+                    ivPaymentIcon.setColorFilter(defaultColor)
+                    tvPaymentMethodText.text = getString(R.string.payment_method_cash)
+                }
+            }
+            "DRIVER_CARD" -> {
+                ivPaymentIcon.setImageResource(R.drawable.ic_card)
+                ivPaymentIcon.setColorFilter(defaultColor)
+                tvPaymentMethodText.text = getString(R.string.payment_method_card_short) // Отобразит "Карткою"
+            }
+            else -> { // CASH
+                ivPaymentIcon.setImageResource(R.drawable.ic_cash)
+                ivPaymentIcon.setColorFilter(defaultColor)
+                tvPaymentMethodText.text = getString(R.string.payment_method_cash)
+            }
         }
     }
     private fun findClosestCity(lat: Double, lng: Double): String? {
@@ -4731,16 +4743,24 @@ val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
 ivMenuIcon.setColorFilter(adaptiveColor)
 
     try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
-    
-    tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
-    val tvPaymentText = findViewById<TextView>(R.id.tv_active_order_payment_text)
-    if (order.paymentMethod == "CARD") {
-        ivActiveOrderPayment.setImageResource(R.drawable.ic_card)
-        tvPaymentText.text = "Картка"
-    } else {
-        ivActiveOrderPayment.setImageResource(R.drawable.ic_cash)
-        tvPaymentText.text = "Готівка"
-    }
+
+        tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
+        val tvPaymentText = findViewById<TextView>(R.id.tv_active_order_payment_text)
+
+        when (order.paymentMethod) {
+            "CARD" -> {
+                ivActiveOrderPayment.setImageResource(R.drawable.ic_card)
+                tvPaymentText.text = getString(R.string.payment_method_card)
+            }
+            "DRIVER_CARD" -> {
+                ivActiveOrderPayment.setImageResource(R.drawable.ic_card)
+                tvPaymentText.text = getString(R.string.payment_method_driver_card)
+            }
+            else -> {
+                ivActiveOrderPayment.setImageResource(R.drawable.ic_cash)
+                tvPaymentText.text = getString(R.string.payment_method_cash)
+            }
+        }
 
     // ==========================================
     // НАЧАЛО ОБНОВЛЕННОГО БЛОКА: 2. Маршрут

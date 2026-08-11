@@ -109,6 +109,9 @@ interface ApiService {
     @POST("public/calculate-price")
     fun calculatePrice(@Body request: CalculatePriceRequestDto): Call<List<CarTariffDto>>
 
+    // --- НАСТРОЙКИ ---
+    @GET("public/settings/payment-methods")
+    fun getPaymentMethodsSettings(): Call<Map<String, Boolean>>
     // --- ІНШЕ ---
     @DELETE("client/account")
     fun deleteAccount(): Call<MessageResponse>
