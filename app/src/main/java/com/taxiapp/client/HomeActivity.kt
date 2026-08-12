@@ -1906,14 +1906,22 @@ btnChangePayment.setOnClickListener {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 client.lastLocation.addOnSuccessListener { location ->
                     if (location != null) {
+                        val userLatLng = LatLng(location.latitude, location.longitude)
+                        
+                        // 🔥 ФИКС: Если замовлення нет и точка А еще не выбрана вручную,
+                        // сразу ставим Точку А на реальные координаты устройства
+                        if (activeOrderId == null && !isRouteMode && originPlace == null) {
+                            originPlace = Place.builder().setName("Визначення...").setLatLng(userLatLng).build()
+                            getAddressForOrigin(userLatLng)
+                        }
+
                         val foundCityName = findClosestCity(location.latitude, location.longitude)
                         if (foundCityName != null) {
                             val regionData = CityDatabase.regions[foundCityName]!!
                             currentCity = CityData(foundCityName, regionData.center.latitude, regionData.center.longitude, regionData.zoom)
                             sessionManager.saveUserCity(currentCity!!)
                             updateCityUI(foundCityName)
-                            showToast("Ваш регіон: $foundCityName")
-                            val userLatLng = LatLng(location.latitude, location.longitude)
+                            
                             mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(userLatLng, 16f))
                         } else {
                             showCitySelectorDialog()
@@ -2332,6 +2340,9 @@ btnChangePayment.setOnClickListener {
                     updateSmartLabels()
                 }
                 if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
+                
+                // 🔥 ФИКС: Перезаписываем точку А при сдвиге карты ТОЛЬКО если пользователь 
+                // действительно взаимодействовал с картой или точка А уже инициализирована
                 getAddressForOrigin(target)
             }
         }
@@ -2604,11 +2615,14 @@ private fun confirmMapSelection() {
         // 3. Возвращаем пользователя обратно в экран выбора адресов (AddressPickerActivity)
         returnToAddressPicker()
     } else {
-        // 4. Пустых зупинок нет. Все поля заполнены, смело строим маршрут!
-        hideMapPickerMode()
-        pickerMode = MODE_DESTINATION 
-        handleAddressSelection(selectedPlace, addressName)
-    }
+                // 4. Пустих зупинок немає. Всі поля заповнені, сміливо будуємо маршрут!
+                hideMapPickerMode()
+                // 🔥 ФИКС: Сохраняем режим MODE_ADD_HOME или MODE_ADD_WORK, если пользователь добавляет Дом/Работу!
+                if (pickerMode != MODE_ADD_HOME && pickerMode != MODE_ADD_WORK) {
+                    pickerMode = MODE_DESTINATION
+                }
+                handleAddressSelection(selectedPlace, addressName)
+            }
 }
         AddressPickerActivity.TARGET_WAYPOINT -> {
             // Если выбрали зупинку — сохраняем её и возвращаем пользователя в список
@@ -3695,71 +3709,92 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
         val rbCash = view.findViewById<RadioButton>(R.id.rb_cash)
         val rbCard = view.findViewById<RadioButton>(R.id.rb_card)
+        val rbDriverCard = view.findViewById<RadioButton>(R.id.rb_driver_card) // <-- Добавлен элемент
         val btnSave = view.findViewById<Button>(R.id.btn_save_payment)
         val btnClose = view.findViewById<ImageView>(R.id.btn_close_dialog)
 
-        // Получаем текущий метод оплаты и маску из локального хранилища
-        val currentMethod = viewModel.activeOrder.value?.paymentMethod ?: "CASH"
+        // Изначально скрываем опциональные варианты до получения ответа от сервера
+        rbCard.visibility = View.GONE
+        rbDriverCard?.visibility = View.GONE
+
+        // Запрашиваем актуальные настройки способов оплаты с сервера
+        ApiClient.instance.getPaymentMethodsSettings().enqueue(object : retrofit2.Callback<Map<String, Boolean>> {
+            override fun onResponse(call: retrofit2.Call<Map<String, Boolean>>, response: retrofit2.Response<Map<String, Boolean>>) {
+                if (response.isSuccessful && response.body() != null) {
+                    val settings = response.body()!!
+                    val isCardEnabled = settings["enable_card_payment"] ?: true
+                    val isDriverCardEnabled = settings["enable_driver_card_payment"] ?: true
+
+                    rbCard.visibility = if (isCardEnabled) View.VISIBLE else View.GONE
+                    rbDriverCard?.visibility = if (isDriverCardEnabled) View.VISIBLE else View.GONE
+                }
+            }
+
+            override fun onFailure(call: retrofit2.Call<Map<String, Boolean>>, t: Throwable) {
+                // В случае ошибки сети по умолчанию показываем кнопки
+                rbCard.visibility = View.VISIBLE
+                rbDriverCard?.visibility = View.VISIBLE
+            }
+        })
+
+        // Получаем текущий метод оплаты и маску карты
+        val currentMethod = viewModel.activeOrder.value?.paymentMethod ?: sessionManager.fetchPaymentMethod()
         val cardMask = sessionManager.getCardMask()
-        
 
-        // 1. ПОКАЗЫВАЕМ МАСКУ КАРТЫ В ДИАЛОГЕ
-if (!cardMask.isNullOrEmpty()) {
-    val fullText = getString(R.string.payment_card_format, cardMask)
-    val spannable = SpannableString(fullText)
-    
-    val startIndex = fullText.indexOf(cardMask)
-    if (startIndex != -1) {
-    val bgColor = ContextCompat.getColor(this, R.color.menu_background_color)
-    val textColor = ContextCompat.getColor(this, R.color.text_primary)
-    
-    spannable.setSpan(
-        RoundedBackgroundSpan(
-            backgroundColor = bgColor,
-            textColor = textColor,
-            cornerRadius = 12f,      // Радиус скругления
-            horizontalPadding = 20f,  // Отступ слева и справа (сделали чуть больше)
-            verticalPadding = 8f      // Отступ сверху и снизу (теперь будет одинаково!)
-        ),
-        startIndex,
-        startIndex + cardMask.length,
-        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-    )
-}
-    
-    rbCard.text = spannable
-} else {
-    rbCard.text = getString(R.string.payment_card)
-}
-
-        // Выставляем правильную галочку
-        if (currentMethod == "CARD") {
-            rbCard.isChecked = true
+        // Форматирование текста маски карты
+        if (!cardMask.isNullOrEmpty()) {
+            val fullText = getString(R.string.payment_card_format, cardMask)
+            val spannable = SpannableString(fullText)
+            
+            val startIndex = fullText.indexOf(cardMask)
+            if (startIndex != -1) {
+                val bgColor = ContextCompat.getColor(this, R.color.menu_background_color)
+                val textColor = ContextCompat.getColor(this, R.color.text_primary)
+                
+                spannable.setSpan(
+                    RoundedBackgroundSpan(
+                        backgroundColor = bgColor,
+                        textColor = textColor,
+                        cornerRadius = 12f,
+                        horizontalPadding = 20f,
+                        verticalPadding = 8f
+                    ),
+                    startIndex,
+                    startIndex + cardMask.length,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            rbCard.text = spannable
         } else {
-            rbCash.isChecked = true
+            rbCard.text = getString(R.string.payment_card)
+        }
+
+        // Выставляем выбранный RadioButton
+        when (currentMethod) {
+            "CARD" -> rbCard.isChecked = true
+            "DRIVER_CARD" -> rbDriverCard?.isChecked = true
+            else -> rbCash.isChecked = true
         }
 
         // Кнопка сохранения
         btnSave.setOnClickListener {
-            val selectedMethod = if (rbCard.isChecked) "CARD" else "CASH"
+            val selectedMethod = when {
+                rbCard.isChecked -> "CARD"
+                rbDriverCard?.isChecked == true -> "DRIVER_CARD"
+                else -> "CASH"
+            }
 
-            // 2. ПРЯМАЯ ИНТЕГРАЦИЯ LIQPAY
+            // Проверка привязки карты при выборе CARD без маски
             if (selectedMethod == "CARD" && cardMask.isNullOrEmpty()) {
                 btnSave.isEnabled = false
                 btnSave.text = "Зачекайте..."
-
-                val token = "Bearer ${sessionManager.fetchAuthToken()}"
 
                 ApiClient.instance.initBindCard().enqueue(object : retrofit2.Callback<com.taxiapp.client.network.InitBindCardResponse> {
                     override fun onResponse(call: retrofit2.Call<com.taxiapp.client.network.InitBindCardResponse>, response: retrofit2.Response<com.taxiapp.client.network.InitBindCardResponse>) {
                         dialog.dismiss()
                         if (response.isSuccessful && response.body() != null) {
-
-                            // === ИЗМЕНЕНИЕ ЗДЕСЬ ===
                             val url = response.body()!!.paymentUrl
-                            openLiqPayInApp(url) // Вызываем встроенный браузер!
-                            // =======================
-
+                            openLiqPayInApp(url)
                         } else {
                             showToast("Помилка підключення карти")
                         }
@@ -3770,12 +3805,14 @@ if (!cardMask.isNullOrEmpty()) {
                         showToast("Помилка мережі")
                     }
                 })
-                
                 return@setOnClickListener
             }
 
-            // Если карта уже есть или выбрали "Готівка", отправляем запрос на обновление в заказе
-            viewModel.updateActiveOrderPaymentMethod(selectedMethod)
+            // Сохраняем выбранный метод оплаты в заказе и сессии
+            if (viewModel.activeOrder.value != null) {
+                viewModel.updateActiveOrderPaymentMethod(selectedMethod)
+            }
+            sessionManager.savePaymentMethod(selectedMethod)
             
             // Обновляем UI локально
             currentPaymentMethod = selectedMethod

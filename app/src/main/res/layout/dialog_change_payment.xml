@@ -66,7 +66,18 @@
             android:buttonTint="@color/taxi_yellow"
             android:text="@string/payment_card"
             android:textColor="?attr/colorOnBackground"
-            android:textSize="16sp" />
+            android:textSize="16sp" /><RadioButton
+
+
+        android:id="@+id/rb_driver_card"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:buttonTint="@color/taxi_yellow"
+        android:text="@string/payment_method_driver_card"
+        android:textColor="?attr/colorOnBackground"
+        android:textSize="16sp" />
     </RadioGroup>
 
     <androidx.constraintlayout.widget.ConstraintLayout
