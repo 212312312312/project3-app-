@@ -190,14 +190,16 @@ object ApiClient {
         .readTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(20, TimeUnit.SECONDS)
         .apply {
-            // Certificate Pinning для защиты трафика пассажиров от перехвата в публичных Wi-Fi сетях
+            // Certificate Pinning с реальными хэшами сервера и промежуточного ЦА
             if (!com.taxiapp.client.BuildConfig.DEBUG) {
                 val uri = android.net.Uri.parse(BASE_URL)
                 val host = uri.host
-                if (host != null) {
+                if (host != null && host != "192.168.0.107" && !host.contains("localhost")) {
                     val certificatePinner = CertificatePinner.Builder()
-                        .add(host, "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-                        .add(host, "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=")
+                        // 1. Точный хэш твоего сервера api.unitua.com из консоли
+                        .add(host, "sha256/9JyM4kaYamI9aABprfG+BPHoX11cJLif0m9Da2XoEDw=")
+                        // 2. Хэш промежуточного ЦА Google Trust Services (чтобы приложение не тыквынулось через 90 дней после авто-обновления SSL)
+                        .add(host, "sha256/kldp6NNEd8wsugYyyIYFsi1yIMCEd3hZbSR8ZFsa/A4=")
                         .build()
                     certificatePinner(certificatePinner)
                 }

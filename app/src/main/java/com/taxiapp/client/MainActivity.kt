@@ -4,6 +4,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.graphics.Color
 import android.os.CountDownTimer
+import com.google.android.gms.auth.api.phone.SmsRetriever
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
+import com.taxiapp.client.utils.AppSignatureHelper
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
@@ -156,6 +160,20 @@ class MainActivity : BaseActivity() {
             .requestEmail()
             .build()
         googleSignInClient = GoogleSignIn.getClient(this, gso)
+
+        if (com.taxiapp.client.BuildConfig.DEBUG) {
+            val appSignatureHelper = AppSignatureHelper(this)
+            for (signature in appSignatureHelper.appSignatures) {
+                Log.d("MY_APP_HASH", "ТВОЙ ХЭШ ДЛЯ СМС: $signature")
+            }
+        }
+
+        // Регистрируем слушатель
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(smsRetrieverReceiver, android.content.IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION), RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(smsRetrieverReceiver, android.content.IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION))
+        }
 
         initUI()
 
@@ -365,6 +383,11 @@ class MainActivity : BaseActivity() {
     override fun onDestroy() {
         super.onDestroy()
         resendTimer?.cancel()
+        try {
+            unregisterReceiver(smsRetrieverReceiver)
+        } catch (e: Exception) {
+            // Игнорируем, если не был зарегистрирован
+        }
     }
 
     private fun startResendTimer() {
@@ -422,6 +445,7 @@ class MainActivity : BaseActivity() {
                     showSmsScreen(phone)
                     showToast("Код надіслано!")
                     startResendTimer()
+                    startSmsRetriever()
                 } else {
                     if (response.code() == 403) showToast("Доступ заборонено (Блок/Бан)")
                     else showToast("Помилка: ${response.message()}")
@@ -433,7 +457,59 @@ class MainActivity : BaseActivity() {
             }
         })
     }
+    // Приемник автоматических СМС от SMS Retriever API (0 кликов)
+    private val smsRetrieverReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (SmsRetriever.SMS_RETRIEVED_ACTION == intent?.action) {
+                val extras = intent.extras
+                val status = extras?.get(SmsRetriever.EXTRA_STATUS) as? Status
+                when (status?.statusCode) {
+                    CommonStatusCodes.SUCCESS -> {
+                        val message = extras.get(SmsRetriever.EXTRA_SMS_MESSAGE) as? String
+                        if (!message.isNullOrEmpty()) {
+                            parseAndSubmitSmsCode(message)
+                        }
+                    }
+                    CommonStatusCodes.TIMEOUT -> {
+                        Log.d("SmsRetriever", "Таймаут ожидания СМС (5 минут)")
+                    }
+                }
+            }
+        }
+    }
 
+    private fun startSmsRetriever() {
+        try {
+            val client = SmsRetriever.getClient(this)
+            val task = client.startSmsRetriever()
+            task.addOnSuccessListener {
+                Log.d("SmsRetriever", "SMS Retriever успешно запущен")
+            }
+            task.addOnFailureListener { e ->
+                Log.e("SmsRetriever", "Ошибка запуска SMS Retriever", e)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun parseAndSubmitSmsCode(message: String) {
+        // Достаем ровно 6 цифр подряд из СМС
+        val regex = Regex("\\b\\d{6}\\b")
+        val matchResult = regex.find(message)
+        val code = matchResult?.value
+
+        if (!code.isNullOrEmpty() && code.length == 6) {
+            code.forEachIndexed { index, char ->
+                if (index < otpEdits.size) {
+                    otpEdits[index].setText(char.toString())
+                }
+            }
+            showToast("Код автоподставлен!")
+            // Мгновенная отправка на сервер без участия пользователя
+            verifySms(fullPhoneNumber, code)
+        }
+    }
     private fun updateFcmTokenOnServer() {
         val token = sessionManager.fetchAuthToken() ?: return
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->

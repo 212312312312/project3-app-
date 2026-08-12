@@ -15,7 +15,6 @@
         android:name=".TaxiApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-
         android:fullBackupContent="@xml/backup_rules"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
@@ -24,8 +23,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ClientApp"
         android:usesCleartextTraffic="true"
+
         android:localeConfig="@xml/locales_config"
         tools:targetApi="31">
+
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
@@ -69,7 +70,8 @@
 
         <activity
             android:name=".HomeActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".ChatActivity"
@@ -84,52 +86,58 @@
 
         <activity
             android:name=".CityPickerActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".FavoriteAddressesActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".PromoActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".HistoryActivity"
-            android:screenOrientation="portrait"/>
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".StatsActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".HelpActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".HelpWaitingActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".HelpPaymentActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".HelpTariffsActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".HelpDiscountsActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".NewsActivity"
-            android:screenOrientation="portrait" />
-
-        <service
-            android:name=".service.OrderStatusService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".PaymentActivity"
@@ -143,12 +151,19 @@
 
         <activity
             android:name=".NoInternetActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".CommentActivity"
             android:screenOrientation="portrait"
+            android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+
+        <service
+            android:name=".service.OrderStatusService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".service.MyFirebaseMessagingService"
