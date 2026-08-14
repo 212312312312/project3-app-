@@ -1,45 +1,73 @@
 {
   "project_info": {
-    "project_number": "1071507342848",
-    "project_id": "taxiapp-333",
-    "storage_bucket": "taxiapp-333.firebasestorage.app"
+    "project_number": "1097800629122",
+    "project_id": "taxi-app-59732",
+    "storage_bucket": "taxi-app-59732.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1071507342848:android:6c6171e9cffec7f68b7ae5",
+        "mobilesdk_app_id": "1:1097800629122:android:5e3d9cec666d7e839f6d9b",
         "android_client_info": {
-          "package_name": "com.taxiapp.driver"
+          "package_name": "com.taxiunit.unitapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1097800629122-cl2h1k30tvelpd9bj7lbvaqoah79hcoi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.taxiunit.unitapp",
+            "certificate_hash": "f24299ec4a5d71305493b1d85a2d2e617436f55c"
+          }
+        },
+        {
+          "client_id": "1097800629122-aqaunip6dcp6hrk8c1oe580n8kaapkg2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyAV8rnEIUnbS2LeLVSrYBGHu2-98mXmGnM"
+          "current_key": "AIzaSyDNmZP7FCD_xQe0gGLRcEtxuj0Dkl3mr24"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1097800629122-aqaunip6dcp6hrk8c1oe580n8kaapkg2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1071507342848:android:a995997a33bc89338b7ae5",
+        "mobilesdk_app_id": "1:1097800629122:android:7148a43cf91efd349f6d9b",
         "android_client_info": {
-          "package_name": "com.taxiunit.unitapp"
+          "package_name": "com.unitapp.driver"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1097800629122-aqaunip6dcp6hrk8c1oe580n8kaapkg2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyAV8rnEIUnbS2LeLVSrYBGHu2-98mXmGnM"
+          "current_key": "AIzaSyDNmZP7FCD_xQe0gGLRcEtxuj0Dkl3mr24"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1097800629122-aqaunip6dcp6hrk8c1oe580n8kaapkg2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -18,8 +18,8 @@ android {
         applicationId "com.taxiunit.unitapp"
         minSdk 24
         targetSdk 36
-        versionCode 10
-        versionName "1.0.8"
+        versionCode 13
+        versionName "1.0.11"
         buildConfigField "String", "GOOGLE_PLACES_API_KEY", "\"${properties.getProperty('GOOGLE_PLACES_API_KEY', '')}\""
 
         buildConfigField "String", "BASE_URL", "\"https://api.unitua.com/\""
