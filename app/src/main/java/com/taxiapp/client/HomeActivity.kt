@@ -3973,7 +3973,9 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun updateDriverMarker(loc: com.taxiapp.client.network.dto.TrackingLocationDto) {
-        val latLng = com.google.android.gms.maps.model.LatLng(loc.lat, loc.lng)
+        val lat = loc.lat ?: return
+        val lng = loc.lng ?: return
+        val latLng = com.google.android.gms.maps.model.LatLng(lat, lng)
 
         // 🛡️ ФИКС МИГАНИЯ: Если маркер есть, проверяем, изменилась ли позиция.
         // Если водитель стоит на месте, НИЧЕГО не делаем, чтобы не провоцировать перерисовку.
@@ -5695,15 +5697,28 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
             tvCarDetailsSubtitle.text = subtitle
 
-            val fullName = drv.fullName
-            val firstName = fullName.split(" ").firstOrNull() ?: fullName
-            tvDriverFirstName.text = firstName
+            val isPartner = (drv.id == -1L)
 
+            // 1. Имя водителя (для партнера выводим статус партнерской сети)
+            tvDriverFirstName.text = if (isPartner) "Водій (Партнер)" else (drv.fullName.split(" ").firstOrNull() ?: drv.fullName)
+
+            // 2. Стаж / Принадлежность к службе
             val months = drv.monthsInService
-            val expText = if (months < 1) "В службі < 1 міс." else "В службі $months міс."
+            val expText = if (isPartner) {
+                "Партнерська мережа"
+            } else if (months < 1) {
+                "В службі < 1 міс."
+            } else {
+                "В службі $months міс."
+            }
             tvDriverExperience.text = expText
 
-            tvDriverRidesCount.text = "Поїздок: ${drv.completedRides}"
+            // 3. Рейтинг и количество поездок
+            tvDriverRidesCount.text = if (isPartner) {
+                String.format(Locale.US, "★ %.1f", drv.rating)
+            } else {
+                "Поїздок: ${drv.completedRides}"
+            }
 
             activeOrderCard.tag = drv.phoneNumber
 
