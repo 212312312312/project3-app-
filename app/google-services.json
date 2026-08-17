@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "1097800629122-7o4tmfeksj7v7kj9vd6gr8lcjvutnffd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.taxiunit.unitapp",
+            "certificate_hash": "ce9d8b3b0a1732aa5fa70534490cf5ecdc596d4e"
+          }
+        },
+        {
+          "client_id": "1097800629122-chhqv69j8afjm1rd8v5ts8psre0bp4e2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.taxiunit.unitapp",
+            "certificate_hash": "a1240b9a38607230318e7f39d43ec509f0394ec5"
+          }
+        },
+        {
           "client_id": "1097800629122-cl2h1k30tvelpd9bj7lbvaqoah79hcoi.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

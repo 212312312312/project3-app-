@@ -53,8 +53,10 @@ class SplashActivity : BaseActivity()  {
         try {
             val sessionManager = SessionManager(applicationContext)
             val token = sessionManager.fetchAuthToken()
+            val phone = sessionManager.getUserPhone()
 
-            if (token != null) {
+            // В HomeActivity пускаем ТОЛЬКО если есть и токен, и непустой номер
+            if (!token.isNullOrBlank() && !phone.isNullOrBlank()) {
                 startActivity(Intent(this, HomeActivity::class.java))
             } else {
                 val intent = Intent(this, MainActivity::class.java).apply {

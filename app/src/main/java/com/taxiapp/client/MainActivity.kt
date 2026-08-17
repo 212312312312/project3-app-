@@ -211,12 +211,14 @@ class MainActivity : BaseActivity() {
         }
 
         btnGoogleSignIn.setOnClickListener {
-            // Предотвращаем дребезг контактов и повторные клики в течение 1.5 сек
             if (System.currentTimeMillis() - lastGoogleClickTime < 1500) return@setOnClickListener
             lastGoogleClickTime = System.currentTimeMillis()
 
-            val signInIntent = googleSignInClient.signInIntent
-            googleSignInLauncher.launch(signInIntent)
+            // Сбрасываем старую зависшую сессию перед открытием окна
+            googleSignInClient.signOut().addOnCompleteListener {
+                val signInIntent = googleSignInClient.signInIntent
+                googleSignInLauncher.launch(signInIntent)
+            }
         }
 
         tvResendCode.setOnClickListener { requestSms(fullPhoneNumber) }
@@ -237,14 +239,10 @@ class MainActivity : BaseActivity() {
                     val phone = body?.phoneNumber
 
                     if (token != null) {
-                        // КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: Сохраняем userId для WebSocket топиков
                         sessionManager.saveUserId(body.userId)
 
-                        // ПРОПУСК ВЕРИФИКАЦИИ НОМЕРА:
-                        // Если isNewUser == true, значит емейла в базе еще не было (обычный сценарий -> запрашиваем номер).
-                        // Если isNewUser == false, емейл УЖЕ есть в базе -> пропускаем сразу.
-                        if (body.isNewUser) {
-                            // ЗБЕРІГАЄМО ТОКЕН ДЛЯ INTERCEPTOR, щоб linkPhone спрацював автоматично!
+                        // Если помечен как новый ИЛИ в ответе пустой номер — только привязка телефона
+                        if (body.isNewUser || phone.isNullOrBlank()) {
                             sessionManager.saveAuthToken(token)
                             showLinkPhoneScreen()
                         } else {
@@ -252,11 +250,11 @@ class MainActivity : BaseActivity() {
                             if (body.refreshToken != null) {
                                 sessionManager.saveRefreshToken(body.refreshToken)
                             }
-                            sessionManager.saveUserInfo(body.fullName, phone ?: "")
+                            sessionManager.saveUserInfo(body.fullName, phone)
                             updateFcmTokenOnServer()
-                            checkWhereToGo(body.isNewUser)
+                            checkWhereToGo(false)
                         }
-                    } else {
+                    }else {
                         showToast("Помилка сервера при Google авторизації")
                     }
                 } else {
