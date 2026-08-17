@@ -45,6 +45,7 @@ data class TaxiOrderDto(
     val isRatedByClient: Boolean = false,
     val arrivedAt: String? = null,
     val startedAt: String? = null,
+    val waitingStartTime: String? = null,
     val waitingPrice: Double = 0.0,
     val freeWaitingMinutes: Int = 3,
     val pricePerWaitingMinute: Double = 0.0,

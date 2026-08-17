@@ -74,6 +74,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     } else {
                         startService(updateIntent)
                     }
+
+                    // 🟢 ДОБАВЛЕНО: Мгновенно триггерим обновление UI на открытом экране
+                    com.taxiapp.client.network.OrderStatusBus.notifyOrderUpdated(orderIdStr)
                 }
             }
             return

@@ -93,6 +93,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+
+        com.taxiapp.client.network.OrderStatusBus.orderUpdatedEvent.observeForever { updatedId ->
+            if (!updatedId.isNullOrEmpty()) {
+                Log.d("HomeViewModel", "🔔 Получен Push-сигнал обновления заказа $updatedId. Синхронизируем статус...")
+                checkOrderStatusOnce(updatedId)
+                com.taxiapp.client.network.OrderStatusBus.resetEvent()
+            }
+        }
     }
 
     fun startOrderSocketListening(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {

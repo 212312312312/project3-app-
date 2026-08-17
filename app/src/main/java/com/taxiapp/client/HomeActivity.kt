@@ -4271,60 +4271,56 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun startWaitingTimer(order: TaxiOrderDto) {
-    stopWaitingTimer()
+        stopWaitingTimer()
 
-    if (order.arrivedAt == null) {
-        cardWaitingTimer.visibility = View.GONE
-        return
-    }
-
-    cardWaitingTimer.visibility = View.VISIBLE
-
-    val cleanArrivedAt = order.arrivedAt.substringBefore(".").substringBefore("Z")
-    val format = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
-    
-    val arrivedTime = try {
-        format.parse(cleanArrivedAt)?.time ?: return
-    } catch (e: Exception) {
-        return
-    }
-
-    waitingTimerRunnable = object : Runnable {
-        override fun run() {
-            val now = System.currentTimeMillis()
-            val diffMs = now - arrivedTime
-            
-            if (diffMs < 0) {
-                waitingTimerHandler.postDelayed(this, 1000)
-                return
-            }
-
-            val diffMinutesFull = diffMs / (1000 * 60).toDouble()
-            val freeMins = order.freeWaitingMinutes
-
-            if (diffMinutesFull <= freeMins) {
-                // 1. БЕЗКОШТОВНЕ ОЧІКУВАННЯ (Зворотний відлік)
-                val remainingMs = (freeMins * 60 * 1000) - diffMs
-                val remMin = (remainingMs / (1000 * 60)).toInt()
-                val remSec = ((remainingMs / 1000) % 60).toInt()
-                
-                tvNewWaitingTimer.text = String.format("%02d:%02d", remMin, remSec)
-                tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.text_secondary))
-            } else {
-                // 2. ПЛАТНЕ ОЧІКУВАННЯ (Відлік вперед: +00:01, +00:02...)
-                val paidMs = diffMs - (freeMins * 60 * 1000) // Час, що пройшов понад безкоштовний
-                val paidMin = (paidMs / (1000 * 60)).toInt()
-                val paidSec = ((paidMs / 1000) % 60).toInt()
-                
-                tvNewWaitingTimer.text = String.format("+%02d:%02d", paidMin, paidSec)
-                // ИЗМЕНЕНО: Берем цвет taxi_red_cancel из ресурсов
-                tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.taxi_red_cancel))
-            }
-            waitingTimerHandler.postDelayed(this, 1000)
+        val timeSource = order.waitingStartTime ?: order.arrivedAt
+        if (timeSource.isNullOrBlank()) {
+            cardWaitingTimer.visibility = View.GONE
+            return
         }
+
+        cardWaitingTimer.visibility = View.VISIBLE
+
+        val cleanTime = timeSource.substringBefore(".").substringBefore("Z")
+        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+
+        val arrivedTime = try {
+            format.parse(cleanTime)?.time ?: return
+        } catch (e: Exception) {
+            return
+        }
+
+        waitingTimerRunnable = object : Runnable {
+            override fun run() {
+                val now = System.currentTimeMillis()
+                // 🟢 Если часы рассинхронизированы, не выходим, а начинаем с 0
+                val diffMs = if (now >= arrivedTime) now - arrivedTime else 0L
+
+                val diffMinutesFull = diffMs / (1000 * 60).toDouble()
+                val freeMins = order.freeWaitingMinutes
+
+                if (diffMinutesFull <= freeMins) {
+                    // 1. БЕСПЛАТНОЕ ОЖИДАНИЕ (Обратный отсчет)
+                    val remainingMs = (freeMins * 60 * 1000) - diffMs
+                    val remMin = (remainingMs / (1000 * 60)).toInt().coerceAtLeast(0)
+                    val remSec = ((remainingMs / 1000) % 60).toInt().coerceAtLeast(0)
+
+                    tvNewWaitingTimer.text = String.format("%02d:%02d", remMin, remSec)
+                    tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.text_secondary))
+                } else {
+                    // 2. ПЛАТНОЕ ОЖИДАНИЕ (+00:01, +00:02...)
+                    val paidMs = diffMs - (freeMins * 60 * 1000)
+                    val paidMin = (paidMs / (1000 * 60)).toInt()
+                    val paidSec = ((paidMs / 1000) % 60).toInt()
+
+                    tvNewWaitingTimer.text = String.format("+%02d:%02d", paidMin, paidSec)
+                    tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.taxi_red_cancel))
+                }
+                waitingTimerHandler.postDelayed(this, 1000)
+            }
+        }
+        waitingTimerHandler.post(waitingTimerRunnable!!)
     }
-    waitingTimerHandler.post(waitingTimerRunnable!!)
-}
 
 private fun stopWaitingTimer() {
     waitingTimerRunnable?.let { waitingTimerHandler.removeCallbacks(it) }
@@ -5680,13 +5676,15 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         // Запускаем плавное следование паддингов
         animateMapPadding(fromHeight, toHeight, recenterMap)
     }
-    
+
     private fun updateDriverInfo(order: TaxiOrderDto) {
         order.driver?.let { drv ->
             tvCarPlateLarge.text = drv.carPlateNumber ?: "---"
 
             val colorPart = drv.carColor ?: ""
-            val modelPart = drv.carModel ?: "Авто"
+            // 🟢 Очищаем название авто от телефона, если он попал в строку
+            val rawModel = drv.carModel ?: "Авто"
+            val modelPart = rawModel.replace(Regex("\\+?\\d{9,13}"), "").trim().trimEnd(',', '-')
             val tariffPart = order.tariffName ?: "Standard"
 
             val subtitle = buildString {
@@ -5699,30 +5697,42 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
             val isPartner = (drv.id == -1L)
 
-            // 1. Имя водителя (для партнера выводим статус партнерской сети)
-            tvDriverFirstName.text = if (isPartner) "Водій (Партнер)" else (drv.fullName.split(" ").firstOrNull() ?: drv.fullName)
-
-            // 2. Стаж / Принадлежность к службе
-            val months = drv.monthsInService
-            val expText = if (isPartner) {
-                "Партнерська мережа"
-            } else if (months < 1) {
-                "В службі < 1 міс."
+            // 1. Имя водителя: убрана приписка "(Партнер)"
+            tvDriverFirstName.text = if (isPartner) {
+                "Водій"
             } else {
-                "В службі $months міс."
+                drv.fullName.split(" ").firstOrNull() ?: drv.fullName
             }
-            tvDriverExperience.text = expText
 
-            // 3. Рейтинг и количество поездок
-            tvDriverRidesCount.text = if (isPartner) {
-                String.format(Locale.US, "★ %.1f", drv.rating)
+            // 2. Стаж / Принадлежность к службе: убираем текст "Партнерська мережа"
+            if (isPartner) {
+                tvDriverExperience.visibility = View.GONE
             } else {
-                "Поїздок: ${drv.completedRides}"
+                tvDriverExperience.visibility = View.VISIBLE
+                val months = drv.monthsInService
+                val expText = if (months < 1) "В службі < 1 міс." else "В службі $months міс."
+                tvDriverExperience.text = expText
+            }
+
+            // 3. Рейтинг: оставляем отображение рейтинга
+            tvDriverRidesCount.visibility = View.VISIBLE
+            if (isPartner) {
+                val sizePx = convertDpToPixel(16f).toInt()
+                val starDrawable = ContextCompat.getDrawable(this, R.drawable.ic_stat_star)?.mutate()?.apply {
+                    setTint(ContextCompat.getColor(this@HomeActivity, R.color.taxi_yellow))
+                    setBounds(0, 0, sizePx, sizePx)
+                }
+                tvDriverRidesCount.setCompoundDrawablesRelative(starDrawable, null, null, null)
+                tvDriverRidesCount.compoundDrawablePadding = convertDpToPixel(4f).toInt()
+                tvDriverRidesCount.text = String.format(Locale.US, "%.1f", drv.rating)
+            } else {
+                tvDriverRidesCount.setCompoundDrawablesRelative(null, null, null, null)
+                tvDriverRidesCount.text = "Поїздок: ${drv.completedRides}"
             }
 
             activeOrderCard.tag = drv.phoneNumber
 
-            // Блок мед. предупреждений водителю
+            // Блок мед. предупреждений
             val healthIssues = mutableListOf<String>()
             if (drv.hasMovementIssue) healthIssues.add("Порушення опорно-рухового апарату")
             if (drv.hasHearingIssue) healthIssues.add("Порушення слуху")
@@ -5740,14 +5750,10 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
             if (!drv.photoUrl.isNullOrEmpty()) {
                 var finalUrl = drv.photoUrl!!
-                
-                // 🔥 ФИКС ПРОДАКШЕНА: Динамически парсим корень из BASE_URL вместо хардкода localhost/10.0.2.2
-                val baseUrlUri = android.net.Uri.parse(com.taxiapp.client.network.ApiClient.BASE_URL)
+                val baseUrlUri = Uri.parse(ApiClient.BASE_URL)
                 val serverRoot = "${baseUrlUri.scheme}://${baseUrlUri.host}${if (baseUrlUri.port != -1) ":${baseUrlUri.port}" else ""}"
 
-                if (finalUrl.startsWith("http://") || finalUrl.startsWith("https://")) {
-                    // Оставляем как есть, если ссылка уже полная
-                } else {
+                if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
                     val cleanPath = finalUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
                     finalUrl = "$serverRoot/$cleanPath"
                 }
