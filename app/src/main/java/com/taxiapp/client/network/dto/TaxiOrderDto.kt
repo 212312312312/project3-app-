@@ -51,5 +51,8 @@ data class TaxiOrderDto(
     val pricePerWaitingMinute: Double = 0.0,
 
     // --- НОВОЕ ПОЛЕ ---
-    val scheduledAt: String? = null
+    val scheduledAt: String? = null,
+
+    // ➕ ДОБАВЛЕНО: Полилиния маршрута подачи водителя к клиенту
+    val driverToPickupPolyline: String? = null
 )

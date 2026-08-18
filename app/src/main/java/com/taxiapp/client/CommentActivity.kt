@@ -120,11 +120,11 @@ class CommentActivity : BaseActivity() {
                 R.id.suggestion_wait -> "Чекайте біля "
                 R.id.suggestion_entry -> "Заїзд зі сторони "
                 R.id.suggestion_change -> "Потрібна решта з "
-                R.id.suggestion_nocall -> "Не телефонуйте мені, будь ласка"
+                // УДАЛЕНО: R.id.suggestion_nocall -> "Не телефонуйте мені, будь ласка"
                 else -> ""
             }
 
-            etComment.setText(textToAdd) // Это само скроет контейнер через TextWatcher
+            etComment.setText(textToAdd)
             etComment.setSelection(etComment.text.length)
 
             etComment.requestFocus()
@@ -135,6 +135,6 @@ class CommentActivity : BaseActivity() {
         findViewById<TextView>(R.id.suggestion_wait).setOnClickListener(clickListener)
         findViewById<TextView>(R.id.suggestion_entry).setOnClickListener(clickListener)
         findViewById<TextView>(R.id.suggestion_change).setOnClickListener(clickListener)
-        findViewById<TextView>(R.id.suggestion_nocall).setOnClickListener(clickListener)
+        // УДАЛЕНО: findViewById<TextView>(R.id.suggestion_nocall).setOnClickListener(clickListener)
     }
 }

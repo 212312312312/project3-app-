@@ -173,19 +173,5 @@
 
         <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?android:attr/listDivider" android:layout_marginStart="60dp" android:layout_marginEnd="24dp"/>
 
-        <TextView
-            android:id="@+id/suggestion_nocall"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/suggestion_nocall"
-            android:paddingVertical="16dp"
-            android:paddingStart="60dp"
-            android:paddingEnd="24dp"
-            android:textSize="16sp"
-            android:textColor="?attr/colorOnBackground"
-            android:background="?attr/selectableItemBackground"/>
-
-        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?android:attr/listDivider" android:layout_marginStart="60dp" android:layout_marginEnd="24dp"/>
-
     </LinearLayout>
 </LinearLayout>

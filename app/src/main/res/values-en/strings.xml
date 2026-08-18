@@ -75,7 +75,6 @@
     <string name="suggestion_wait">Wait near...</string>
     <string name="suggestion_entry">Entrance from...</string>
     <string name="suggestion_change">Need change from...</string>
-    <string name="suggestion_nocall">Do not call me</string>
 
 
     <string name="favorite_addresses_title">Favorite addresses</string>

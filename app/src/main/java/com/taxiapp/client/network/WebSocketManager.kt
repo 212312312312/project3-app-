@@ -166,15 +166,24 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
     fun subscribeToDriverLocation(orderId: String, onLocationReceived: (TrackingLocationDto) -> Unit) {
         currentLocationSub = Pair(orderId, onLocationReceived)
         val topic = "/topic/order/$orderId/tracking"
+
         driverTrackingDisposable?.dispose()
 
-        driverTrackingDisposable = stompClient?.topic(topic)
-            ?.subscribeOn(Schedulers.io())
-            ?.observeOn(AndroidSchedulers.mainThread())
-            ?.subscribe({ topicMessage ->
-                val location = gson.fromJson(topicMessage.payload, TrackingLocationDto::class.java)
-                onLocationReceived(location)
-            }, { Log.e("WebSocket", "Tracking Error", it) })
+        if (stompClient?.isConnected == true) {
+            driverTrackingDisposable = stompClient?.topic(topic)
+                ?.subscribeOn(Schedulers.io())
+                ?.observeOn(AndroidSchedulers.mainThread())
+                ?.subscribe({ topicMessage ->
+                    try {
+                        val location = gson.fromJson(topicMessage.payload, TrackingLocationDto::class.java)
+                        if (location != null && location.lat != null && location.lng != null && location.lat != 0.0 && location.lng != 0.0) {
+                            onLocationReceived(location)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("WS_TAXI_DEBUG", "Error parsing tracking payload: ${e.message}")
+                    }
+                }, { Log.e("WS_TAXI_DEBUG", "Tracking Subscription Error", it) })
+        }
     }
 
     fun unsubscribeFromDriverLocation() {

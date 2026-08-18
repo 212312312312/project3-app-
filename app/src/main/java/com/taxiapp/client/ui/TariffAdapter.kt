@@ -2,7 +2,6 @@ package com.taxiapp.client.ui
 
 import android.graphics.Color
 import android.graphics.Paint
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,9 +14,6 @@ import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
 import com.taxiapp.client.R
 import com.taxiapp.client.network.dto.CarTariffDto
-import kotlin.math.ceil
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 data class TariffItem(
@@ -37,8 +33,6 @@ class TariffAdapter(
     private var selectedPosition: Int = -1
     private var rawTariffs: List<CarTariffDto> = emptyList()
 
-    private val loadedTariffIds = mutableSetOf<Long>()
-    private var imagesToLoadCount = 0
     private var currentDistanceMeters: Int = 0
     private var currentExtraCost: Double = 0.0
 
@@ -58,7 +52,6 @@ class TariffAdapter(
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
         val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge)
         val betaBadge: TextView = view.findViewById(R.id.tv_beta_badge)
-        val skeletonView: View = view.findViewById(R.id.tariff_skeleton_view)
 
         fun bind(item: TariffItem, isSelected: Boolean) {
             val tariff = item.tariff
@@ -79,13 +72,6 @@ class TariffAdapter(
                 betaBadge.visibility = View.GONE
             }
 
-            // --- УПРАВЛЕНИЕ ИЗОЛИРОВАННЫМ СКЕЛЕТОНОМ ТАРИФА ---
-            if (loadedTariffIds.contains(tariff.id) || tariff.imageUrl.isNullOrEmpty()) {
-                skeletonView.visibility = View.GONE
-            } else {
-                skeletonView.visibility = View.VISIBLE
-            }
-
             // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
             if (!tariff.imageUrl.isNullOrEmpty()) {
                 val rawUrl = tariff.imageUrl
@@ -102,40 +88,7 @@ class TariffAdapter(
                     .load(fullUrl)
                     .placeholder(R.drawable.ic_taxi_model_standard)
                     .error(R.drawable.ic_taxi_model_standard)
-                    .into(object : com.bumptech.glide.request.target.CustomTarget<android.graphics.drawable.Drawable>() {
-                        private fun decrementAndCheck() {
-                            imagesToLoadCount--
-                            if (imagesToLoadCount <= 0) {
-                                onImagesLoaded()
-                            }
-                        }
-
-                        override fun onResourceReady(
-                            resource: android.graphics.drawable.Drawable,
-                            transition: com.bumptech.glide.request.transition.Transition<in android.graphics.drawable.Drawable>?
-                        ) {
-                            image.setImageDrawable(resource)
-                            loadedTariffIds.add(tariff.id)
-                            skeletonView.visibility = View.GONE
-                            decrementAndCheck()
-                        }
-
-                        override fun onLoadFailed(errorDrawable: android.graphics.drawable.Drawable?) {
-                            super.onLoadFailed(errorDrawable)
-                            if (errorDrawable != null) {
-                                image.setImageDrawable(errorDrawable)
-                            } else {
-                                image.setImageResource(R.drawable.ic_taxi_model_standard)
-                            }
-                            loadedTariffIds.add(tariff.id)
-                            skeletonView.visibility = View.GONE
-                            decrementAndCheck()
-                        }
-
-                        override fun onLoadCleared(placeholder: android.graphics.drawable.Drawable?) {
-                            image.setImageDrawable(placeholder)
-                        }
-                    })
+                    .into(image)
             } else {
                 image.setImageResource(R.drawable.ic_taxi_model_standard)
             }
@@ -169,7 +122,7 @@ class TariffAdapter(
             cardView.clearAnimation()
 
             if (item.priceValue < 0) {
-                // Жесткая блокировка UI при ошибке просчета сервера
+                // Блокировка UI при ошибке просчета сервера
                 price.text = "Помилка"
                 price.setTextColor(Color.RED)
 
@@ -181,7 +134,6 @@ class TariffAdapter(
                 itemView.isEnabled = false
                 itemView.isClickable = false
 
-                // Показываем Toast один раз для всей группы тарифов
                 if (!errorToastShown) {
                     errorToastShown = true
                     Toast.makeText(
@@ -192,10 +144,8 @@ class TariffAdapter(
                 }
             } else {
                 price.text = "${item.priceValue.roundToInt()} ₴"
-
                 price.setTextColor(ContextCompat.getColor(itemView.context, R.color.text_primary))
 
-                // Стандартная логика доступности тарифа
                 if (tariff.isUnavailable) {
                     itemView.alpha = 0.4f
                     cardView.alpha = 0.4f
@@ -212,8 +162,9 @@ class TariffAdapter(
                     itemView.isClickable = true
 
                     if (isSelected) {
+                        val strokePx = (2.5f * itemView.context.resources.displayMetrics.density).roundToInt()
                         cardView.cardElevation = 0f
-                        cardView.strokeWidth = 6
+                        cardView.strokeWidth = strokePx
                         cardView.strokeColor = ContextCompat.getColor(itemView.context, R.color.taxi_yellow)
                     } else {
                         cardView.strokeWidth = 0
@@ -255,14 +206,14 @@ class TariffAdapter(
     fun submitList(tariffs: List<CarTariffDto>, distanceMeters: Int) {
         this.rawTariffs = tariffs
         this.currentDistanceMeters = distanceMeters
-        this.imagesToLoadCount = tariffs.count { !it.imageUrl.isNullOrEmpty() }
 
-        if (this.imagesToLoadCount == 0 && tariffs.isNotEmpty()) {
+        errorToastShown = false
+        recalculateItems()
+
+        // ВЫЗЫВАЕМ ТОЛЬКО ЕСЛИ СПИСОК НЕ ПУСТОЙ:
+        if (tariffs.isNotEmpty()) {
             onImagesLoaded()
         }
-
-        errorToastShown = false // Сбрасываем флаг тоста при обновлении данных
-        recalculateItems()
     }
 
     fun updatePrices(newPrices: Map<Long, Double>) { }
@@ -316,14 +267,11 @@ class TariffAdapter(
 
     private fun recalculateItems() {
         items = rawTariffs.map { tariff ->
-            // ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ: Расчет идет строго на основе данных сервера
             val basePriceForCalc = if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
                 tariff.calculatedPrice!!
             } else if (currentDistanceMeters > 0) {
-                // Маршрут построен, а сервер цену не прислал -> Критическая ошибка!
                 -1.0
             } else {
-                // Стартовое состояние (адреса еще не введены) -> Показываем базовую цену "от..."
                 tariff.basePrice
             }
 

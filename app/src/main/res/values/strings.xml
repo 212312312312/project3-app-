@@ -77,7 +77,6 @@
     <string name="suggestion_wait">Чекайте біля...</string>
     <string name="suggestion_entry">Заїзд зі сторони...</string>
     <string name="suggestion_change">Потрібна решта з...</string>
-    <string name="suggestion_nocall">Не телефонуйте мені</string>
 
     <string name="favorite_addresses_title">Обрані адреси</string>
     <string name="hint_provide_address">Вкажіть адресу</string>

@@ -145,7 +145,8 @@ private var lastAddressPickerIntentData: Intent? = null
 
     private var polylineBorder: Polyline? = null
     private var polylineMain: Polyline? = null
-    
+    private var pickupPolyline: Polyline? = null
+    private var pickupRoutePoints: MutableList<LatLng> = mutableListOf()
     private var webSocketManager: WebSocketManager? = null
     private var driverMarker: Marker? = null
     private var customCarIcon: BitmapDescriptor? = null
@@ -676,7 +677,7 @@ private fun fetchAddressAtCurrentLocation() {
         viewModel.nearbyDrivers.observe(this) { drivers ->
         updateNearbyDriversOnMap(drivers)
     }
-        
+
         // ДОБАВЛЕНО: Обработка системной кнопки/жеста "Назад"
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
     override fun handleOnBackPressed() {
@@ -723,6 +724,75 @@ private fun fetchAddressAtCurrentLocation() {
     // =========================================================
     // НОВАЯ ФУНКЦИЯ: СВЯЗЬ С VIEWMODEL
     // =========================================================
+
+
+    private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
+        if (mMap == null) return
+
+        val mapCenter = mMap!!.cameraPosition.target
+
+        // Проверка: Если открыт заказ, тарифы или режим выбора адреса — тотально чистим маркеры свободных машин
+        if (activeOrderId != null || isRouteMode || viewModel.currentRoutePolyline != null ||
+            tariffsPanel.visibility == View.VISIBLE || isMapPickingMode) {
+            nearbyDriverMarkers.values.forEach { it.remove() }
+            nearbyDriverMarkers.clear()
+            return
+        }
+
+        // Фильтр отображения свободных машин в радиусе 500 метров
+        val SEARCH_RADIUS_METERS = 500.0
+        val driversInRange = drivers.filter { driver ->
+            val driverPos = LatLng(driver.lat, driver.lng)
+            val distance = com.google.maps.android.SphericalUtil.computeDistanceBetween(mapCenter, driverPos)
+            distance <= SEARCH_RADIUS_METERS
+        }
+
+        val newDriverIds = driversInRange.map { it.driverId }
+
+        // УДАЛЯЕМ МАРКЕРЫ: Если водитель вышел за радиус или пропал со связи
+        val iterator = nearbyDriverMarkers.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (!newDriverIds.contains(entry.key)) {
+                entry.value.remove()
+                iterator.remove()
+            }
+        }
+
+        // ДОБАВЛЯЕМ / ОБНОВЛЯЕМ МАРКЕРЫ НА КАРТЕ:
+        for (driver in driversInRange) {
+            val position = LatLng(driver.lat, driver.lng)
+            if (nearbyDriverMarkers.containsKey(driver.driverId)) {
+                val marker = nearbyDriverMarkers[driver.driverId]!!
+                animateMarker(marker, position, driver.bearing)
+            } else {
+                val carWidth = 40
+                val carHeight = 40
+
+                val fallbackIcon = BitmapHelper.getScaledBitmapDescriptor(
+                    this,
+                    R.drawable.ic_car_icon,
+                    carWidth,
+                    carHeight
+                )
+
+                val carIcon = customCarIcon ?: fallbackIcon
+
+                val markerOpts = MarkerOptions()
+                    .position(position)
+                    .icon(carIcon)
+                    .flat(true)
+                    .anchor(0.5f, 0.5f)
+                    .rotation(driver.bearing)
+                    .zIndex(50f)
+
+                val marker = mMap?.addMarker(markerOpts)
+                if (marker != null) {
+                    nearbyDriverMarkers[driver.driverId] = marker
+                }
+            }
+        }
+    }
     private fun setupViewModelObservers() {
         // 1. Маршрут
         viewModel.decodedRoute.observe(this) { points ->
@@ -3138,6 +3208,10 @@ class RoundedBackgroundSpan(
 
         polylineAnim?.remove()
         polylineAnim = null
+
+        pickupPolyline?.remove()
+        pickupPolyline = null
+        pickupRoutePoints.clear()
         
         // <-- 2. ЖЕСТКО УБИВАЕМ ВСЕ АНИМАТОРЫ
         routeAnimator?.cancel()
@@ -3184,39 +3258,37 @@ class RoundedBackgroundSpan(
         addressPanel.visibility = View.GONE
 
         setButtonsLoadingState(true)
-        
-        // 👈 ФИКС БАГА 2: Задаем геометрию панели ЖЕСТКО ДО её переключения в VISIBLE.
-        // Это прижмет кнопку к нижнему краю экрана, а пустоту займет шиммер-скелетон.
+
         val displayMetrics = resources.displayMetrics
         val maxTariffHeight = (displayMetrics.heightPixels * 0.45).toInt()
         tariffsPanel.layoutParams.height = maxTariffHeight
 
         tariffsPanel.visibility = View.VISIBLE
         hasTrackedTariffsView = false
-        
-        // ВМЕСТО ProgressBar используем Shimmer
+
+        // Включаем шиммер
         tariffsRecyclerView.visibility = View.GONE
         tariffsShimmer.visibility = View.VISIBLE
         tariffsShimmer.startShimmer()
-    
-    btnRecenter.visibility = View.GONE
-    setLocationButtonAnchor(R.id.tariffs_panel)
 
-    try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
+        btnRecenter.visibility = View.GONE
+        setLocationButtonAnchor(R.id.tariffs_panel)
 
-    tariffAdapter.submitList(emptyList(), 0)
-    
-    ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
-    val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
-    ivMenuIcon.setColorFilter(adaptiveColor)
+        try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
-    val route = viewModel.currentRoutePolyline
-    val dist = viewModel.routeInfo.value?.first ?: 0
-    
-    if (route != null) {
-        viewModel.loadTariffsAndCalculatePrice(route, dist)
+        // УДАЛЕНО: tariffAdapter.submitList(emptyList(), 0)
+
+        ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
+        val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
+        ivMenuIcon.setColorFilter(adaptiveColor)
+
+        val route = viewModel.currentRoutePolyline
+        val dist = viewModel.routeInfo.value?.first ?: 0
+
+        if (route != null) {
+            viewModel.loadTariffsAndCalculatePrice(route, dist)
+        }
     }
-}
 
     private fun showCustomScheduleDialog() {
     val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
@@ -3533,13 +3605,11 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun startDriverTracking(orderId: String) {
-        if (isDriverTrackingActive) return
-        isDriverTrackingActive = true
-
         val token = sessionManager.fetchAuthToken()
-        webSocketManager?.connect(token)
+        if (webSocketManager?.isConnected() != true) {
+            webSocketManager?.connect(token)
+        }
 
-        // 🔥 ИСПРАВЛЕНО: Передаем именно orderId, пришедший в параметры метода
         webSocketManager?.subscribeToDriverLocation(orderId) { locationDto ->
             runOnUiThread {
                 updateDriverMarker(locationDto)
@@ -3975,45 +4045,48 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     private fun updateDriverMarker(loc: com.taxiapp.client.network.dto.TrackingLocationDto) {
         val lat = loc.lat ?: return
         val lng = loc.lng ?: return
+        if (lat == 0.0 && lng == 0.0) return
+
         val latLng = com.google.android.gms.maps.model.LatLng(lat, lng)
 
-        // 🛡️ ФИКС МИГАНИЯ: Если маркер есть, проверяем, изменилась ли позиция.
-        // Если водитель стоит на месте, НИЧЕГО не делаем, чтобы не провоцировать перерисовку.
+        // 1. Стираем пройденный хвост маршрута подачи при любом тике координат
+        if (pickupPolyline != null && pickupRoutePoints.isNotEmpty()) {
+            trimPickupRoute(latLng)
+        }
+
+        // 2. Если маркер уже на карте — плавно анимируем движение
         if (driverMarker != null) {
             val oldPos = driverMarker!!.position
-            // Погрешность 0.00001 (около 1 метра) - если сдвинулся меньше, не трогаем маркер
-            if (Math.abs(oldPos.latitude - latLng.latitude) < 0.00001 && 
+            if (Math.abs(oldPos.latitude - latLng.latitude) < 0.00001 &&
                 Math.abs(oldPos.longitude - latLng.longitude) < 0.00001) {
-                return 
+                return
             }
-            // Плавная анимация, если сдвинулся
             animateMarker(driverMarker!!, latLng, loc.bearing ?: 0f)
             return
         }
 
-        // Если маркера нет — создаем его один раз с нужными размерами
+        // 3. Создаем маркер, если его еще не было
         val carWidth = 40
         val carHeight = 40
 
         val carIcon = com.taxiapp.client.utils.BitmapHelper.getScaledBitmapDescriptor(
-            this, 
-            R.drawable.ic_car_icon, 
-            carWidth, 
+            this,
+            R.drawable.ic_car_icon,
+            carWidth,
             carHeight
         )
-
-        val initialBearing = loc.bearing ?: 0f
 
         driverMarker = mMap?.addMarker(
             com.google.android.gms.maps.model.MarkerOptions()
                 .position(latLng)
                 .icon(carIcon)
-                .flat(true)          
-                .anchor(0.5f, 0.5f)  
-                .rotation(initialBearing)
-                .zIndex(1100f) // 🔥 Поднимаем слой машинки на самый верх
+                .flat(true)
+                .anchor(0.5f, 0.5f)
+                .rotation(loc.bearing ?: 0f)
+                .zIndex(1100f)
         )
     }
+
 
     private fun animateMarker(marker: Marker, toPosition: LatLng, toRotation: Float) {
         val startPosition = marker.position
@@ -4109,7 +4182,6 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
             // --- ФИКС ДВОЙНОЙ ОЧИСТКИ КАРТЫ ---
             if (s == "ACCEPTED" || s == "DRIVER_ARRIVED") {
-                // Для этих изолированных статусов строим только Точку А и включаем радар/трекинг
                 mMap?.clear()
                 driverMarker = null
 
@@ -4123,6 +4195,12 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                     overlayOrigin.alpha = 1f
                 }
                 overlayDest.visibility = View.GONE
+
+                // ➕ ДОБАВЛЕНО: Рисуем маршрут подачи для статуса ACCEPTED
+                if (s == "ACCEPTED") {
+                    drawPickupRoute(order.driverToPickupPolyline)
+                }
+
                 startDriverTracking(order.id)
             } else {
                 // Для всех остальных активных и завершенных статусов (IN_PROGRESS, CANCELLED)
@@ -4269,7 +4347,58 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         vectorDrawable.draw(canvas)
         return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
+    private fun focusOnPickupRoute(driverLatLng: LatLng? = null) {
+        if (mMap == null) return
 
+        try {
+            val boundsBuilder = LatLngBounds.Builder()
+            var pointsCount = 0
+
+            // 1. Точки полилинии подачи
+            if (pickupRoutePoints.isNotEmpty()) {
+                pickupRoutePoints.forEach {
+                    boundsBuilder.include(it)
+                    pointsCount++
+                }
+            }
+
+            // 2. Координаты водителя
+            val driverPos = driverLatLng
+                ?: driverMarker?.position
+                ?: viewModel.activeOrder.value?.driver?.let {
+                    if (it.latitude != null && it.longitude != null && it.latitude != 0.0 && it.longitude != 0.0)
+                        LatLng(it.latitude, it.longitude) else null
+                }
+
+            if (driverPos != null) {
+                boundsBuilder.include(driverPos)
+                pointsCount++
+            }
+
+            // 3. Точка посадки клиента (Точка А)
+            val originPos = originPlace?.latLng
+                ?: viewModel.activeOrder.value?.let {
+                    if (it.originLat != null && it.originLng != null && it.originLat != 0.0 && it.originLng != 0.0)
+                        LatLng(it.originLat, it.originLng) else null
+                }
+
+            if (originPos != null) {
+                boundsBuilder.include(originPos)
+                pointsCount++
+            }
+
+            // 4. Плавное центрирование с комфортным отступом 110dp
+            if (pointsCount >= 2) {
+                val paddingSide = convertDpToPixel(110f).toInt()
+                val bounds = boundsBuilder.build()
+                mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingSide), 800, null)
+            } else if (driverPos != null) {
+                mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(driverPos, 14.5f), 800, null)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
     private fun startWaitingTimer(order: TaxiOrderDto) {
         stopWaitingTimer()
 
@@ -4862,7 +4991,60 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
     updateStatusUI(order)
 }
+    private fun drawPickupRoute(polylineStr: String?) {
+        if (polylineStr.isNullOrEmpty() || mMap == null) return
+        try {
+            pickupPolyline?.remove()
+            val points = PolyUtil.decode(polylineStr)
+            pickupRoutePoints = points.toMutableList()
 
+            val pickupOpts = PolylineOptions()
+                .addAll(pickupRoutePoints)
+                .width(14f)
+                .color(ContextCompat.getColor(this, R.color.taxi_yellow))
+                .startCap(RoundCap())
+                .endCap(RoundCap())
+                .jointType(JointType.ROUND)
+                .zIndex(2.0f)
+
+            pickupPolyline = mMap?.addPolyline(pickupOpts)
+
+            // ➕ Плавно переводим камеру на весь маршрут от водителя к нам
+            focusOnPickupRoute()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun trimPickupRoute(driverPos: LatLng) {
+        if (pickupRoutePoints.isEmpty() || pickupPolyline == null) return
+
+        try {
+            val snap = getSnapPointAndDistance(driverPos, pickupRoutePoints)
+
+            var closestIndex = 0
+            var minDistance = Double.MAX_VALUE
+            for (i in pickupRoutePoints.indices) {
+                val d = SphericalUtil.computeDistanceBetween(driverPos, pickupRoutePoints[i])
+                if (d < minDistance) {
+                    minDistance = d
+                    closestIndex = i
+                }
+            }
+
+            if (closestIndex > 0) {
+                pickupRoutePoints = pickupRoutePoints.subList(closestIndex, pickupRoutePoints.size).toMutableList()
+            }
+
+            if (pickupRoutePoints.isNotEmpty()) {
+                pickupRoutePoints[0] = snap.first
+            }
+
+            pickupPolyline?.points = pickupRoutePoints
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         if (!::layoutExpandableDetails.isInitialized) return
 
@@ -5315,6 +5497,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 polylineAnim?.remove()
                 polylineAnim = null
 
+                if (pickupPolyline == null && !order.driverToPickupPolyline.isNullOrEmpty()) {
+                    drawPickupRoute(order.driverToPickupPolyline)
+                }
                 waypointMarkers.forEach { it.remove() }
                 waypointMarkers.clear()
 
@@ -5343,10 +5528,19 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.VISIBLE
+
+                // ➕ Сбрасываем сдвиги и скрываем кнопку центрирования в ACCEPTED
+                btnRecenterRoute.translationY = 0f
                 btnRecenterRoute.visibility = View.GONE
 
                 updateDriverInfo(order)
                 stopWaitingTimer()
+
+                // ➕ ДОБАВЛЕНО: Дожидаемся полного пересчета высоты карточки active_order_card
+                // после чего передаем честный bottomPadding в Google Maps (логотип встанет ровно над карточкой)
+                activeOrderCard.post {
+                    updateMapPadding(activeOrderCard, recenterMap = true)
+                }
 
                 order.driver?.let { drv ->
                     val lat = drv.latitude
@@ -5358,24 +5552,20 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                             bearing = drv.bearing ?: 0f
                         )
                         updateDriverMarker(initialLoc)
-
                         val carLatLng = LatLng(lat, lng)
-                        val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
-                            .target(carLatLng)
-                            .zoom(17f)
-                            .tilt(0f)
-                            .bearing(drv.bearing ?: 0f)
-                            .build()
-
-                        mMap?.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 1000, null)
+                        focusOnPickupRoute(carLatLng)
                     }
                 }
 
                 startDriverTracking(order.id)
             }
-
-            "DRIVER_ARRIVED" -> {
+"DRIVER_ARRIVED" -> {
                 isCameraFocusedOnSearch = false
+
+                // Очищаем линию подачи (водитель уже прибыл)
+                pickupPolyline?.remove()
+                pickupPolyline = null
+                pickupRoutePoints.clear()
 
                 polylineMain?.remove()
                 polylineMain = null
@@ -5415,23 +5605,29 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 updateDriverInfo(order)
                 startWaitingTimer(order)
 
-                order.driver?.let { drv ->
-                    val lat = drv.latitude
-                    val lng = drv.longitude
-                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                // ➕ Фокусируем камеру на водителе / Точке А
+                val targetLatLng = order.driver?.let { drv ->
+                    if (drv.latitude != null && drv.longitude != null && drv.latitude != 0.0 && drv.longitude != 0.0) {
                         val initialLoc = TrackingLocationDto(
-                            lat = lat,
-                            lng = lng,
+                            lat = drv.latitude,
+                            lng = drv.longitude,
                             bearing = drv.bearing ?: 0f
                         )
                         updateDriverMarker(initialLoc)
-                    }
+                        LatLng(drv.latitude, drv.longitude)
+                    } else null
+                } ?: originPlace?.latLng ?: LatLng(order.originLat ?: 0.0, order.originLng ?: 0.0)
+
+                if (targetLatLng.latitude != 0.0 && targetLatLng.longitude != 0.0) {
+                    mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(targetLatLng, 16.5f), 800, null)
                 }
 
                 startDriverTracking(order.id)
             }
-
             "IN_PROGRESS" -> {
+                pickupPolyline?.remove()
+                pickupPolyline = null
+                pickupRoutePoints.clear()
                 isCameraFocusedOnSearch = false
                 stopRadarAnimation()
 
@@ -5452,6 +5648,8 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.GONE
+                btnRecenterRoute.translationY = 0f
+                btnRecenterRoute.visibility = View.VISIBLE
 
                 btnRecenterRoute.visibility = View.VISIBLE
 
@@ -5590,6 +5788,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "CANCELLED" -> {
+                pickupPolyline?.remove()
+                pickupPolyline = null
+                pickupRoutePoints.clear()
                 isCameraFocusedOnSearch = false
                 stopStatusBlinking()
                 resetOrderDetailsState()
@@ -5768,7 +5969,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
         }
     }
-    
+
     private fun updateMapPadding(bottomPanel: View, extraBottomDp: Float = 20f, topPaddingDp: Float = 20f, recenterMap: Boolean = true) {
         bottomPanel.requestLayout()
 
@@ -5892,75 +6093,6 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
         }
     }
-
-    private fun updateNearbyDriversOnMap(drivers: List<DriverLocationDto>) {
-        if (mMap == null) return
-        
-        val mapCenter = mMap!!.cameraPosition.target
-
-        // Проверка: Если открыт заказ, тарифы или режим выбора адреса — тотально чистим маркеры свободных машин
-        if (activeOrderId != null || isRouteMode || viewModel.currentRoutePolyline != null || 
-            tariffsPanel.visibility == View.VISIBLE || isMapPickingMode) {
-            nearbyDriverMarkers.values.forEach { it.remove() }
-            nearbyDriverMarkers.clear()
-            return
-        }
-
-        // Фильтр отображения свободных машин в радиусе 500 метров
-        val SEARCH_RADIUS_METERS = 500.0
-        val driversInRange = drivers.filter { driver ->
-            val driverPos = LatLng(driver.lat, driver.lng)
-            val distance = com.google.maps.android.SphericalUtil.computeDistanceBetween(mapCenter, driverPos)
-            distance <= SEARCH_RADIUS_METERS
-        }
-
-        val newDriverIds = driversInRange.map { it.driverId }
-        
-        // УДАЛЯЕМ МАРКЕРЫ: Если водитель вышел за радиус или пропал со связи
-        val iterator = nearbyDriverMarkers.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (!newDriverIds.contains(entry.key)) {
-                entry.value.remove()
-                iterator.remove()
-            }
-        }
-
-        // ДОБАВЛЯЕМ / ОБНОВЛЯЕМ МАРКЕРЫ НА КАРТЕ:
-        for (driver in driversInRange) {
-            val position = LatLng(driver.lat, driver.lng)
-            if (nearbyDriverMarkers.containsKey(driver.driverId)) {
-                val marker = nearbyDriverMarkers[driver.driverId]!!
-                animateMarker(marker, position, driver.bearing)
-            } else {
-                val carWidth = 40
-                val carHeight = 40
-
-                val fallbackIcon = BitmapHelper.getScaledBitmapDescriptor(
-                    this, 
-                    R.drawable.ic_car_icon, 
-                    carWidth, 
-                    carHeight
-                )
-
-                val carIcon = customCarIcon ?: fallbackIcon
-                
-                val markerOpts = MarkerOptions()
-                    .position(position)
-                    .icon(carIcon)
-                    .flat(true)
-                    .anchor(0.5f, 0.5f)
-                    .rotation(driver.bearing)
-                    .zIndex(50f)
-                
-                val marker = mMap?.addMarker(markerOpts)
-                if (marker != null) {
-                    nearbyDriverMarkers[driver.driverId] = marker
-                }
-            }
-        }
-    }
-
     private fun showAddressPanel() {
         mMap?.clear()
         isRouteMode = false
@@ -6086,21 +6218,30 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         if (recenterMap && viewModel.currentRoutePolyline != null) {
             try {
                 val currentStatus = viewModel.activeOrder.value?.status
-                
+
                 if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
-                    val originLoc = originPlace?.latLng 
+                    val originLoc = originPlace?.latLng
                         ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
-                    
+
                     if (originLoc != null) {
                         val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
                             .target(originLoc)
                             .zoom(16.0f)
-                            .tilt(45f)   
+                            .tilt(45f)
                             .bearing(0f)
                             .build()
                         mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
                     }
-                } else {
+                } else if (currentStatus == "ACCEPTED") {
+                    focusOnPickupRoute()
+                    // ➕ ДОБАВЛЕНО: Удерживаем фокус на месте подачи
+                } else if (currentStatus == "DRIVER_ARRIVED") {
+                    val pos = driverMarker?.position ?: originPlace?.latLng
+                    if (pos != null) {
+                        mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16.5f), 400, null)
+                    }
+                    // Фокус на всю поездку только при IN_PROGRESS
+                } else if (currentStatus == "IN_PROGRESS") {
                     val boundsBuilder = LatLngBounds.Builder()
                     if (originPlace != null && destinationPlace != null) {
                         boundsBuilder.include(originPlace!!.latLng!!)

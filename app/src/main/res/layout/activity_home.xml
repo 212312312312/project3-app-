@@ -290,7 +290,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:padding="12dp"
-                android:src="@drawable/ic_my_location" 
+                android:src="@drawable/ic_my_location"
                 app:tint="@color/text_primary" />
         </androidx.cardview.widget.CardView>
 
@@ -492,85 +492,88 @@
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
-    android:id="@+id/tariffs_panel"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_alignParentBottom="true"
-    android:layout_marginBottom="-10dp"
-    android:layout_marginHorizontal="0dp"
-    app:cardElevation="16dp"
-    app:cardBackgroundColor="@color/card_background"
-    app:shapeAppearanceOverlay="@style/Shape.BottomSheet.TopRounded24"
-    app:strokeWidth="0dp"
-    app:cardUseCompatPadding="false"
-    app:cardPreventCornerOverlap="false"
-    android:clipToOutline="true"
-    android:visibility="gone">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingTop="0dp"
-        android:paddingBottom="2dp">
-
-        <FrameLayout
-            android:id="@+id/tariffs_list_container"
+            android:id="@+id/tariffs_panel"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_marginBottom="-10dp"
+            android:layout_marginHorizontal="0dp"
+            app:cardElevation="16dp"
+            app:cardBackgroundColor="@color/card_background"
+            app:shapeAppearanceOverlay="@style/Shape.BottomSheet.TopRounded24"
+            app:strokeWidth="0dp"
+            app:cardUseCompatPadding="false"
+            app:cardPreventCornerOverlap="false"
+            android:clipToOutline="true"
+            android:visibility="gone">
 
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/tariffs_scroll_view"
+            <!-- ВЫСОТА ИЗМЕНЕНА НА match_parent -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:paddingTop="8dp"
-                android:paddingBottom="20dp" 
-                android:overScrollMode="never"
-                android:fillViewport="true">
+                android:orientation="vertical"
+                android:paddingTop="0dp"
+                android:paddingBottom="2dp">
 
                 <FrameLayout
+                    android:id="@+id/tariffs_list_container"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
 
-                    <com.facebook.shimmer.ShimmerFrameLayout
-                        android:id="@+id/tariffs_shimmer_container"
+                    <androidx.core.widget.NestedScrollView
+                        android:id="@+id/tariffs_scroll_view"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:visibility="gone"
-                        app:shimmer_auto_start="true"
-                        app:shimmer_duration="1200"
-                        app:shimmer_base_alpha="1.0"
-                        app:shimmer_highlight_alpha="0.5"
-                        app:shimmer_dropoff="0.5">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-                            <include layout="@layout/tariff_item_skeleton" />
-                            <include layout="@layout/tariff_item_skeleton" />
-                            <include layout="@layout/tariff_item_skeleton" />
-                        </LinearLayout>
-                    </com.facebook.shimmer.ShimmerFrameLayout>
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/tariffs_recycler_view"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="match_parent"
                         android:clipToPadding="false"
-                        android:overScrollMode="never" />
+                        android:paddingTop="8dp"
+                        android:paddingBottom="20dp"
+                        android:overScrollMode="never"
+                        android:fillViewport="true">
 
+                        <FrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+
+                            <!-- VISIBILITY ПО УМОЛЧАНИЮ visible ДЛЯ МГНОВЕННОГО СКЕЛЕТОНА -->
+                            <com.facebook.shimmer.ShimmerFrameLayout
+                                android:id="@+id/tariffs_shimmer_container"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:visibility="visible"
+                                app:shimmer_auto_start="true"
+                                app:shimmer_duration="1200"
+                                app:shimmer_base_alpha="1.0"
+                                app:shimmer_highlight_alpha="0.5"
+                                app:shimmer_dropoff="0.5">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="vertical">
+                                    <include layout="@layout/tariff_item_skeleton" />
+                                    <include layout="@layout/tariff_item_skeleton" />
+                                    <include layout="@layout/tariff_item_skeleton" />
+                                </LinearLayout>
+                            </com.facebook.shimmer.ShimmerFrameLayout>
+
+                            <androidx.recyclerview.widget.RecyclerView
+                                android:id="@+id/tariffs_recycler_view"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:clipToPadding="false"
+                                android:visibility="gone"
+                                android:overScrollMode="never" />
+
+                        </FrameLayout>
+                    </androidx.core.widget.NestedScrollView>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="40dp"
+                        android:layout_gravity="bottom"
+                        android:background="@drawable/shadow_gradient_up" />
                 </FrameLayout>
-            </androidx.core.widget.NestedScrollView>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:layout_gravity="bottom"
-                android:background="@drawable/shadow_gradient_up" />
-        </FrameLayout>
 
         <com.facebook.shimmer.ShimmerFrameLayout
             android:id="@+id/buttons_shimmer_container"
