@@ -863,6 +863,8 @@ private fun fetchAddressAtCurrentLocation() {
                     updateChatBadgeUI()
                     if (order.status == "COMPLETED") {
                         showActiveOrderPanel(order)
+                    } else {
+                        updateStatusUI(order)
                     }
                 } else {
                     restoreOrderOnMap(order)
@@ -870,11 +872,10 @@ private fun fetchAddressAtCurrentLocation() {
 
                     activeOrderCard.post {
                         if (!isDestroyed && !isFinishing) {
-                            updateMapPadding(activeOrderCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = true)
+                            updateMapPadding(activeOrderCard, extraBottomDp = 4f, topPaddingDp = 20f, recenterMap = true)
                         }
                     }
                 }
-                updateStatusUI(order)
             } else {
                 activeOrderId = null
                 showAddressPanel()
@@ -4909,7 +4910,16 @@ private fun stopWaitingTimer() {
 
     findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
     findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
-    
+        val isSearch = order.status == "REQUESTED" || order.status == "OFFERING" || order.status == "SCHEDULED"
+        if (isSearch) {
+            layoutDriverFoundState.visibility = View.GONE
+            layoutDriverDetails.visibility = View.GONE
+            layoutSearchControls.visibility = View.VISIBLE
+            layoutSearchDetails.visibility = View.VISIBLE
+            tvCarPlateLarge.text = ""
+            tvDriverFirstName.text = ""
+            tvCarDetailsSubtitle.text = ""
+        }
     activeOrderCard.visibility = View.VISIBLE
     tariffsPanel.visibility = View.GONE
     
@@ -5378,12 +5388,15 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             activeOrderCard.height
         }
 
-        (activeOrderCard as? ViewGroup)?.let { cardGroup ->
-            val transition = android.transition.AutoTransition().apply {
-                duration = 300
-                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+// Запускаем плавную анимацию переходов ТОЛЬКО если карточка уже была отрисована на экране
+        if (activeOrderCard.visibility == View.VISIBLE && activeOrderCard.height > 0) {
+            (activeOrderCard as? ViewGroup)?.let { cardGroup ->
+                val transition = android.transition.AutoTransition().apply {
+                    duration = 250
+                    interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+                }
+                android.transition.TransitionManager.beginDelayedTransition(cardGroup, transition)
             }
-            android.transition.TransitionManager.beginDelayedTransition(cardGroup, transition)
         }
 
         orderStatusText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
@@ -6173,7 +6186,13 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         selectedServiceIds.clear()
         servicesExtraCost = 0.0
         tariffAdapter.updateExtraCost(0.0)
-
+        layoutDriverFoundState.visibility = View.GONE
+        layoutDriverDetails.visibility = View.GONE
+        layoutSearchControls.visibility = View.GONE
+        layoutSearchDetails.visibility = View.GONE
+        tvCarPlateLarge.text = ""
+        tvDriverFirstName.text = ""
+        tvCarDetailsSubtitle.text = ""
         orderComment = ""
         updateCommentIconState()
 

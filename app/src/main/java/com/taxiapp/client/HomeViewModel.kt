@@ -112,15 +112,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         webSocketManager?.subscribeToClientOrders(clientId) { messageDto ->
             val order = messageDto.order
             if (order != null) {
-                if (activeOrderId == null || activeOrderId == order.id || activeOrderId == order.idLong.toString()) {
-                    activeOrderId = order.id
-                    _activeOrder.postValue(order)
+                // 🛡️ БРОНЯ: Игнорируем сокеты по закрытым или отмененным заказам, если мы их уже сбросили
+                if ((order.status == "COMPLETED" || order.status == "CANCELLED") && activeOrderId == null) {
+                    return@subscribeToClientOrders
+                }
 
+                if (activeOrderId == null || activeOrderId == order.id || activeOrderId == order.idLong.toString()) {
                     if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                         stopOrderStatusService(order.id)
-                        sessionManager.clearActiveOrderId()
+                        clearOrderState()
                     } else {
+                        activeOrderId = order.id
                         sessionManager.saveActiveOrderId(order.id)
+                        _activeOrder.postValue(order)
                         updateOrderStatusService(order)
                     }
                 }
@@ -469,10 +473,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopStatusPolling() {}
 
+    // Замените метод clearOrderState() в HomeViewModel.kt:
     fun clearOrderState() {
         activeOrderId?.let { stopOrderStatusService(it) }
         activeOrderId = null
         sessionManager.clearActiveOrderId()
+        // Принудительно очищаем SharedPreferences от зависших ключей заказов
+        val prefs = getApplication<Application>().applicationContext.getSharedPreferences("taxi_session", Context.MODE_PRIVATE)
+        prefs.edit().remove("active_order_id").apply()
+
         _activeOrder.postValue(null)
     }
 
