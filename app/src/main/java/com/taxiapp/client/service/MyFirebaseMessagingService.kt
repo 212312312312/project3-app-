@@ -51,16 +51,18 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 if (status == "COMPLETED" || status == "CANCELLED") {
                     val stopIntent = Intent(this, OrderStatusService::class.java).apply {
                         action = OrderStatusService.ACTION_STOP
-                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderId)
+                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderIdStr) // Передаем строковый UUID
                     }
                     startService(stopIntent)
 
-                    // 🟢 1. Очищаем сохраненную сессию
-                    val sessionManager = com.taxiapp.client.utils.SessionManager(applicationContext)
-                    sessionManager.clearActiveOrderId()
-
-                    // 🟢 2. Передаем сигнал в UI, если приложение открыто на экране
-                    com.taxiapp.client.network.OrderStatusBus.notifyOrderCanceled(orderIdStr)
+                    if (status == "COMPLETED") {
+                        // Передаем сигнал обновления, чтобы экран показал завершение поездки и оценку
+                        com.taxiapp.client.network.OrderStatusBus.notifyOrderUpdated(orderIdStr)
+                    } else {
+                        val sessionManager = com.taxiapp.client.utils.SessionManager(applicationContext)
+                        sessionManager.clearActiveOrderId()
+                        com.taxiapp.client.network.OrderStatusBus.notifyOrderCanceled(orderIdStr)
+                    }
                 } else {
                     // Если заказ активен — обновляем Foreground Service
                     val updateIntent = Intent(this, OrderStatusService::class.java).apply {

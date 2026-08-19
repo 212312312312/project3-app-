@@ -113,20 +113,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val order = messageDto.order
             if (order != null) {
                 if (activeOrderId == null || activeOrderId == order.id || activeOrderId == order.idLong.toString()) {
+                    activeOrderId = order.id
+                    _activeOrder.postValue(order)
+
                     if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                         stopOrderStatusService(order.id)
-                        clearOrderState()
+                        sessionManager.clearActiveOrderId()
                     } else {
-                        activeOrderId = order.id
                         sessionManager.saveActiveOrderId(order.id)
-                        _activeOrder.postValue(order)
                         updateOrderStatusService(order)
                     }
                 }
             } else if (messageDto.action == "REMOVE") {
                 val currentOrder = _activeOrder.value
                 if (currentOrder != null) {
-                    // 🟢 Сравниваем полученный UUID акшена со всеми возможными идентификаторами текущего заказа
                     val isMatch = messageDto.orderId == activeOrderId ||
                             messageDto.orderId == currentOrder.id ||
                             messageDto.orderId == currentOrder.idLong.toString()
@@ -473,7 +473,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         activeOrderId?.let { stopOrderStatusService(it) }
         activeOrderId = null
         sessionManager.clearActiveOrderId()
-        _activeOrder.value = null
+        _activeOrder.postValue(null)
     }
 
     // 🔥 ИСПРАВЛЕНО: Безопасный вызов без аргументов очистит сокет, предотвращая утечку памяти

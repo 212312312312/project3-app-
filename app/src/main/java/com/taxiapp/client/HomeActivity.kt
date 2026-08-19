@@ -854,20 +854,20 @@ private fun fetchAddressAtCurrentLocation() {
             }
         }
 
-        // 3. Активный заказ (обновление статуса)
+        // ЗАМЕНИТЬ наблюдатель activeOrder:
         viewModel.activeOrder.observe(this) { order ->
             if (order != null) {
                 activeOrderId = order.id
                 if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                     unreadChatMessages = 0
                     updateChatBadgeUI()
+                    if (order.status == "COMPLETED") {
+                        showActiveOrderPanel(order)
+                    }
                 } else {
-                    // ВІДНОВЛЮЄМО МАРШРУТ ПЕРЕД ПОКАЗОМ ПАНЕЛІ
-                    restoreOrderOnMap(order) 
+                    restoreOrderOnMap(order)
                     showActiveOrderPanel(order)
-                    
-                    // 🔥 ФИКС ГОНКИ UI: Ждем, пока карточка замерится на экране,
-                    // выставляем правильный нижний отступ карты и принудительно центрируем (recenterMap = true)
+
                     activeOrderCard.post {
                         if (!isDestroyed && !isFinishing) {
                             updateMapPadding(activeOrderCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = true)
@@ -1486,6 +1486,15 @@ btnConfirmMapPicker.setOnClickListener {
         
 
         activeOrderCard = findViewById(R.id.active_order_card)
+        activeOrderCard.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, oldTop, oldBottom ->
+            val newHeight = bottom - top
+            val oldHeight = oldBottom - oldTop
+            if (activeOrderCard.visibility == View.VISIBLE && newHeight > 0 && newHeight != oldHeight) {
+                if (mMap != null && !isDestroyed && !isFinishing) {
+                    updateMapPadding(activeOrderCard, extraBottomDp = 4f, topPaddingDp = 20f, recenterMap = false)
+                }
+            }
+        }
         layoutActiveOrderPrice = findViewById(R.id.layout_active_order_price)
         orderStatusText = findViewById(R.id.order_status_text)
         
@@ -5565,10 +5574,6 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 stopWaitingTimer()
 
                 // ➕ ДОБАВЛЕНО: Дожидаемся полного пересчета высоты карточки active_order_card
-                // после чего передаем честный bottomPadding в Google Maps (логотип встанет ровно над карточкой)
-                activeOrderCard.post {
-                    updateMapPadding(activeOrderCard, recenterMap = true)
-                }
 
                 order.driver?.let { drv ->
                     val lat = drv.latitude
@@ -6234,14 +6239,21 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
     }
 
     private fun animateMapPadding(fromHeight: Int, toHeight: Int, recenterMap: Boolean) {
+        if (mMap == null || activeOrderCard.visibility != View.VISIBLE) return
+
         val params = activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams
         val marginBottom = params?.bottomMargin ?: 0
         val sideMargin = params?.leftMargin ?: 0
-        val extraBuffer = convertDpToPixel(4f).toInt() 
-        val topPadding = convertDpToPixel(0f).toInt()
+        val extraBuffer = convertDpToPixel(4f).toInt()
+        val topPadding = convertDpToPixel(20f).toInt()
 
-        // КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ 60 FPS: Выставляем паддинг сразу, отсекая фризы аниматоров
-        val totalBottomPadding = toHeight + marginBottom + extraBuffer
+        var targetHeight = if (activeOrderCard.height > 0) activeOrderCard.height else toHeight
+        val detailsView = activeOrderCard.findViewById<View>(R.id.layout_expandable_details)
+        if (detailsView != null && detailsView.visibility == View.VISIBLE && detailsView.height > 0) {
+            targetHeight -= detailsView.height
+        }
+
+        val totalBottomPadding = targetHeight + marginBottom + extraBuffer
         mMap?.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
 
         if (recenterMap && viewModel.currentRoutePolyline != null) {
@@ -6263,16 +6275,14 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                     }
                 } else if (currentStatus == "ACCEPTED") {
                     focusOnPickupRoute()
-                    // ➕ ДОБАВЛЕНО: Удерживаем фокус на месте подачи
                 } else if (currentStatus == "DRIVER_ARRIVED") {
                     val pos = driverMarker?.position ?: originPlace?.latLng
                     if (pos != null) {
                         mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16.5f), 400, null)
                     }
-                    // Фокус на всю поездку только при IN_PROGRESS
                 } else if (currentStatus == "IN_PROGRESS") {
-                    val boundsBuilder = LatLngBounds.Builder()
                     if (originPlace != null && destinationPlace != null) {
+                        val boundsBuilder = LatLngBounds.Builder()
                         boundsBuilder.include(originPlace!!.latLng!!)
                         boundsBuilder.include(destinationPlace!!.latLng!!)
                         currentWaypoints.forEach { boundsBuilder.include(it.first) }
