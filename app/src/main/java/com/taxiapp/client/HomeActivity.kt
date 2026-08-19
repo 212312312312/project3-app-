@@ -1386,24 +1386,18 @@ btnConfirmMapPicker.setOnClickListener {
             // --------------------------------
 
             when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
+               MotionEvent.ACTION_DOWN -> {
                     startY = event.rawY
                     v.parent.requestDisallowInterceptTouchEvent(true)
 
-                    startHeight = if (layoutExpandableDetails.layoutParams.height <= 0) {
-                        layoutExpandableDetails.height
-                    } else {
-                        layoutExpandableDetails.layoutParams.height
-                    }
+                    // Актуализируем точный замер перед началом жеста
+                    val cardWidth = if (activeOrderCard.width > 0) activeOrderCard.width else resources.displayMetrics.widthPixels
+                    val widthSpec = View.MeasureSpec.makeMeasureSpec(cardWidth, View.MeasureSpec.EXACTLY)
+                    val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                    layoutExpandableDetails.measure(widthSpec, heightSpec)
+                    maxDetailsHeight = layoutExpandableDetails.measuredHeight
 
-                    if (maxDetailsHeight == 0 || maxDetailsHeight < layoutExpandableDetails.height) {
-                        val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
-                        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-                        layoutExpandableDetails.measure(widthSpec, heightSpec)
-                        maxDetailsHeight = layoutExpandableDetails.measuredHeight
-                    }
-
-                    // Просто фіксуємо стартову висоту, АЛЕ НЕ РОБИМО панель відразу видимою!
+                    startHeight = layoutExpandableDetails.height
                     val params = layoutExpandableDetails.layoutParams
                     params.height = startHeight
                     layoutExpandableDetails.layoutParams = params
@@ -1710,11 +1704,20 @@ btnChangePayment.setOnClickListener {
         tvChatBadge = findViewById(R.id.tv_chat_badge)
 
         btnChatDriver.setOnClickListener {
+            val order = viewModel.activeOrder.value
+            val isPartnerDriver = (order?.driver?.id == -1L)
+
+            // Если водитель является партнером (из сторонней системы без чата)
+            if (isPartnerDriver) {
+                showToast(getString(R.string.toast_chat_unavailable_partner))
+                return@setOnClickListener
+            }
+
             activeOrderId?.let { orderId ->
                 unreadChatMessages = 0
                 updateChatBadgeUI()
-                
-                // Открываем экран чата
+
+                // Открываем экран чата только для наших системных водителей
                 val intent = Intent(this@HomeActivity, ChatActivity::class.java)
                 intent.putExtra("ORDER_ID", orderId)
                 startActivity(intent)
@@ -2335,12 +2338,11 @@ btnChangePayment.setOnClickListener {
                     }
                 }
             } else {
-                // Если пользователь двигает карту пальцем при построенном маршруте
+                // Если пользователь двигает карту пальцем при наличии маршрута
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     val currentStatus = viewModel.activeOrder.value?.status
-                    // 🔥 ФИКС: Запрещаем кнопке маршрута активироваться при отмене или завершении заказа
-                    if (currentStatus != "ACCEPTED" && currentStatus != "DRIVER_ARRIVED" && 
-                        currentStatus != "IN_PROGRESS" && currentStatus != "CANCELLED" && currentStatus != "COMPLETED") {
+                    // Показываем кнопку центрирования при сдвиге карты в поездке или при выборе тарифов
+                    if (currentStatus == "IN_PROGRESS" || (activeOrderId == null && tariffsPanel.visibility == View.VISIBLE)) {
                         btnRecenterRoute.visibility = View.VISIBLE
                     }
                 }
@@ -3255,8 +3257,11 @@ class RoundedBackgroundSpan(
         viewModel.stopListeningNearbyDrivers(webSocketManager)
         nearbyDriverMarkers.values.forEach { it.remove() }
         nearbyDriverMarkers.clear()
-        addressPanel.visibility = View.GONE
 
+        // Гарантированно гасим трекинг водителя при расчете нового заказа
+        stopDriverTracking()
+
+        addressPanel.visibility = View.GONE
         setButtonsLoadingState(true)
 
         val displayMetrics = resources.displayMetrics
@@ -3272,11 +3277,10 @@ class RoundedBackgroundSpan(
         tariffsShimmer.startShimmer()
 
         btnRecenter.visibility = View.GONE
-        setLocationButtonAnchor(R.id.tariffs_panel)
+        setRecenterRouteButtonAnchor(R.id.tariffs_panel, 16f)
+        btnRecenterRoute.visibility = View.GONE
 
         try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
-
-        // УДАЛЕНО: tariffAdapter.submitList(emptyList(), 0)
 
         ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
         val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
@@ -3605,6 +3609,8 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun startDriverTracking(orderId: String) {
+        isDriverTrackingActive = true // Фиксируем активное состояние трекинга
+
         val token = sessionManager.fetchAuthToken()
         if (webSocketManager?.isConnected() != true) {
             webSocketManager?.connect(token)
@@ -4043,6 +4049,13 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun updateDriverMarker(loc: com.taxiapp.client.network.dto.TrackingLocationDto) {
+        // Защита: не отображаем машину назначенного водителя на экранах выбора адреса и тарифов
+        if (activeOrderCard.visibility != View.VISIBLE || tariffsPanel.visibility == View.VISIBLE || isMapPickingMode) {
+            driverMarker?.remove()
+            driverMarker = null
+            return
+        }
+
         val lat = loc.lat ?: return
         val lng = loc.lng ?: return
         if (lat == 0.0 && lng == 0.0) return
@@ -4751,14 +4764,15 @@ private fun stopWaitingTimer() {
 
     private fun animateOrderDetailsToState(expand: Boolean) {
         val overlay = findViewById<View>(R.id.map_solid_overlay)
-        if (maxDetailsHeight == 0) {
-            val widthSpec = View.MeasureSpec.makeMeasureSpec(activeOrderCard.width, View.MeasureSpec.EXACTLY)
-            val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            layoutExpandableDetails.measure(widthSpec, heightSpec)
-            maxDetailsHeight = layoutExpandableDetails.measuredHeight
-        }
 
-        val startHeight = layoutExpandableDetails.layoutParams.height
+        // 1. Всегда актуально замеряем текущую реальную высоту видимых элементов
+        val cardWidth = if (activeOrderCard.width > 0) activeOrderCard.width else resources.displayMetrics.widthPixels
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(cardWidth, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        layoutExpandableDetails.measure(widthSpec, heightSpec)
+        
+        maxDetailsHeight = layoutExpandableDetails.measuredHeight
+        val startHeight = layoutExpandableDetails.height
         val targetHeight = if (expand) maxDetailsHeight else 0
 
         isOrderDetailsExpanded = expand
@@ -4768,11 +4782,10 @@ private fun stopWaitingTimer() {
             overlay?.visibility = View.VISIBLE
         }
 
-        // --- ИСПРАВЛЕНИЕ: Отменяем предыдущую анимацию, чтобы они не конфликтовали ---
         orderDetailsAnimator?.cancel()
 
-        val animator = android.animation.ValueAnimator.ofInt(startHeight, targetHeight)
-        orderDetailsAnimator = animator // Сохраняем ссылку на текущую анимацию
+        val animator = ValueAnimator.ofInt(startHeight, targetHeight)
+        orderDetailsAnimator = animator
         
         animator.duration = 250
         animator.addUpdateListener { animation ->
@@ -4782,15 +4795,23 @@ private fun stopWaitingTimer() {
             layoutExpandableDetails.layoutParams = params
 
             if (maxDetailsHeight > 0) {
-                overlay?.alpha = h.toFloat() / maxDetailsHeight.toFloat()
+                overlay?.alpha = (h.toFloat() / maxDetailsHeight.toFloat()).coerceIn(0f, 1f)
             }
         }
 
-        animator.addListener(object : android.animation.AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: android.animation.Animator) {
-                if (!expand) {
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (expand) {
+                    // 2. ФИКС ПУСТОТЫ: переводим в WRAP_CONTENT, чтобы карточка облепила контент
+                    val params = layoutExpandableDetails.layoutParams
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    layoutExpandableDetails.layoutParams = params
+                } else {
                     layoutExpandableDetails.visibility = View.GONE
                     overlay?.visibility = View.GONE
+                    val params = layoutExpandableDetails.layoutParams
+                    params.height = 0
+                    layoutExpandableDetails.layoutParams = params
                 }
             }
         })
@@ -4893,12 +4914,9 @@ private fun stopWaitingTimer() {
     // ВСТАВЬ ЭТОТ ВАРИАНТ ВЗАМЕН УДАЛЕННОГО:
 ivMenuIcon.tag = "order_mode"
 
-// 🔥 ЗАЩИТА ОТ ПРЫЖКА ЛОГОТИПА: Применяем большой паддинг при первом показе 
-// ТОЛЬКО если это не режим поиска водителя (в поиске отступ сразу выставит updateStatusUI)
 if (isFirstShow && order.status != "REQUESTED" && order.status != "OFFERING") {
-    setLocationButtonAnchor(R.id.active_order_card)
-    updateMapPadding(activeOrderCard, 0f, 20f)
-}
+            updateMapPadding(activeOrderCard, 0f, 20f)
+        }
 
 // Вирішення 4: Робимо кнопку меню видимою і перетворюємо её на кнопку "Назад"
 btnMenu.visibility = View.VISIBLE
@@ -5044,6 +5062,16 @@ ivMenuIcon.setColorFilter(adaptiveColor)
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+
+    private fun setRecenterRouteButtonAnchor(anchorId: Int, bottomMarginDp: Float = 16f) {
+        val btnRoute = findViewById<View>(R.id.btn_recenter_route) ?: return
+        val params = btnRoute.layoutParams as RelativeLayout.LayoutParams
+        params.removeRule(RelativeLayout.ABOVE)
+        params.addRule(RelativeLayout.ABOVE, anchorId)
+        params.bottomMargin = convertDpToPixel(bottomMarginDp).toInt()
+        btnRoute.layoutParams = params
     }
 private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         if (!::layoutExpandableDetails.isInitialized) return
@@ -5648,10 +5676,10 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.GONE
-                btnRecenterRoute.translationY = 0f
-                btnRecenterRoute.visibility = View.VISIBLE
 
-                btnRecenterRoute.visibility = View.VISIBLE
+                // Закрепляем кнопку ровно над карточкой активного заказа
+                setRecenterRouteButtonAnchor(R.id.active_order_card, 16f)
+                btnRecenterRoute.translationY = 0f
 
                 overlayOrigin.visibility = View.GONE
                 overlayDest.visibility = View.GONE
@@ -5807,14 +5835,14 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.GONE
                 btnRecenterRoute.visibility = View.GONE
-                btnRecenter.visibility = View.VISIBLE
-                setLocationButtonAnchor(R.id.active_order_card)
+                
+                // УДАЛЕНО: btnRecenter.visibility = View.VISIBLE
+                // УДАЛЕНО: setLocationButtonAnchor(R.id.active_order_card)
 
                 stopRadarAnimation()
                 stopDriverTracking()
                 stopWaitingTimer()
 
-                // 🔥 МГНОВЕННАЯ ОЧИСТКА ГРАФИКИ: убираем старый кэш прямо сейчас
                 mMap?.clear() 
                 polylineMain?.remove()
                 polylineMain = null
@@ -5833,18 +5861,15 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 viewModel.currentRoutePolyline = null
                 decodedRoutePoints = null
 
-                // Возвращаем пин-маркер в центр экрана
                 centerPin.translationY = 0f
                 centerPin.animate().cancel()
                 centerPin.alpha = 1f
                 centerPin.visibility = View.VISIBLE
                 try { pinShadow.visibility = View.VISIBLE } catch (e: Exception) {}
 
-                // 🔥 ОДИН ПЛАВНЫЙ ПЕРЕЛЕТ: включаем панель поиска и сразу наводим на пользователя
                 showAddressPanel()
                 recenterMapOnUser() 
 
-                // В самом конце обнуляем стейт во ViewModel
                 viewModel.clearOrderState()
             }
         }
@@ -5897,7 +5922,10 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             tvCarDetailsSubtitle.text = subtitle
 
             val isPartner = (drv.id == -1L)
-
+            btnChatDriver.alpha = if (isPartner) 0.5f else 1.0f
+            if (isPartner) {
+                tvChatBadge.visibility = View.GONE
+            }
             // 1. Имя водителя: убрана приписка "(Партнер)"
             tvDriverFirstName.text = if (isPartner) {
                 "Водій"
@@ -6121,6 +6149,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         clearMapForRoute()
 
         setLocationButtonAnchor(R.id.bottom_sheet_card)
+        btnRecenter.visibility = View.VISIBLE
         btnMenu.visibility = View.VISIBLE
         
         updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)

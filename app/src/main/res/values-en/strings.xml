@@ -54,7 +54,7 @@
 
     <string name="btn_understood">Understood</string>
 
-
+    <string name="toast_chat_unavailable_partner">Chat is unavailable for this driver. Please call the driver</string>
     <!-- Unbind card dialog -->
     <string name="dialog_delete_card_title">Remove Card</string>
     <string name="dialog_delete_card_message">Are you sure you want to remove this card? You will need to add it again to use it for future payments.</string>

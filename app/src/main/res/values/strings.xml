@@ -48,7 +48,7 @@
     <string name="btn_cancel_trip">Скасувати поїздку</string>
     <string name="btn_cancel_order">Скасувати замовлення</string>
     <string name="btn_understood">Зрозуміло</string>
-
+    <string name="toast_chat_unavailable_partner">У водія-партнера вимкнено чат. Скористайтеся дзвінком</string>
 
     <string name="title_add_home">Додати дім</string>
     <string name="hint_add_home">Введіть адресу дому</string>

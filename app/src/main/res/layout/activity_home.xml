@@ -824,24 +824,19 @@
             android:elevation="10dp" />
 
         <com.google.android.material.card.MaterialCardView
-    android:id="@+id/active_order_card"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_alignParentBottom="true"
-    android:layout_marginHorizontal="8dp"
-    android:layout_marginBottom="8dp"
-    android:layout_marginTop="8dp" 
-    app:layout_constraintTop_toTopOf="parent"
-    app:layout_constraintBottom_toBottomOf="parent"
-    app:layout_constrainedHeight="true"
-    app:layout_constraintVertical_bias="1.0"
-    app:cardCornerRadius="24dp"
-    app:cardBackgroundColor="@color/card_background"
-    app:cardElevation="16dp"
-    app:cardPreventCornerOverlap="false"
-    app:cardUseCompatPadding="false"
-    android:visibility="gone"
-    tools:visibility="visible">
+            android:id="@+id/active_order_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginBottom="8dp"
+            app:cardCornerRadius="24dp"
+            app:cardBackgroundColor="@color/card_background"
+            app:cardElevation="16dp"
+            app:cardPreventCornerOverlap="false"
+            app:cardUseCompatPadding="false"
+            android:visibility="gone"
+            tools:visibility="visible">
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -1216,30 +1211,38 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal"
-                            android:padding="12dp"
+                            android:padding="14dp"
                             android:gravity="center_vertical">
 
-                            <ImageView
-                                android:id="@+id/iv_active_order_payment"
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                android:src="@drawable/ic_cash"
-                                app:tint="@color/text_primary" />
+                            <!-- Фиксированный слот 54dp для идеального выравнивания по сетке -->
+                            <FrameLayout
+                                android:layout_width="54dp"
+                                android:layout_height="54dp">
+
+                                <ImageView
+                                    android:id="@+id/iv_active_order_payment"
+                                    android:layout_width="32dp"
+                                    android:layout_height="32dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_cash"
+                                    app:tint="@color/text_primary" />
+                            </FrameLayout>
 
                             <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:orientation="vertical"
-                                android:layout_marginStart="12dp">
+                                android:layout_marginStart="14dp">
 
                                 <TextView
                                     android:id="@+id/tv_active_order_price"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     tools:text="92 ₴"
-                                    android:textSize="18sp"
+                                    android:textSize="20sp"
                                     android:textStyle="bold"
+                                    android:fontFamily="sans-serif-medium"
                                     android:textColor="@color/text_primary" />
 
                                 <TextView
@@ -1247,8 +1250,10 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     tools:text="Готівка"
-                                    android:textSize="13sp"
-                                    android:textColor="@color/text_secondary" />
+                                    android:textSize="14sp"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:textColor="@color/text_secondary"
+                                    android:layout_marginTop="1dp" />
                             </LinearLayout>
                         </LinearLayout>
                     </com.google.android.material.card.MaterialCardView>
@@ -1273,7 +1278,7 @@
                         <androidx.constraintlayout.widget.ConstraintLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:padding="12dp">
+                            android:padding="14dp">
 
                             <View
                                 android:id="@+id/line_route"
@@ -1289,8 +1294,8 @@
 
                             <ImageView
                                 android:id="@+id/iv_order_route_origin_icon"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
                                 android:src="@drawable/ic_marker_base_yellow"
                                 app:layout_constraintStart_toStartOf="parent"
                                 app:layout_constraintTop_toTopOf="@+id/ll_route_origin"
@@ -1311,13 +1316,16 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/label_from_point"
                                     android:textSize="12sp"
+                                    android:fontFamily="sans-serif-medium"
                                     android:textColor="@color/text_secondary" />
                                 <TextView
                                     android:id="@+id/tv_order_route_origin"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     tools:text="Вул. Хрещатик, 1"
-                                    android:textSize="15sp"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold"
+                                    android:fontFamily="sans-serif-medium"
                                     android:textColor="@color/text_primary"
                                     android:layout_marginTop="2dp"/>
                             </LinearLayout>
@@ -1327,7 +1335,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:orientation="vertical"
-                                android:layout_marginTop="4dp"
+                                android:layout_marginTop="6dp"
                                 android:visibility="gone"
                                 tools:visibility="visible"
                                 app:layout_constraintStart_toStartOf="@+id/iv_order_route_origin_icon"
@@ -1336,8 +1344,8 @@
 
                             <ImageView
                                 android:id="@+id/iv_order_route_dest_icon"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
                                 android:src="@drawable/ic_marker_to"
                                 app:layout_constraintStart_toStartOf="parent"
                                 app:layout_constraintTop_toTopOf="@+id/ll_route_dest"
@@ -1349,7 +1357,7 @@
                                 android:layout_height="wrap_content"
                                 android:orientation="vertical"
                                 android:layout_marginStart="12dp"
-                                android:layout_marginTop="12dp"
+                                android:layout_marginTop="14dp"
                                 app:layout_constraintStart_toEndOf="@+id/iv_order_route_dest_icon"
                                 app:layout_constraintEnd_toEndOf="parent"
                                 app:layout_constraintTop_toBottomOf="@+id/ll_route_waypoints">
@@ -1358,13 +1366,16 @@
                                     android:layout_height="wrap_content"
                                     android:text="@string/label_to_point"
                                     android:textSize="12sp"
+                                    android:fontFamily="sans-serif-medium"
                                     android:textColor="@color/text_secondary" />
                                 <TextView
                                     android:id="@+id/tv_order_route_dest"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     tools:text="Вул. Амосова, 12"
-                                    android:textSize="15sp"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold"
+                                    android:fontFamily="sans-serif-medium"
                                     android:textColor="@color/text_primary"
                                     android:layout_marginTop="2dp"/>
                             </LinearLayout>
@@ -1394,13 +1405,14 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal"
-                            android:padding="12dp"
+                            android:padding="14dp"
                             android:gravity="center_vertical">
 
                             <ImageView
                                 android:id="@+id/iv_order_tariff_icon"
-                                android:layout_width="40dp"
-                                android:layout_height="40dp"
+                                android:layout_width="54dp"
+                                android:layout_height="54dp"
+                                android:scaleType="fitCenter"
                                 android:src="@drawable/ic_taxi_model_standard" />
 
                             <LinearLayout
@@ -1408,23 +1420,26 @@
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:orientation="vertical"
-                                android:layout_marginStart="12dp">
+                                android:layout_marginStart="14dp">
 
                                 <TextView
                                     android:id="@+id/tv_order_tariff_name"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     tools:text="Стандарт"
-                                    android:textSize="16sp"
+                                    android:textSize="17sp"
                                     android:textStyle="bold"
+                                    android:fontFamily="sans-serif-medium"
                                     android:textColor="@color/text_primary" />
 
                                 <TextView
                                     android:id="@+id/tv_order_services"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:textSize="12sp"
+                                    android:textSize="13sp"
+                                    android:fontFamily="sans-serif-medium"
                                     android:textColor="@color/text_secondary"
+                                    android:layout_marginTop="2dp"
                                     android:visibility="gone"
                                     tools:visibility="visible"
                                     tools:text="+ Кондиціонер" />

@@ -2,15 +2,15 @@ package com.taxiapp.client.utils
 
 object AddressUtils {
     fun formatAddress(rawAddress: String?): String {
-        if (rawAddress.isNullOrEmpty()) return ""
+        if (rawAddress.isNullOrBlank()) return ""
 
-        var text = rawAddress!!
+        var text = rawAddress.trim()
 
         // 1. ВИДАЛЯЄМО "PLUS CODES" (Наприклад, 7F7P+F9P)
         text = text.replace(Regex("^[A-Z0-9]+\\+[A-Z0-9]+\\s*,?"), "")
             .replace(Regex("\\s*[A-Z0-9]+\\+[A-Z0-9]+"), "")
 
-        // 2. АГРЕСИВНЕ ОЧИЩЕННЯ (Індекси, Країна)
+        // 2. ОЧИЩЕННЯ ВІД КРАЇНИ ТА ПОШТОВИХ ІНДЕКСІВ
         text = text
             .replace(Regex("\\b\\d{5}\\b"), "")
             .replace(", Україна", "", ignoreCase = true)
@@ -20,13 +20,23 @@ object AddressUtils {
             .replace(", Украина", "", ignoreCase = true)
             .replace("Украина", "", ignoreCase = true)
             .replace("Unnamed Road", "Точка на карті", ignoreCase = true)
-            .replace(", ,", ",")
-            .trim()
-            .removeSuffix(",")
-            .removePrefix(",")
-            .trim()
 
-        // 3. НОРМАЛІЗАЦІЯ АНГЛІЦИЗМІВ У НОМЕРАХ БУДИНКІВ (1D -> 1Д, 14A -> 14А)
+        // 3. ВИДАЛЯЄМО ВСІ ОБЛАСТІ ТА РАЙОНИ (Одеська обл., Київська область, р-н тощо)
+        text = text
+            .replace(Regex("\\b\\w+(ська|цька|зька|ская|цкая|зская)\\s+(область|обл\\.?|район|р-н\\.?)\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\b(область|обл\\.?|район|р-н\\.?)\\s+\\w+\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\b\\w+\\s+(Oblast|Region|Raion|District)\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("Автономна Республіка Крим|АР Крим", RegexOption.IGNORE_CASE), "")
+
+        // 4. ОЧИЩЕННЯ ВІД ВЛАДЕНИХ ТА ПОРОЖНІХ ДУЖОК
+        text = text
+            .replace(Regex("\\(\\s*\\)"), "")
+            .replace("((", "(")
+            .replace("))", ")")
+            .replace(Regex("\\(\\s*,"), "(")
+            .replace(Regex(",\\s*\\)"), ")")
+
+        // 5. НОРМАЛІЗАЦІЯ АНГЛІЦИЗМІВ У НОМЕРАХ БУДИНКІВ (1D -> 1Д, 14A -> 14А)
         val latinToCyrillic = mapOf(
             'A' to 'А', 'a' to 'а',
             'B' to 'Б', 'b' to 'б',
@@ -47,22 +57,33 @@ object AddressUtils {
             "$digits$letters"
         }
 
-        // 4. РОЗБИВАЄМО НА ЧАСТИНИ
-        var parts = text.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+        // 6. РОЗБИВАЄМО НА ЧАСТИНИ ПО КОМАХ ТА ДУЖКАХ
+        var parts = text
+            .replace("(", ", ")
+            .replace(")", "")
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toMutableList()
 
-        // 5. ПОШУК МІСТА
+        // 7. ПОШУК ТА ВИТЯГ МІСТА
         var city = ""
         if (parts.size > 1) {
             val lastPart = parts.last()
-            val isNumber = lastPart.any { it.isDigit() }
-            if (!isNumber) {
+            val isHouseNumber = lastPart.any { it.isDigit() }
+            val isStreetKeyword = listOf("вул", "пр-т", "пер", "наб", "б-р", "ш.", "пл", "м-н").any {
+                lastPart.contains(it, ignoreCase = true)
+            }
+
+            if (!isHouseNumber && !isStreetKeyword) {
                 city = lastPart
+                    .replace(Regex("^(м\\.|м\\s+|місто\\s+|город\\s+|c\\.|с\\.\\s+|смт\\.?\\s*)", RegexOption.IGNORE_CASE), "")
+                    .trim()
                 parts.removeAt(parts.lastIndex)
             }
         }
 
-        // 6. ДЕДУПЛІКАЦІЯ НОМЕРА БУДИНКУ В НАЧАЛІ
-        // Якщо перша частина (наприклад, "14А" або "1Д") зустрічається в наступних частинах адреси — видаляємо її з початку
+        // 8. ДЕДУПЛІКАЦІЯ НОМЕРА БУДИНКУ В ПОЧАТКУ
         if (parts.size > 1) {
             val firstPart = parts.first().lowercase()
             val restContainsFirst = parts.drop(1).any { part ->
@@ -74,16 +95,17 @@ object AddressUtils {
             }
         }
 
-        // Видаляємо дублікати однакових слів/частин адреси
+        // 9. ВИДАЛЯЄМО ДУБЛІКАТИ ТА МІСТО З ОСНОВНОЇ ЧАСТИНИ
         val uniqueParts = mutableListOf<String>()
         for (p in parts) {
-            if (uniqueParts.none { it.equals(p, ignoreCase = true) }) {
+            if (uniqueParts.none { it.equals(p, ignoreCase = true) } &&
+                (city.isEmpty() || !p.equals(city, ignoreCase = true))) {
                 uniqueParts.add(p)
             }
         }
         parts = uniqueParts
 
-        // 7. СКОРОЧЕННЯ
+        // 10. СКОРОЧЕННЯ ТИПІВ ВУЛИЦЬ
         val replacements = mapOf(
             "вулиця" to "вул.",
             "улица" to "вул.",
@@ -97,9 +119,7 @@ object AddressUtils {
             "шоссе" to "ш.",
             "площа" to "пл.",
             "площадь" to "пл.",
-            "майдан" to "м-н",
-            "район" to "р-он",
-            "область" to "обл."
+            "майдан" to "м-н"
         )
 
         val formattedParts = parts.map { part ->
@@ -110,11 +130,11 @@ object AddressUtils {
             p
         }
 
-        // 8. ЗБІРКА
+        // 11. ФІНАЛЬНА ЗБІРКА АДРЕСИ
         val mainAddress = formattedParts.joinToString(", ")
 
         if (mainAddress.isEmpty() && city.isNotEmpty()) {
-            return city
+            return city.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         }
 
         return if (city.isNotEmpty()) {

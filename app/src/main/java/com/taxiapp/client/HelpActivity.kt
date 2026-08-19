@@ -33,10 +33,6 @@ class HelpActivity : BaseActivity() {
         }
 
         // 4. Заглушки
-        findViewById<LinearLayout>(R.id.btn_tariffs)?.setOnClickListener {
-            val intent = Intent(this, HelpTariffsActivity::class.java)
-            startActivity(intent)
-        }
 
         findViewById<LinearLayout>(R.id.btn_payment)?.setOnClickListener {
             val intent = Intent(this, HelpPaymentActivity::class.java)
