@@ -24,7 +24,7 @@
             android:id="@+id/iv_tariff_icon"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:src="@drawable/ic_car_marker_info"
+            android:src="@drawable/bg_car_placeholder"
             android:scaleType="fitCenter"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"

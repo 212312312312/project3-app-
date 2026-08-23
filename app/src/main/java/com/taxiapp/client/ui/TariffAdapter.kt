@@ -86,13 +86,12 @@ class TariffAdapter(
 
                 Glide.with(itemView.context)
                     .load(fullUrl)
-                    .placeholder(R.drawable.ic_taxi_model_standard)
-                    .error(R.drawable.ic_taxi_model_standard)
+                    .placeholder(R.drawable.bg_car_placeholder)
+                    .error(R.drawable.bg_car_placeholder)
                     .into(image)
             } else {
-                image.setImageResource(R.drawable.ic_taxi_model_standard)
+                image.setImageResource(R.drawable.bg_car_placeholder)
             }
-
             // --- Знижки та Стара ціна ---
             if (item.oldPriceValue != null && item.oldPriceValue > item.priceValue && item.priceValue > 0) {
                 oldPrice.visibility = View.VISIBLE

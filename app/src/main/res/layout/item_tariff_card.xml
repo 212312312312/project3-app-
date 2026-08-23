@@ -12,7 +12,7 @@
         android:id="@+id/iv_tariff_icon"
         android:layout_width="64dp"
         android:layout_height="64dp"
-        android:src="@drawable/ic_home_custom"
+        android:src="@drawable/bg_car_placeholder"
         android:layout_marginBottom="8dp"/>
 
     <TextView

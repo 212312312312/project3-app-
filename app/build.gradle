@@ -18,11 +18,11 @@ android {
         applicationId "com.taxiunit.unitapp"
         minSdk 24
         targetSdk 36
-        versionCode 14
-        versionName "1.0.14"
+        versionCode 17
+        versionName "1.0.17"
         buildConfigField "String", "GOOGLE_PLACES_API_KEY", "\"${properties.getProperty('GOOGLE_PLACES_API_KEY', '')}\""
 
-        buildConfigField "String", "BASE_URL", "\"http://192.168.0.107:8080/\""
+        buildConfigField "String", "BASE_URL", "\"https://api.unitua.com/\""
 
         // 🔥 ДОБАВЛЯЕМ СЮДА: Читаем ключ карт из свойств и пробрасываем в Манифест
         manifestPlaceholders = [mapsApiKeyPlaceholder: properties.getProperty("MAPS_API_KEY", "")]

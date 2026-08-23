@@ -77,11 +77,15 @@ class OrderStatusService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val largeIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(finalTitle)
             .setContentText(finalBody)
             .setStyle(NotificationCompat.BigTextStyle().bigText(finalBody))
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(largeIconBitmap)
+            .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.notification_icon_bg))
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

@@ -16,6 +16,9 @@
     <color name="almost_black">#010101</color>
     <color name="taxi_red">#E53935</color>
 
+    <!-- Выделенный цвет фона (кружка) для уведомлений -->
+    <color name="notification_icon_bg">#FF000000</color>
+
 
     <color name="taxi_red_cancel">#FF6B6B</color>
 

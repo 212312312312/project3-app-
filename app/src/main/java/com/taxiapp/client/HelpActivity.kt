@@ -84,7 +84,7 @@ class HelpActivity : BaseActivity() {
 
     private fun openTelegram() {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/taxi_support_bot"))
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/unit_taxi_support_bot"))
             startActivity(intent)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -93,7 +93,7 @@ class HelpActivity : BaseActivity() {
 
     private fun makeCall() {
         try {
-            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+380999999999"))
+            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:+380633101265"))
             startActivity(intent)
         } catch (e: Exception) {
             e.printStackTrace()

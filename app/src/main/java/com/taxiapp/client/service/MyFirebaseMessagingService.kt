@@ -118,8 +118,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val largeIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.mipmap.ic_launcher) // Переконайтесь, що іконка існує, або замініть на вашу
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(largeIconBitmap)
+            .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.notification_icon_bg))
             .setContentTitle(title)
             .setContentText(message)
             .setAutoCancel(true)

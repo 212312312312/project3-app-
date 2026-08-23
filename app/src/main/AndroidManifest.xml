@@ -22,12 +22,21 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ClientApp"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
 
         android:localeConfig="@xml/locales_config"
         tools:targetApi="31">
 
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_icon_bg" />
 
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${mapsApiKeyPlaceholder}" />
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${mapsApiKeyPlaceholder}" />

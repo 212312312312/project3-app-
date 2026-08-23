@@ -155,10 +155,8 @@ object ApiClient {
                     } else {
                         logDebug("AUTH INTERCEPTOR: Refresh FAILED with code ${refreshResponse.code()}")
 
-                        // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Выкидываем на регистрацию ТОЛЬКО если сервер явно
-                        // ответил 400 или 401 (значит Refresh Token действительно протух или аннулирован).
-                        // Если сервер лежит (500/503), мы НЕ стираем сессию пользователя!
-                        if (refreshResponse.code() == 400 || refreshResponse.code() == 401) {
+                        // Сбрасываем сессию при 400, 401, 403 (недействительный или протухший Refresh Token)
+                        if (refreshResponse.code() in listOf(400, 401, 403, 404)) {
                             sm.clearSession()
                             ServerStatusBus.triggerSessionExpired()
                         }
