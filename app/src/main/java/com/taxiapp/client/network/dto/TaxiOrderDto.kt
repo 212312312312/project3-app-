@@ -49,6 +49,7 @@ data class TaxiOrderDto(
     val waitingPrice: Double = 0.0,
     val freeWaitingMinutes: Int = 3,
     val pricePerWaitingMinute: Double = 0.0,
+    val cancellationReason: String? = null,
 
     // --- НОВОЕ ПОЛЕ ---
     val scheduledAt: String? = null,

@@ -241,6 +241,14 @@ class MainActivity : BaseActivity() {
                     if (token != null) {
                         sessionManager.saveUserId(body.userId)
 
+                        // 📊 ТРЕКИНГ: Фиксируем регистрацию нового пользователя через Google
+                        if (body.isNewUser) {
+                            com.taxiapp.client.analytics.AnalyticsManager.trackUserRegistered(
+                                userId = body.userId,
+                                source = sessionManager.getUtmSource() ?: marketingSource ?: "google_auth"
+                            )
+                        }
+
                         // Если помечен как новый ИЛИ в ответе пустой номер — только привязка телефона
                         if (body.isNewUser || phone.isNullOrBlank()) {
                             sessionManager.saveAuthToken(token)
@@ -254,7 +262,7 @@ class MainActivity : BaseActivity() {
                             updateFcmTokenOnServer()
                             checkWhereToGo(false)
                         }
-                    }else {
+                    } else {
                         showToast("Помилка сервера при Google авторизації")
                     }
                 } else {

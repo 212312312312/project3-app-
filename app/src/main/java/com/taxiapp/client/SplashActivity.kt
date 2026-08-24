@@ -39,6 +39,22 @@ class SplashActivity : BaseActivity()  {
         val slideUp = AnimationUtils.loadAnimation(this, R.anim.slide_up)
         // Анімуємо тільки контент
         contentWrapper.startAnimation(slideUp)
+
+        val sessionManager = SessionManager(applicationContext)
+        val utmSource = intent?.data?.getQueryParameter("utm_source") ?: intent?.data?.getQueryParameter("source")
+        val utmMedium = intent?.data?.getQueryParameter("utm_medium")
+        val utmCampaign = intent?.data?.getQueryParameter("utm_campaign")
+
+        if (!utmSource.isNullOrBlank()) {
+            sessionManager.saveUtmTags(utmSource, utmMedium, utmCampaign)
+            com.taxiapp.client.analytics.AnalyticsManager.utmSource = utmSource
+            com.taxiapp.client.analytics.AnalyticsManager.utmMedium = utmMedium
+            com.taxiapp.client.analytics.AnalyticsManager.utmCampaign = utmCampaign
+        }
+
+        val userId = sessionManager.fetchUserId()
+        val deviceId = sessionManager.fetchDeviceId()
+        com.taxiapp.client.analytics.AnalyticsManager.trackAppOpen(userId, deviceId)
         // -----------------
 
         navigationHandler.postDelayed(navigationRunnable, 2000)

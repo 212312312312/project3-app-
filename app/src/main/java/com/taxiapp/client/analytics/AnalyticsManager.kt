@@ -74,4 +74,36 @@ object AnalyticsManager {
             }
         }
     }
+
+    fun trackAppOpen(userId: Long, deviceId: String) {
+        trackCustomEvent("app_open", "user:$userId,device:$deviceId")
+    }
+
+    fun trackUserRegistered(userId: Long, source: String?) {
+        trackCustomEvent("user_registered", "user:$userId,source:${source ?: "organic"}")
+    }
+
+    fun trackOrderCreated(orderId: String, district: String?, basePrice: Double) {
+        trackCustomEvent("order_created", "order:$orderId,district:${district ?: "city"},base:$basePrice")
+    }
+
+    fun trackBoostClicked(orderId: String, boostAmount: Double, timeSinceCreationSec: Long) {
+        trackCustomEvent("boost_clicked", "order:$orderId,boost:+$boostAmount,sec:$timeSinceCreationSec")
+    }
+
+    fun trackOrderAccepted(orderId: String, driverSource: String, searchDurationSec: Long) {
+        trackCustomEvent("order_accepted", "order:$orderId,source:$driverSource,duration:${searchDurationSec}s")
+    }
+
+    fun trackOrderCompleted(orderId: String, finalPrice: Double, orderNumber: Int) {
+        trackCustomEvent("order_completed", "order:$orderId,price:$finalPrice,ride_num:$orderNumber")
+    }
+
+    fun trackOrderFailed(orderId: String, reason: String, searchDurationSec: Long) {
+        trackCustomEvent("order_failed", "order:$orderId,reason:$reason,duration:${searchDurationSec}s")
+    }
+
+    fun trackPushDiscountSent(userId: Long, triggerType: String) {
+        trackCustomEvent("push_discount_sent", "user:$userId,trigger:$triggerType")
+    }
 }

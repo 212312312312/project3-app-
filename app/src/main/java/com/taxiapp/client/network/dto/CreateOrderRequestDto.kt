@@ -17,7 +17,11 @@ data class CreateOrderRequestDto(
     val paymentMethod: String,
     val serviceIds: List<Long> = emptyList(),
     val addedValue: Double = 0.0,
+    val scheduledAt: String? = null,
 
-    // --- НОВОЕ ПОЛЕ ---
-    val scheduledAt: String? = null // Формат: "2026-01-30T15:30:00"
+    // ➕ ДОБАВИТЬ ПОЛЯ:
+    val districtStart: String? = null,
+    val districtEnd: String? = null,
+    val deviceId: String? = null,
+    val boostAmount: Double? = 0.0
 )

@@ -22,7 +22,7 @@ android {
         versionName "1.0.17"
         buildConfigField "String", "GOOGLE_PLACES_API_KEY", "\"${properties.getProperty('GOOGLE_PLACES_API_KEY', '')}\""
 
-        buildConfigField "String", "BASE_URL", "\"https://api.unitua.com/\""
+        buildConfigField "String", "BASE_URL", "\"http://192.168.0.107:8080/\""
 
         // 🔥 ДОБАВЛЯЕМ СЮДА: Читаем ключ карт из свойств и пробрасываем в Манифест
         manifestPlaceholders = [mapsApiKeyPlaceholder: properties.getProperty("MAPS_API_KEY", "")]

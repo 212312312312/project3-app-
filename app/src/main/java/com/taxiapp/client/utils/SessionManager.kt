@@ -13,7 +13,7 @@ data class SessionPromoData(
     val maxDiscountAmount: Double
 )
 
-class SessionManager(context: Context) {
+class SessionManager(private val context: Context) {
 
     private var prefs: SharedPreferences
 
@@ -21,6 +21,11 @@ class SessionManager(context: Context) {
         const val PREFS_NAME = "TaxiAppPrefs"
 
         const val KEY_LANGUAGE = "app_language"
+
+        const val KEY_DEVICE_ID = "app_device_id"
+        const val KEY_UTM_SOURCE = "utm_source"
+        const val KEY_UTM_MEDIUM = "utm_medium"
+        const val KEY_UTM_CAMPAIGN = "utm_campaign"
 
         const val KEY_USER_ID = "user_id"
         const val USER_TOKEN = "user_token"
@@ -117,6 +122,34 @@ class SessionManager(context: Context) {
             apply()
         }
     }
+
+    fun fetchDeviceId(): String {
+        var deviceId = prefs.getString(KEY_DEVICE_ID, null)
+        if (deviceId.isNullOrEmpty()) {
+            val androidId = android.provider.Settings.Secure.getString(
+                context.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID
+            )
+            deviceId = if (!androidId.isNullOrEmpty() && androidId != "9774d56d682e549c") {
+                androidId
+            } else {
+                java.util.UUID.randomUUID().toString()
+            }
+            prefs.edit().putString(KEY_DEVICE_ID, deviceId).apply()
+        }
+        return deviceId
+    }
+
+    fun saveUtmTags(source: String?, medium: String?, campaign: String?) {
+        prefs.edit().apply {
+            putString(KEY_UTM_SOURCE, source)
+            putString(KEY_UTM_MEDIUM, medium)
+            putString(KEY_UTM_CAMPAIGN, campaign)
+            apply()
+        }
+    }
+
+    fun getUtmSource(): String? = prefs.getString(KEY_UTM_SOURCE, null)
 
     fun fetchUserCity(): CityData? {
         val name = prefs.getString(USER_CITY_NAME, null) ?: return null

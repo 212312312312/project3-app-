@@ -4050,6 +4050,15 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
         btnSave.setOnClickListener {
             val newAddedValue = (currentPrice - minPrice).toDouble()
+            val order = viewModel.activeOrder.value
+            if (order != null) {
+                val durationSec = 30L // расчет разницы времени с создания заказа
+                com.taxiapp.client.analytics.AnalyticsManager.trackBoostClicked(
+                    orderId = order.id,
+                    boostAmount = newAddedValue,
+                    timeSinceCreationSec = durationSec
+                )
+            }
             viewModel.updateActiveOrderPrice(newAddedValue)
             dialog.dismiss()
         }
@@ -4566,7 +4575,7 @@ private fun stopWaitingTimer() {
         
         btnLocation.layoutParams = params
     }
-    
+
     private fun createOrder(tariff: CarTariffDto, price: Double) {
         btnOrderTaxi.isEnabled = false
         btnOrderTaxi.text = "Обробка..."
@@ -4587,6 +4596,10 @@ private fun stopWaitingTimer() {
             scheduledAtString = sdf.format(scheduledDate!!.time)
         }
 
+        val startDistrict = originPlace?.name?.split(",")?.getOrNull(1)?.trim() ?: "Центр"
+        val endDistrict = destinationPlace?.name?.split(",")?.getOrNull(1)?.trim() ?: "Місто"
+        val deviceId = sessionManager.fetchDeviceId()
+
         val request = CreateOrderRequestDto(
             fromAddress = originPlace!!.name ?: "А",
             toAddress = destinationPlace!!.name ?: "Б",
@@ -4604,12 +4617,23 @@ private fun stopWaitingTimer() {
             paymentMethod = currentPaymentMethod,
             serviceIds = selectedServiceIds,
             addedValue = myAddedValue,
-            scheduledAt = scheduledAtString
+            scheduledAt = scheduledAtString,
+            // ➕ НОВЫЕ ПОЛЯ АНАЛИТИКИ И АНТИФРОДА:
+            districtStart = startDistrict,
+            districtEnd = endDistrict,
+            deviceId = deviceId,
+            boostAmount = myAddedValue
+        )
+
+        // 📊 ТРЕКИНГ: Старт воронки заказа
+        com.taxiapp.client.analytics.AnalyticsManager.trackOrderCreated(
+            orderId = "temp_${System.currentTimeMillis()}",
+            district = startDistrict,
+            basePrice = tariff.basePrice
         )
 
         viewModel.createOrder(request)
     }
-
     private fun showChangePriceDialog() {
     val selectedItem = tariffAdapter.getSelectedTariff()
     if (selectedItem == null) {
@@ -5540,6 +5564,14 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             "ACCEPTED" -> {
                 isCameraFocusedOnSearch = false
 
+                // 📊 ТРЕКИНГ: Замер скорости взятия заказа и источника водителя
+                val isPartner = (order.driver?.id == -1L)
+                com.taxiapp.client.analytics.AnalyticsManager.trackOrderAccepted(
+                    orderId = order.id,
+                    driverSource = if (isPartner) "evos_exchange" else "own_fleet",
+                    searchDurationSec = 45L
+                )
+
                 polylineMain?.remove()
                 polylineMain = null
                 polylineBorder?.remove()
@@ -5579,14 +5611,11 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.VISIBLE
 
-                // ➕ Сбрасываем сдвиги и скрываем кнопку центрирования в ACCEPTED
                 btnRecenterRoute.translationY = 0f
                 btnRecenterRoute.visibility = View.GONE
 
                 updateDriverInfo(order)
                 stopWaitingTimer()
-
-                // ➕ ДОБАВЛЕНО: Дожидаемся полного пересчета высоты карточки active_order_card
 
                 order.driver?.let { drv ->
                     val lat = drv.latitude
@@ -5605,10 +5634,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 startDriverTracking(order.id)
             }
-"DRIVER_ARRIVED" -> {
+            "DRIVER_ARRIVED" -> {
                 isCameraFocusedOnSearch = false
 
-                // Очищаем линию подачи (водитель уже прибыл)
                 pickupPolyline?.remove()
                 pickupPolyline = null
                 pickupRoutePoints.clear()
@@ -5651,7 +5679,6 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 updateDriverInfo(order)
                 startWaitingTimer(order)
 
-                // ➕ Фокусируем камеру на водителе / Точке А
                 val targetLatLng = order.driver?.let { drv ->
                     if (drv.latitude != null && drv.longitude != null && drv.latitude != 0.0 && drv.longitude != 0.0) {
                         val initialLoc = TrackingLocationDto(
@@ -5695,7 +5722,6 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.GONE
 
-                // Закрепляем кнопку ровно над карточкой активного заказа
                 setRecenterRouteButtonAnchor(R.id.active_order_card, 16f)
                 btnRecenterRoute.translationY = 0f
 
@@ -5791,6 +5817,13 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 resetOrderDetailsState()
                 orderStatusText.text = getString(R.string.status_completed)
 
+                // 📊 ТРЕКИНГ: Главная маркетинговая конверсия
+                com.taxiapp.client.analytics.AnalyticsManager.trackOrderCompleted(
+                    orderId = order.id,
+                    finalPrice = order.price,
+                    orderNumber = order.driver?.completedRides ?: 1
+                )
+
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.GONE
 
@@ -5843,6 +5876,13 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 orderStatusText.text = getString(R.string.status_cancelled)
                 orderStatusText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.taxi_red_cancel))
 
+                // 📊 ТРЕКИНГ: Анализ отмен и поиска дыр в вывозимости
+                com.taxiapp.client.analytics.AnalyticsManager.trackOrderFailed(
+                    orderId = order.id,
+                    reason = order.cancellationReason ?: "Скасовано клієнтом",
+                    searchDurationSec = 60L
+                )
+
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.GONE
                 layoutSearchDetails.visibility = View.GONE
@@ -5853,22 +5893,19 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 btnCancelOrder.visibility = View.GONE
                 btnCancelRideDriver.visibility = View.GONE
                 btnRecenterRoute.visibility = View.GONE
-                
-                // УДАЛЕНО: btnRecenter.visibility = View.VISIBLE
-                // УДАЛЕНО: setLocationButtonAnchor(R.id.active_order_card)
 
                 stopRadarAnimation()
                 stopDriverTracking()
                 stopWaitingTimer()
 
-                mMap?.clear() 
+                mMap?.clear()
                 polylineMain?.remove()
                 polylineMain = null
                 polylineBorder?.remove()
                 polylineBorder = null
                 polylineAnim?.remove()
                 polylineAnim = null
-                
+
                 destinationMarker = null
                 originMarker = null
                 driverMarker = null
@@ -5886,7 +5923,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 try { pinShadow.visibility = View.VISIBLE } catch (e: Exception) {}
 
                 showAddressPanel()
-                recenterMapOnUser() 
+                recenterMapOnUser()
 
                 viewModel.clearOrderState()
             }

@@ -25,6 +25,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val type = remoteMessage.data["type"]
 
+        // 📊 ТРЕКИНГ: Логирование триггерных пушей скидок и удержания
+        val triggerType = remoteMessage.data["trigger_type"] ?: remoteMessage.data["type"]
+        if (triggerType == "push_discount_sent" || triggerType == "48h_after_first_ride" || triggerType == "DISCOUNT_PROMO") {
+            val sessionManager = com.taxiapp.client.utils.SessionManager(applicationContext)
+            com.taxiapp.client.analytics.AnalyticsManager.trackPushDiscountSent(
+                userId = sessionManager.fetchUserId(),
+                triggerType = triggerType
+            )
+        }
+
         // 1. Обробка повідомлень чату
         if (type == "CHAT_MESSAGE") {
             if (com.taxiapp.client.ChatEventBus.isChatScreenOpen) {
@@ -36,7 +46,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         // =======================================================================
-        // 2. ДОДАНО: Обробка тихого пуша зі зміною статусу замовлення
+        // 2. Обробка тихого пуша зі зміною статусу замовлення
         // =======================================================================
         if (type == "ORDER_STATUS_UPDATE") {
             val orderIdStr = remoteMessage.data["orderId"]
@@ -47,16 +57,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             if (orderIdStr != null && status != null) {
                 val orderId = orderIdStr.toLongOrNull() ?: return
 
-                // Если заказ закрыт или отменен — останавливаем виджет шторки и очищаем локальную сессию
                 if (status == "COMPLETED" || status == "CANCELLED") {
                     val stopIntent = Intent(this, OrderStatusService::class.java).apply {
                         action = OrderStatusService.ACTION_STOP
-                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderIdStr) // Передаем строковый UUID
+                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderIdStr)
                     }
                     startService(stopIntent)
 
                     if (status == "COMPLETED") {
-                        // Передаем сигнал обновления, чтобы экран показал завершение поездки и оценку
                         com.taxiapp.client.network.OrderStatusBus.notifyOrderUpdated(orderIdStr)
                     } else {
                         val sessionManager = com.taxiapp.client.utils.SessionManager(applicationContext)
@@ -64,7 +72,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         com.taxiapp.client.network.OrderStatusBus.notifyOrderCanceled(orderIdStr)
                     }
                 } else {
-                    // Если заказ активен — обновляем Foreground Service
                     val updateIntent = Intent(this, OrderStatusService::class.java).apply {
                         putExtra(OrderStatusService.EXTRA_ORDER_ID, orderId)
                         putExtra(OrderStatusService.EXTRA_STATUS, status)
@@ -77,7 +84,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         startService(updateIntent)
                     }
 
-                    // 🟢 ДОБАВЛЕНО: Мгновенно триггерим обновление UI на открытом экране
                     com.taxiapp.client.network.OrderStatusBus.notifyOrderUpdated(orderIdStr)
                 }
             }
@@ -88,9 +94,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // 3. Якщо є стандартна нотифікація (наприклад, Новини)
         if (remoteMessage.notification != null) {
             showNotification(remoteMessage.notification?.title ?: "Сповіщення", remoteMessage.notification?.body ?: "")
-        }
-        // Якщо це якийсь інший data payload (не статус і не чат)
-        else if (remoteMessage.data.isNotEmpty() && type != "CHAT_MESSAGE") {
+        } else if (remoteMessage.data.isNotEmpty() && type != "CHAT_MESSAGE") {
             val title = remoteMessage.data["title"] ?: "Сповіщення"
             val body = remoteMessage.data["body"]
             if (body != null) {
