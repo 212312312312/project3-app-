@@ -83,8 +83,9 @@ object AnalyticsManager {
         trackCustomEvent("user_registered", "user:$userId,source:${source ?: "organic"}")
     }
 
-    fun trackOrderCreated(orderId: String, district: String?, basePrice: Double) {
-        trackCustomEvent("order_created", "order:$orderId,district:${district ?: "city"},base:$basePrice")
+    fun trackOrderFailed(orderId: String, reason: String, searchDurationSec: Long) {
+        trackCustomEvent("order_failed", "order:$orderId,reason:$reason,duration:${searchDurationSec}s")
+        flushEvents() // 👈 Мгновенная отправка пакета на сервер
     }
 
     fun trackBoostClicked(orderId: String, boostAmount: Double, timeSinceCreationSec: Long) {
@@ -99,8 +100,9 @@ object AnalyticsManager {
         trackCustomEvent("order_completed", "order:$orderId,price:$finalPrice,ride_num:$orderNumber")
     }
 
-    fun trackOrderFailed(orderId: String, reason: String, searchDurationSec: Long) {
-        trackCustomEvent("order_failed", "order:$orderId,reason:$reason,duration:${searchDurationSec}s")
+    fun trackOrderCreated(orderId: String, district: String?, basePrice: Double) {
+        trackCustomEvent("order_created", "order:$orderId,district:${district ?: "city"},base:$basePrice")
+        flushEvents() // 👈 Мгновенная отправка пакета на сервер
     }
 
     fun trackPushDiscountSent(userId: Long, triggerType: String) {

@@ -217,11 +217,11 @@
     <string name="dialog_schedule_title">Оберіть час подачі</string>
     <string name="dialog_schedule_tab_date">Дата</string>
     <string name="dialog_schedule_tab_time">Час</string>
-
+    <string name="toast_boost_added">Додано 20₴</string>
     <string name="point_on_map">Точка на карті</string>
     <string name="hint_where_from">Звідки?</string>
     <string name="status_cancelled">Скасовано</string>
-    <string name="status_searching_driver">Пошук водія...</string>
+    <string name="status_searching_driver">Пошук водія</string>
     <string name="status_driver_coming">Водій їде до вас</string>
     <string name="status_driver_arrived">Водій на місці</string>
     <string name="status_in_progress">В дорозі</string>

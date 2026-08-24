@@ -59,6 +59,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _routeInfo = MutableLiveData<Pair<Int, Int>>()
     val routeInfo: LiveData<Pair<Int, Int>> get() = _routeInfo
 
+    var isBoostPromptShown = false
+
     private val _decodedRoute = MutableLiveData<List<LatLng>>()
     val decodedRoute: LiveData<List<LatLng>> get() = _decodedRoute
 
@@ -332,24 +334,66 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelOrder(reasonText: String? = null) {
         val id = activeOrderId ?: return
+        val currentOrder = _activeOrder.value
         _isLoading.value = true
 
         ApiClient.instance.cancelOrder(id, reasonText).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
-                _isLoading.value = true // ИСПРАВЛЕНО на false при ответе
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
-                    _activeOrder.value = response.body()
+                    val order = response.body()!!
+
+                    // Расчет длительности поиска для аналитики
+                    val durationSec = if (order.createdAt != null) {
+                        try {
+                            val created = java.time.LocalDateTime.parse(order.createdAt)
+                            java.time.Duration.between(created, java.time.LocalDateTime.now()).seconds
+                        } catch (e: Exception) { 0L }
+                    } else 0L
+
+                    // Фиксация события отмены в аналитике
+                    com.taxiapp.client.analytics.AnalyticsManager.trackOrderFailed(
+                        orderId = id,
+                        reason = reasonText ?: "Скасовано клієнтом",
+                        searchDurationSec = durationSec
+                    )
+
+                    stopOrderStatusService(id)
+                    clearOrderState()
                 } else {
                     _errorMessage.value = "Не вдалося скасувати"
                 }
             }
+
             override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
                 _isLoading.value = false
                 _errorMessage.value = "Помилка мережі"
             }
         })
     }
+
+
+    fun applyBoostPrice(boostAmount: Double = 20.0) {
+        val order = _activeOrder.value ?: return
+        val newAddedValue = order.addedValue + boostAmount
+
+        val durationSec = if (order.createdAt != null) {
+            try {
+                val created = java.time.LocalDateTime.parse(order.createdAt)
+                java.time.Duration.between(created, java.time.LocalDateTime.now()).seconds
+            } catch (e: Exception) { 180L }
+        } else 180L
+
+        // Фіксація в продуктовій аналітиці
+        com.taxiapp.client.analytics.AnalyticsManager.trackBoostClicked(
+            orderId = order.id,
+            boostAmount = newAddedValue,
+            timeSinceCreationSec = durationSec
+        )
+
+        updateActiveOrderPrice(newAddedValue)
+    }
+
 
     private fun stopOrderStatusService(orderId: String) {
         val context = getApplication<Application>()
@@ -483,6 +527,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().remove("active_order_id").apply()
 
         _activeOrder.postValue(null)
+        isBoostPromptShown = false
     }
 
     // 🔥 ИСПРАВЛЕНО: Безопасный вызов без аргументов очистит сокет, предотвращая утечку памяти

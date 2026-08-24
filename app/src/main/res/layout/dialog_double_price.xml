@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_bottom_sheet_top_rounded"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="24dp"
+    android:paddingBottom="20dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Пришвидшити пошук авто"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnBackground"
+        android:gravity="center"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Додайте надбавку до замовлення, щоб вільні водії швидше звернули увагу на вашу поїздку"
+        android:textSize="13sp"
+        android:textColor="#9E9E9E"
+        android:gravity="center"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- Центральний блок +20 ₴ -->
+    <TextView
+        android:id="@+id/tv_boost_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:text="+20 ₴"
+        android:textSize="40sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnBackground"
+        android:gravity="center"
+        android:layout_marginBottom="28dp"/>
+
+    <!-- Нижні кнопки: Хрестик (Сірий) + Додати (Жовтий) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Сіра кнопка Відмови (Хрестик) -->
+        <FrameLayout
+            android:id="@+id/btn_reject_boost"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_button_secondary"
+            android:layout_marginEnd="12dp">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_close_small"
+                android:layout_gravity="center"
+                app:tint="?attr/colorOnBackground"/>
+        </FrameLayout>
+
+        <!-- Жовта кнопка Підтвердження (Додати) -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_apply_boost"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_yellow">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Додати"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#454754"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"/>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

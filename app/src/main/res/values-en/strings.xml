@@ -12,6 +12,9 @@
     <string name="action_services">Services</string>
     <string name="action_tips">Tip</string>
     <!-- Payment methods -->
+
+    <string name="toast_boost_added">+20 ₴ added</string>
+
     <string name="payment_method_cash">Cash</string>
     <string name="payment_method_card">Card binding</string>
     <string name="payment_method_driver_card">To driver\'s card</string>

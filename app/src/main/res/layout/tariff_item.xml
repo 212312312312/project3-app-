@@ -18,12 +18,16 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="12dp">
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
 
+        <!-- Збільшена іконка машинки -->
         <ImageView
             android:id="@+id/iv_tariff_icon"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
+            android:layout_width="72dp"
+            android:layout_height="52dp"
             android:src="@drawable/bg_car_placeholder"
             android:scaleType="fitCenter"
             app:layout_constraintStart_toStartOf="parent"
@@ -34,7 +38,7 @@
             android:id="@+id/tv_tariff_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="12dp"
             tools:text="Standard"
             android:textSize="16sp"
             android:textStyle="bold"

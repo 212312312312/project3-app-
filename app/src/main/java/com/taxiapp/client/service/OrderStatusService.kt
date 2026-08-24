@@ -59,7 +59,7 @@ class OrderStatusService : Service() {
     private fun buildNotification(orderId: String, status: String, address: String, customTitle: String?, customBody: String?): Notification {
         val statusText = when (status) {
             "SCHEDULED" -> "Заплановано"
-            "REQUESTED", "OFFERING" -> "Пошук водія..."
+            "REQUESTED", "OFFERING" -> "Пошук водія"
             "ACCEPTED" -> "Водій прямує до вас"
             "DRIVER_ARRIVED" -> "Водій очікує"
             "IN_PROGRESS" -> "В дорозі"

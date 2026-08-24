@@ -242,6 +242,11 @@ private lateinit var btnConfirmMapPicker: Button
     private lateinit var ivIconWork: ImageView
     private lateinit var indicatorAddWork: ImageView
 
+    // ➕ Додати у властивості HomeActivity:
+    private val boostTimerHandler = Handler(Looper.getMainLooper())
+    private var boostRunnable: Runnable? = null
+    private var boostDialog: BottomSheetDialog? = null
+
     private lateinit var creationPanelCard: View
     private lateinit var addressPanel: View
     private lateinit var tariffsPanel: View
@@ -2093,6 +2098,7 @@ btnChangePayment.setOnClickListener {
         stopWaitingTimer() 
         
         stopDriverTracking()
+        stopBoostTimer()
         viewModel.stopOrderSocketListening()
     }
 
@@ -5412,7 +5418,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             activeOrderCard.height
         }
 
-// Запускаем плавную анимацию переходов ТОЛЬКО если карточка уже была отрисована на экране
+        // Запускаем плавную анимацию переходов ТОЛЬКО если карточка уже была отрисована на экране
         if (activeOrderCard.visibility == View.VISIBLE && activeOrderCard.height > 0) {
             (activeOrderCard as? ViewGroup)?.let { cardGroup ->
                 val transition = android.transition.AutoTransition().apply {
@@ -5451,6 +5457,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         when(order.status) {
             "SCHEDULED" -> {
                 stopRadarAnimation()
+                stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 isCameraFocusedOnSearch = false
 
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
@@ -5480,6 +5487,8 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "REQUESTED", "OFFERING" -> {
+                checkAndScheduleBoostPrompt(order) // 👈 ЗАПУСК/ПЕРЕВІРКА ТАЙМЕРА БУСТУ НА 3-Й ХВИЛИНІ
+
                 updateOrderProgress(0)
                 orderStatusText.text = getString(R.string.status_searching_driver)
                 startStatusBlinking()
@@ -5562,6 +5571,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "ACCEPTED" -> {
+                stopBoostTimer() // 👈 ЗУПИНКА БУСТУ (водій знайдений)
                 isCameraFocusedOnSearch = false
 
                 // 📊 ТРЕКИНГ: Замер скорости взятия заказа и источника водителя
@@ -5634,7 +5644,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 startDriverTracking(order.id)
             }
+
             "DRIVER_ARRIVED" -> {
+                stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 isCameraFocusedOnSearch = false
 
                 pickupPolyline?.remove()
@@ -5697,7 +5709,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 startDriverTracking(order.id)
             }
+
             "IN_PROGRESS" -> {
+                stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 pickupPolyline?.remove()
                 pickupPolyline = null
                 pickupRoutePoints.clear()
@@ -5809,6 +5823,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "COMPLETED" -> {
+                stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 isCameraFocusedOnSearch = false
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
@@ -5867,6 +5882,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "CANCELLED" -> {
+                stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 pickupPolyline?.remove()
                 pickupPolyline = null
                 pickupRoutePoints.clear()
@@ -5951,11 +5967,76 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         }
 
         val status = order.status
-        // 🔥 ФИКС: Убрали CANCELLED из этого списка
         val recenterMap = (status == "SCHEDULED" || status == "COMPLETED" || status == "REQUESTED" || status == "OFFERING")
 
         // Запускаем плавное следование паддингов
         animateMapPadding(fromHeight, toHeight, recenterMap)
+    }
+
+    // ➕ Додати методи в HomeActivity.kt:
+    private fun checkAndScheduleBoostPrompt(order: TaxiOrderDto) {
+        if (viewModel.isBoostPromptShown) return
+
+        stopBoostTimer()
+
+        val createdAtStr = order.createdAt ?: return
+        val createdTime = try {
+            val cleanTime = createdAtStr.substringBefore(".").substringBefore("Z")
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).parse(cleanTime)?.time ?: return
+        } catch (e: Exception) { return }
+
+        val elapsedSeconds = ((System.currentTimeMillis() - createdTime) / 1000).toInt()
+        val targetDelaySeconds = 180 - elapsedSeconds // 3 хвилини = 180 сек
+
+        if (targetDelaySeconds <= 0) {
+            showBoostPriceDialog()
+        } else {
+            boostRunnable = Runnable {
+                if (!isFinishing && !isDestroyed && (viewModel.activeOrder.value?.status == "REQUESTED" || viewModel.activeOrder.value?.status == "OFFERING")) {
+                    showBoostPriceDialog()
+                }
+            }
+            boostTimerHandler.postDelayed(boostRunnable!!, (targetDelaySeconds * 1000).toLong())
+        }
+    }
+
+    private fun stopBoostTimer() {
+        boostRunnable?.let { boostTimerHandler.removeCallbacks(it) }
+        boostRunnable = null
+        boostDialog?.dismiss()
+        boostDialog = null
+    }
+
+    private fun showBoostPriceDialog() {
+        if (isFinishing || isDestroyed || viewModel.isBoostPromptShown) return
+        viewModel.isBoostPromptShown = true
+
+        boostDialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+        val view = layoutInflater.inflate(R.layout.dialog_double_price, null)
+        boostDialog?.setContentView(view)
+
+        // Системні бари діалогу
+        boostDialog?.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.statusBarColor = Color.TRANSPARENT
+            val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            window.navigationBarColor = ContextCompat.getColor(this, if (isNightMode) android.R.color.black else android.R.color.white)
+        }
+
+        val btnReject = view.findViewById<View>(R.id.btn_reject_boost)
+        val btnApply = view.findViewById<View>(R.id.btn_apply_boost)
+
+        btnReject.setOnClickListener {
+            boostDialog?.dismiss()
+        }
+
+        btnApply.setOnClickListener {
+            viewModel.applyBoostPrice(20.0)
+            showToast(getString(R.string.toast_boost_added))
+            boostDialog?.dismiss()
+        }
+
+        boostDialog?.show()
     }
 
     private fun updateDriverInfo(order: TaxiOrderDto) {
