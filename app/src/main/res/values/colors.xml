@@ -8,6 +8,11 @@
     <color name="black">#FF000000</color>
 
 
+    <!-- app/src/main/res/values/colors.xml -->
+    <color name="status_order_completed">#34C759</color> <!-- Зелений (Успішно) -->
+    <color name="status_order_cancelled">#FF4B4B</color> <!-- Червоний (Скасовано) -->
+
+
     <color name="white">#FFFFFFFF</color>
     <color name="text_hint">#757575</color>
     <color name="taxi_yellow">#ffe03b</color>

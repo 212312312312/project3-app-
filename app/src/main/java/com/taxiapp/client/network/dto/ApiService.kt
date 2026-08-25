@@ -82,6 +82,13 @@ interface ApiService {
     @GET("client/orders/{id}")
     suspend fun getOrder(@Path("id") id: String): Response<TaxiOrderDto>
 
+    // --- ЗАМОВЛЕННЯ (ІСТОРІЯ З ПАГІНАЦІЄЮ) ---
+    @GET("orders/history")
+    fun getHistory(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 30
+    ): Call<List<TaxiOrderDto>>
+
     @POST("client/orders/{id}/cancel")
     fun cancelOrder(@Path("id") orderId: String): Call<TaxiOrderDto> // <-- String
 

@@ -1,5 +1,11 @@
 package com.taxiapp.client.ui
 
+import android.graphics.Color
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -7,14 +13,17 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.R
 import com.taxiapp.client.network.dto.TaxiOrderDto
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class HistoryAdapter(
     private var orders: List<TaxiOrderDto>,
-    private val onItemClick: ((String) -> Unit)? = null, // <-- ИЗМЕНИЛИ НА String
-    private val onCancelClick: ((String) -> Unit)? = null // <-- ИЗМЕНИЛИ НА String
+    private val onItemClick: ((String) -> Unit)? = null,
+    private val onCancelClick: ((String) -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -23,15 +32,24 @@ class HistoryAdapter(
     }
 
     fun submitList(newOrders: List<TaxiOrderDto>) {
-        orders = newOrders
+        orders = newOrders.toMutableList()
         notifyDataSetChanged()
+    }
+
+    fun addOrders(moreOrders: List<TaxiOrderDto>) {
+        val startPos = orders.size
+        val mutable = orders.toMutableList()
+        mutable.addAll(moreOrders)
+        orders = mutable
+        notifyItemRangeInserted(startPos, moreOrders.size)
     }
 
     override fun getItemViewType(position: Int): Int {
         val status = orders[position].status
         val isActive = status == "SCHEDULED" || status == "REQUESTED" ||
                 status == "OFFERING" || status == "ACCEPTED" ||
-                status == "DRIVER_ARRIVED" || status == "IN_PROGRESS"
+                status == "DRIVER_ARRIVED" || status == "IN_PROGRESS" ||
+                status == "ARRIVED_AT_WAYPOINT"
 
         return if (isActive) VIEW_TYPE_ACTIVE else VIEW_TYPE_ARCHIVE
     }
@@ -76,10 +94,9 @@ class HistoryAdapter(
         private val tvDriverName: TextView = itemView.findViewById(R.id.tv_driver_name)
         private val tvCarModel: TextView = itemView.findViewById(R.id.tv_car_model)
 
-        // Новий контейнер для точок
         private val containerWaypoints: LinearLayout? = itemView.findViewById(R.id.container_waypoints)
 
-        fun bind(order: TaxiOrderDto, onItemClick: ((String) -> Unit)?, onCancelClick: ((String) -> Unit)?) { // <-- ИЗМЕНИЛИ НА String
+        fun bind(order: TaxiOrderDto, onItemClick: ((String) -> Unit)?, onCancelClick: ((String) -> Unit)?) {
             tvFrom.text = order.fromAddress
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
@@ -92,16 +109,15 @@ class HistoryAdapter(
                 "SCHEDULED" -> {
                     try {
                         val rawScheduled = order.scheduledAt?.take(19) ?: ""
-                        val inputFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
                         val date = inputFormat.parse(rawScheduled)
 
-                        // Раздельные форматы
-                        val dateFormat = java.text.SimpleDateFormat("dd.MM.yy", java.util.Locale.US)
-                        val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+                        val dateFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
+                        val timeFormat = SimpleDateFormat("HH:mm", Locale.US)
 
                         tvDateTime.text = date?.let { dateFormat.format(it) } ?: rawScheduled
                         tvTime.text = date?.let { timeFormat.format(it) } ?: ""
-                        tvTime.visibility = View.VISIBLE // Показываем время под датой
+                        tvTime.visibility = View.VISIBLE
                     } catch (e: Exception) {
                         tvDateTime.text = order.scheduledAt?.replace("T", " ")?.take(16) ?: ""
                         tvTime.visibility = View.GONE
@@ -111,8 +127,8 @@ class HistoryAdapter(
                 "REQUESTED", "OFFERING" -> tvStatusBadge.text = "Пошук водія"
                 "ACCEPTED" -> tvStatusBadge.text = "Водій їде"
                 "DRIVER_ARRIVED" -> tvStatusBadge.text = "Водій на місці"
-                "IN_PROGRESS" -> {
-                    tvStatusBadge.text = "В дорозі"
+                "IN_PROGRESS", "ARRIVED_AT_WAYPOINT" -> {
+                    tvStatusBadge.text = if (order.status == "ARRIVED_AT_WAYPOINT") "На проміжній точці" else "В дорозі"
                     layoutCancelContainer.visibility = View.GONE
                 }
                 else -> tvStatusBadge.text = "В роботі"
@@ -120,20 +136,14 @@ class HistoryAdapter(
 
             if (order.driver != null) {
                 layoutDriverInfo.visibility = View.VISIBLE
-
-                // --- ИСПРАВЛЕНО: Отсекаем всё лишнее и берем только Имя водителя ---
                 val rawName = order.driver.fullName?.trim() ?: ""
-                // Берем первое слово (предполагая формат "Имя Фамилия")
                 val firstName = rawName.substringBefore(" ")
                 tvDriverName.text = firstName
-                // -------------------------------------------------------------------
-
-                tvCarModel.text = "${order.driver.carColor} ${order.driver.carModel} • ${order.driver.carPlateNumber}"
+                tvCarModel.text = "${order.driver.carColor ?: ""} ${order.driver.carModel ?: ""} • ${order.driver.carPlateNumber ?: ""}".trim()
             } else {
                 layoutDriverInfo.visibility = View.GONE
             }
 
-            // Рендер додаткових точок
             containerWaypoints?.removeAllViews()
             if (!order.stops.isNullOrEmpty()) {
                 containerWaypoints?.visibility = View.VISIBLE
@@ -157,29 +167,80 @@ class HistoryAdapter(
     // 2. VIEWHOLDER ДЛЯ АРХІВУ
     // =========================================================
     class ArchiveOrderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val tvDateTime: TextView = itemView.findViewById(R.id.tv_date_time)
+        private val tvDate: TextView = itemView.findViewById(R.id.tv_date)
+        private val tvTime: TextView = itemView.findViewById(R.id.tv_time)
         private val tvPrice: TextView = itemView.findViewById(R.id.tv_price)
         private val tvFrom: TextView = itemView.findViewById(R.id.tv_from)
         private val tvTo: TextView = itemView.findViewById(R.id.tv_to)
-
-        // Новий контейнер для точок
+        private val ivPaymentType: ImageView = itemView.findViewById(R.id.iv_history_payment_type)
+        private val vStatusCorner: View = itemView.findViewById(R.id.v_status_corner)
         private val containerWaypoints: LinearLayout? = itemView.findViewById(R.id.container_waypoints)
 
-        fun bind(order: TaxiOrderDto, onItemClick: ((String) -> Unit)?) { // <-- ИЗМЕНИЛИ НА String
+        fun bind(order: TaxiOrderDto, onItemClick: ((String) -> Unit)?) {
             tvFrom.text = order.fromAddress
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
 
-            try {
-                val inputFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
-                val date = inputFormat.parse(order.createdAt)
-                val outputFormat = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale("uk"))
-                tvDateTime.text = outputFormat.format(date)
-            } catch (e: Exception) {
-                tvDateTime.text = order.createdAt?.replace("T", " ")?.take(16) ?: "Дата"
+            // Способ оплаты
+            if (order.paymentMethod?.uppercase() == "CARD") {
+                ivPaymentType.setImageResource(R.drawable.ic_card)
+            } else {
+                ivPaymentType.setImageResource(R.drawable.ic_cash)
             }
 
-            // Рендер додаткових точок
+            // Цвет треугольника статуса
+            val context = itemView.context
+            // Колір куточка статусу (яскраві суцільні кольори)
+            when (order.status) {
+                "COMPLETED" -> {
+                    vStatusCorner.background?.setTint(
+                        ContextCompat.getColor(itemView.context, R.color.status_order_completed)
+                    )
+                }
+                "CANCELLED" -> {
+                    vStatusCorner.background?.setTint(
+                        ContextCompat.getColor(itemView.context, R.color.status_order_cancelled)
+                    )
+                }
+                else -> {
+                    // Защитная заглушка для компилятора: скрываем уголок, если статус неизвестен
+                    vStatusCorner.background?.setTint(Color.TRANSPARENT)
+                }
+            }
+
+            // Форматирование даты и времени в одну линию
+            try {
+                val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+                val date = inputFormat.parse(order.createdAt?.take(19) ?: "")
+                if (date != null) {
+                    val dateFormat = SimpleDateFormat("d MMM yyyy", Locale("uk"))
+                    val timeFormat = SimpleDateFormat("HH:mm", Locale("uk"))
+
+                    val dateStr = dateFormat.format(date) // "24 серп. 2026"
+
+                    val spannable = SpannableString(dateStr)
+                    val dayPart = dateStr.substringBefore(" ")
+                    if (dayPart.isNotEmpty() && dayPart.all { it.isDigit() }) {
+                        spannable.setSpan(
+                            RelativeSizeSpan(1.25f),
+                            0,
+                            dayPart.length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                    }
+
+                    tvDate.text = spannable
+                    tvTime.text = timeFormat.format(date)
+                } else {
+                    tvDate.text = order.createdAt?.take(10) ?: "Дата"
+                    tvTime.text = "--:--"
+                }
+            } catch (e: Exception) {
+                tvDate.text = order.createdAt?.take(10) ?: "Дата"
+                tvTime.text = "--:--"
+            }
+
+            // Промежуточные остановки
             containerWaypoints?.removeAllViews()
             if (!order.stops.isNullOrEmpty()) {
                 containerWaypoints?.visibility = View.VISIBLE
