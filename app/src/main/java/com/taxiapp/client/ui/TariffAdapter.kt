@@ -49,6 +49,8 @@ class TariffAdapter(
         val price: TextView = view.findViewById(R.id.tv_tariff_price)
         val image: ImageView = view.findViewById(R.id.iv_tariff_icon)
         val desc: TextView = view.findViewById(R.id.tv_tariff_desc)
+
+        val iconContainer: View = view.findViewById(R.id.fl_tariff_icon_container)
         val oldPrice: TextView = view.findViewById(R.id.tv_old_price)
         val discountBadge: TextView = view.findViewById(R.id.tv_discount_badge)
         val betaBadge: TextView = view.findViewById(R.id.tv_beta_badge)
@@ -73,6 +75,10 @@ class TariffAdapter(
             }
 
             // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
+            // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
+            // 1. Повертаємо фоновий скелетон перед початком завантаження
+            iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
+
             if (!tariff.imageUrl.isNullOrEmpty()) {
                 val rawUrl = tariff.imageUrl
 
@@ -86,11 +92,34 @@ class TariffAdapter(
 
                 Glide.with(itemView.context)
                     .load(fullUrl)
-                    .placeholder(R.drawable.bg_car_placeholder)
-                    .error(R.drawable.bg_car_placeholder)
+                    .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                        override fun onLoadFailed(
+                            e: com.bumptech.glide.load.engine.GlideException?,
+                            model: Any?,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            // При помилці мережі залишаємо скелетон
+                            iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
+                            return false
+                        }
+
+                        override fun onResourceReady(
+                            resource: android.graphics.drawable.Drawable,
+                            model: Any,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                            dataSource: com.bumptech.glide.load.DataSource,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            // 🟢 Картинка завантажилася — миттєво знімаємо фоновий скелетон
+                            iconContainer.background = null
+                            return false
+                        }
+                    })
                     .into(image)
             } else {
-                image.setImageResource(R.drawable.bg_car_placeholder)
+                image.setImageDrawable(null)
+                iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
             }
             // --- Знижки та Стара ціна ---
             if (item.oldPriceValue != null && item.oldPriceValue > item.priceValue && item.priceValue > 0) {

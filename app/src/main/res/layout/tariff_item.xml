@@ -23,16 +23,26 @@
         android:paddingTop="10dp"
         android:paddingBottom="10dp">
 
-        <!-- Збільшена іконка машинки -->
-        <ImageView
-            android:id="@+id/iv_tariff_icon"
-            android:layout_width="72dp"
-            android:layout_height="52dp"
-            android:src="@drawable/bg_car_placeholder"
-            android:scaleType="fitCenter"
+        <!-- Фоновий контейнер-плашка з окремим бекграундом -->
+        <FrameLayout
+            android:id="@+id/fl_tariff_icon_container"
+            android:layout_width="64dp"
+            android:layout_height="46dp"
+            android:background="@drawable/bg_car_placeholder"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"/>
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <!-- Компактна іконка автомобіля по центру з внутрішнім повітрям -->
+            <ImageView
+                android:id="@+id/iv_tariff_icon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="4dp"
+                android:scaleType="fitCenter" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/tv_tariff_name"
@@ -43,7 +53,7 @@
             android:textSize="16sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface"
-            app:layout_constraintStart_toEndOf="@id/iv_tariff_icon"
+            app:layout_constraintStart_toEndOf="@id/fl_tariff_icon_container"
             app:layout_constraintTop_toTopOf="parent"/>
 
         <TextView
