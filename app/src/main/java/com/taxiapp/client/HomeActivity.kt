@@ -889,21 +889,7 @@ private fun fetchAddressAtCurrentLocation() {
         }
 
         // НОВЫЙ БЛОК: Обработка успешного предварительного заказа (на время)
-        viewModel.scheduledOrderSuccess.observe(this) { order ->
-            if (order != null) {
-                // 1. Очищаем главный экран (чтобы при возврате назад не висела панель тарифов)
-                sessionManager.clearActiveOrderId()
-                viewModel.clearOrderState()
-                showAddressPanel()
-                
-                // 2. Открываем экран "Мои поездки" (HistoryActivity)
-                val intent = Intent(this@HomeActivity, HistoryActivity::class.java)
-                startActivity(intent)
-                
-                // 3. Сбрасываем ивент (чтобы он не сработал заново при повороте экрана)
-                viewModel.resetScheduledOrderEvent()
-            }
-        }
+
 
         viewModel.isLoading.observe(this) { loading ->
             setButtonsLoadingState(loading)

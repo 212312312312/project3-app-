@@ -404,7 +404,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         manager.cancel(orderId.hashCode())
     }
 
-    // --- API: Создание заказа ---
+    // 🔄 ЗАМЕНИТЬ В HomeViewModel.kt:
     fun createOrder(request: CreateOrderRequestDto) {
         _isLoading.value = true
         ApiClient.instance.createOrder(request).enqueue(object : Callback<TaxiOrderDto> {
@@ -412,15 +412,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
                     val order = response.body()!!
-                    if (order.status != "SCHEDULED") {
-                        activeOrderId = order.id
-                        sessionManager.saveActiveOrderId(order.id)
-                        _activeOrder.value = order
-                        updateOrderStatusService(order)
-                    } else {
-                        _scheduledOrderSuccess.value = order
-                        updateOrderStatusService(order)
-                    }
+
+                    // Единая логика для всех созданных заказов (включая SCHEDULED)
+                    activeOrderId = order.id
+                    sessionManager.saveActiveOrderId(order.id)
+                    _activeOrder.value = order
+                    updateOrderStatusService(order)
                 } else {
                     val errorJson = response.errorBody()?.string()
                     val msg = try {
