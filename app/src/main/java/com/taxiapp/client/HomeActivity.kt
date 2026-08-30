@@ -365,6 +365,8 @@ private lateinit var buttonsShimmer: ShimmerFrameLayout
     private var pickerMode = MODE_ORIGIN
     private var isSelectingOrigin = true
 
+    private var isSuppressingGeocode = false
+
     private var selectedTariffItem: TariffItem? = null
 
     private var selectedServiceIds = ArrayList<Long>()
@@ -2417,9 +2419,13 @@ btnChangePayment.setOnClickListener {
                     updateSmartLabels()
                 }
                 if (isRouteMode || viewModel.currentRoutePolyline != null) return@setOnCameraIdleListener
-                
-                // 🔥 ФИКС: Перезаписываем точку А при сдвиге карты ТОЛЬКО если пользователь 
-                // действительно взаимодействовал с картой или точка А уже инициализирована
+
+                // 🔥 ЗАЩИТА ОТ МЕРЦАНИЯ: Если камера летит программно к пользователю, не парсим чужой адрес
+                if (isSuppressingGeocode) {
+                    isSuppressingGeocode = false
+                    return@setOnCameraIdleListener
+                }
+
                 getAddressForOrigin(target)
             }
         }
@@ -6257,7 +6263,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
 
-        // Плавно выравниваем камеру обратно в 2D (наклоняем на 0 градусов)
+        // Плавно выравниваем камеру обратно в 2D
         mMap?.cameraPosition?.let { currentPos ->
             val flatCamera = com.google.android.gms.maps.model.CameraPosition.Builder(currentPos)
                 .tilt(0f)
@@ -6276,8 +6282,6 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         setLocationButtonAnchor(R.id.bottom_sheet_card)
         btnRecenter.visibility = View.VISIBLE
         btnMenu.visibility = View.VISIBLE
-        
-        updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
 
         try { btnOpenPromo.visibility = View.VISIBLE } catch (e: Exception) {}
         ivMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
@@ -6308,13 +6312,14 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             btnSchedule.clearColorFilter()
         } catch (e: Exception){}
 
-        tvOrigin.text = getString(R.string.hint_where_from)
+        // Ставим временный статус до прилета камеры
+        tvOrigin.text = "Визначення..."
         tvDestination.text = getString(R.string.hint_where_to)
         originPlace = null
         destinationPlace = null
 
         centerPin.visibility = View.VISIBLE
-        centerPin.alpha = 1f 
+        centerPin.alpha = 1f
         centerPin.translationY = convertDpToPixel(-48f)
         try {
             pinShadow.visibility = View.VISIBLE
@@ -6339,7 +6344,15 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         } catch (e: Exception) {}
 
         stopRadarAnimation()
-        recenterMapOnUser()
+
+        // 🔥 СИНХРОНИЗАЦИЯ: Включаем блокировку промежуточного геокодинга и центрируем строго после расчета паддинга
+        isSuppressingGeocode = true
+        updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
+
+        creationPanelCard.post {
+            recenterMapOnUser()
+        }
+
         viewModel.startListeningNearbyDrivers(webSocketManager)
     }
 
