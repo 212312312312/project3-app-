@@ -18,6 +18,7 @@ import com.taxiapp.client.network.DirectionsApiClient
 import com.taxiapp.client.network.dto.*
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.CityData
+import com.taxiapp.client.utils.LocationValidator
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -184,10 +185,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateClientLocation(webSocketManager: com.taxiapp.client.network.WebSocketManager?, lat: Double, lng: Double) {
+        // Передаем 2 параметра (lat, lng) вместо 3
+        if (!LocationValidator.isValidLocation(lat, lng)) return
+
         val request = ClientLocationRequest(mapSessionId, lat, lng)
         webSocketManager?.sendClientLocation(request)
     }
-
     fun stopListeningNearbyDrivers(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
         webSocketManager?.unsubscribeFromNearbyDrivers()
     }

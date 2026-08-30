@@ -1979,11 +1979,10 @@ btnChangePayment.setOnClickListener {
             val client = LocationServices.getFusedLocationProviderClient(this)
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 client.lastLocation.addOnSuccessListener { location ->
-                    if (location != null) {
-                        val userLatLng = LatLng(location.latitude, location.longitude)
-                        
-                        // 🔥 ФИКС: Если замовлення нет и точка А еще не выбрана вручную,
-                        // сразу ставим Точку А на реальные координаты устройства
+                    // 🔥 ЗАЩИТА: Проверяем реальный GPS без ложных срабатываний
+                    if (LocationValidator.isValidLocation(location)) {
+                        val userLatLng = LatLng(location!!.latitude, location.longitude)
+
                         if (activeOrderId == null && !isRouteMode && originPlace == null) {
                             originPlace = Place.builder().setName("Визначення...").setLatLng(userLatLng).build()
                             getAddressForOrigin(userLatLng)
@@ -1995,13 +1994,16 @@ btnChangePayment.setOnClickListener {
                             currentCity = CityData(foundCityName, regionData.center.latitude, regionData.center.longitude, regionData.zoom)
                             sessionManager.saveUserCity(currentCity!!)
                             updateCityUI(foundCityName)
-                            
+
                             mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(userLatLng, 16f))
                         } else {
                             showCitySelectorDialog()
                         }
                     } else {
-                        showCitySelectorDialog()
+                        // Если сигнал действительно в Перу / открытом море
+                        currentCity?.let { city ->
+                            mMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(city.lat, city.lng), city.zoom))
+                        } ?: showCitySelectorDialog()
                     }
                 }
             }
@@ -2009,7 +2011,6 @@ btnChangePayment.setOnClickListener {
             showCitySelectorDialog()
         }
     }
-
     private fun updatePaymentMethodFromSession() {
         currentPaymentMethod = sessionManager.fetchPaymentMethod()
         val cardMask = sessionManager.getCardMask()
@@ -2095,18 +2096,20 @@ btnChangePayment.setOnClickListener {
         }
         val client = LocationServices.getFusedLocationProviderClient(this)
         client.lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                val userLatLng = LatLng(loc.latitude, loc.longitude)
+            // 🔥 ЗАЩИТА:
+            if (LocationValidator.isValidLocation(loc)) {
+                val userLatLng = LatLng(loc!!.latitude, loc.longitude)
                 mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(userLatLng, 16f))
-                
-                // ФИКС БАГА №3: Сразу принудительно шлем координаты на сервер, 
-                // чтобы машины подгрузились в сокет мгновенно, не дожидаясь остановки камеры!
+
                 lastLocationUpdateTime = System.currentTimeMillis()
                 lastLocationSent = userLatLng
-                Log.d("WS_TAXI_DEBUG", "📤 МГНОВЕННАЯ ОТПРАВКА КООРДИНАТ ПРИ ВОЗВРАТЕ: lat=${userLatLng.latitude}")
                 viewModel.updateClientLocation(webSocketManager, userLatLng.latitude, userLatLng.longitude)
+            } else {
+                showToast("Неточний GPS (можливий РЕБ). Вкажіть точку на карті")
+                currentCity?.let { city ->
+                    mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(city.lat, city.lng), city.zoom))
+                }
             }
-            else showToast("Місцезнаходження не знайдено")
         }
     }
 

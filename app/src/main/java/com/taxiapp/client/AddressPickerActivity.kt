@@ -38,6 +38,7 @@ import com.taxiapp.client.utils.AddressUtils
 import android.view.MotionEvent
 import android.content.Context
 import android.view.inputmethod.InputMethodManager
+import com.taxiapp.client.utils.LocationValidator
 import com.taxiapp.client.utils.ViewUtils
 import java.util.Locale
 
@@ -611,7 +612,8 @@ class AddressPickerActivity : BaseActivity() {
         }
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null) {
+            // 🔥 ЗАЩИТА ОТ РЭБ
+            if (location != null && LocationValidator.isValidLocation(location.latitude, location.longitude)) {
                 userLatLng = LatLng(location.latitude, location.longitude)
 
                 try {
@@ -629,6 +631,8 @@ class AddressPickerActivity : BaseActivity() {
                         if (isFinishConditionMet()) returnResultData()
                     }
                 }
+            } else {
+                Toast.makeText(this, "Неточний сигнал GPS (можливий РЕБ). Оберіть адресу зі списку", Toast.LENGTH_SHORT).show()
             }
         }
     }

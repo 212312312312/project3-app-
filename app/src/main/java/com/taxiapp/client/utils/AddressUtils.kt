@@ -36,11 +36,11 @@ object AddressUtils {
             .replace(Regex("\\(\\s*,"), "(")
             .replace(Regex(",\\s*\\)"), ")")
 
-        // 5. НОРМАЛІЗАЦІЯ АНГЛІЦИЗМІВ У НОМЕРАХ БУДИНКІВ (1D -> 1Д, 14A -> 14А)
+        // 5. НОРМАЛІЗАЦІЯ АНГЛІЦИЗМІВ У НОМЕРАХ БУДИНКІВ (1D -> 1Д, 3V -> 3В, 14A -> 14А)
         val latinToCyrillic = mapOf(
             'A' to 'А', 'a' to 'а',
             'B' to 'Б', 'b' to 'б',
-            'C' to 'В', 'c' to 'в',
+            'C' to 'С', 'c' to 'с', // ВИПРАВЛЕНО: було 'В'
             'D' to 'Д', 'd' to 'д',
             'E' to 'Е', 'e' to 'е',
             'H' to 'Н', 'h' to 'н',
@@ -48,7 +48,11 @@ object AddressUtils {
             'M' to 'М', 'm' to 'м',
             'O' to 'О', 'o' to 'о',
             'P' to 'Р', 'p' to 'р',
-            'T' to 'Т', 't' to 'т'
+            'S' to 'С', 's' to 'с',
+            'T' to 'Т', 't' to 'т',
+            'V' to 'В', 'v' to 'в', // ДОДАНО: англійська V -> кирилична В
+            'W' to 'В', 'w' to 'в',
+            'X' to 'Х', 'x' to 'х'
         )
 
         text = text.replace(Regex("\\b(\\d+)\\s*([A-Za-z]+)\\b")) { match ->
@@ -83,15 +87,33 @@ object AddressUtils {
             }
         }
 
-        // 8. ДЕДУПЛІКАЦІЯ НОМЕРА БУДИНКУ В ПОЧАТКУ
+        // 8. ДЕДУПЛІКАЦІЯ ТА ВИПРАВЛЕННЯ НОМЕРА БУДИНКУ В ПОЧАТКУ
         if (parts.size > 1) {
-            val firstPart = parts.first().lowercase()
-            val restContainsFirst = parts.drop(1).any { part ->
-                val pLower = part.lowercase()
-                pLower == firstPart || pLower.contains(" $firstPart") || pLower.contains("$firstPart ")
-            }
-            if (restContainsFirst) {
-                parts.removeAt(0)
+            val firstPart = parts.first().trim()
+            val firstPartLower = firstPart.lowercase()
+
+            // Перевіряємо, чи перша частина є просто номером будинку (наприклад: "12", "3В", "3-В", "14/2")
+            val isFirstOnlyHouseNumber = firstPart.matches(Regex("^[\\d]+[A-Za-zА-Яа-яіІїЇєЄ/'\"\\-\\s]*$"))
+
+            if (isFirstOnlyHouseNumber) {
+                val restText = parts.drop(1).joinToString(" ").lowercase()
+
+                // Перевіряємо, чи решта адреси вже містить цей номер або будь-який номер будинку
+                val restContainsNumber = restText.contains(firstPartLower) ||
+                        parts.drop(1).any { it.any { char -> char.isDigit() } }
+
+                if (restContainsNumber) {
+                    // Якщо номер уже є далі по тексту або в іншій секції — просто видаляємо дублікат з початку
+                    parts.removeAt(0)
+                } else {
+                    // Якщо номер був ТІЛЬКИ на початку ("12", "вул. Івана Дзюби"), переносимо його в кінець назви вулиці
+                    val streetIndex = parts.indexOfFirst { part ->
+                        listOf("вул", "пр-т", "пер", "наб", "б-р", "ш.", "пл", "м-н").any { part.contains(it, ignoreCase = true) }
+                    }
+                    val targetIndex = if (streetIndex != -1) streetIndex else 1
+                    parts[targetIndex] = "${parts[targetIndex]} $firstPart"
+                    parts.removeAt(0)
+                }
             }
         }
 
