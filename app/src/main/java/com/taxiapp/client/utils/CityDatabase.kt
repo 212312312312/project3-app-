@@ -11,6 +11,27 @@ data class RegionData(
 
 object CityDatabase {
 
+    // Словник синонімів та російських назв для розумного пошуку
+    val citySearchAliases: Map<String, List<String>> = mapOf(
+        "Київ" to listOf("киев", "kiev", "kyiv"),
+        "Львів" to listOf("львов", "lvov", "lviv"),
+        "Одеса" to listOf("одесса", "odessa", "odesa"),
+        "Дніпро" to listOf("днепр", "днепропетровск", "dnepr", "dnipro"),
+        "Харків" to listOf("харьков", "kharkov", "kharkiv"),
+        "Житомир" to listOf("житомир", "zhitomir", "zhytomyr"),
+        "Запоріжжя" to listOf("запорожье", "zaporozhye", "zaporozhe", "zaporizhzhia"),
+        "Івано-Франківськ" to listOf("ивано-франковск", "ивано франковск", "иванофранковск", "ivano-frankivsk"),
+        "Кропивницький" to listOf("кропивницкий", "кировоград", "kropyvnytskyi", "kirovograd"),
+        "Миколаїв" to listOf("николаев", "nikolaev", "mykolaiv"),
+        "Полтава" to listOf("полтава", "poltava"),
+        "Рівне" to listOf("ровно", "rovno", "rivne"),
+        "Суми" to listOf("сумы", "sumy"),
+        "Хмельницький" to listOf("хмельницкий", "khmelnitsky", "khmelnytskyi"),
+        "Черкаси" to listOf("черкассы", "cherkassy", "cherkasy"),
+        "Чернівці" to listOf("черновцы", "chernovtsy", "chernivtsi"),
+        "Чернігів" to listOf("чернигов", "chernigov", "chernihiv")
+    )
+
     // Создаем прямоугольные границы (Box) вокруг центра города
     private fun createBounds(center: LatLng, radiusKm: Double = 25.0): RectangularBounds { // 25 км радиус (50км диаметр)
         val latRadian = Math.toRadians(center.latitude)

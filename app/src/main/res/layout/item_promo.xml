@@ -42,14 +42,14 @@
                 android:textColor="@color/text_secondary"
                 android:layout_marginTop="4dp"/>
 
+            <!-- Дата закінчення дії завдання -->
             <TextView
                 android:id="@+id/tv_task_expires"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="#E65100"
-                android:layout_marginTop="4dp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="2dp"
                 android:visibility="gone"/>
 
             <LinearLayout

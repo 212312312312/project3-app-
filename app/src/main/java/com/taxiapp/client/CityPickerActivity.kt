@@ -74,10 +74,18 @@ class CityPickerActivity : BaseActivity() {
         })
     }
     private fun filterCities(query: String) {
-        val filtered = if (query.isEmpty()) {
+        val trimmed = query.trim().lowercase()
+        val filtered = if (trimmed.isEmpty()) {
             allCities
         } else {
-            allCities.filter { it.contains(query, ignoreCase = true) }
+            allCities.filter { cityName ->
+                // 1. Прямий пошук за українською назвою
+                cityName.lowercase().contains(trimmed) ||
+                        // 2. Пошук за синонімами / російськими назвами
+                        (CityDatabase.citySearchAliases[cityName]?.any { alias ->
+                            alias.contains(trimmed)
+                        } == true)
+            }
         }
         adapter.updateList(filtered)
     }
