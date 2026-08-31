@@ -20,6 +20,7 @@ class PromoAdapter(
     class PromoViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val title: TextView = view.findViewById(R.id.tv_promo_title)
         val desc: TextView = view.findViewById(R.id.tv_promo_desc)
+        val taskExpires: TextView = view.findViewById(R.id.tv_task_expires) // <- ДОБАВЛЕНО
         val progressText: TextView = view.findViewById(R.id.tv_promo_progress_text)
         val progressBar: ProgressBar = view.findViewById(R.id.pb_promo_progress)
         val discount: TextView = view.findViewById(R.id.tv_discount_percent)
@@ -43,13 +44,28 @@ class PromoAdapter(
         }
         holder.desc.text = descText
 
-        // --- 2. ЗНИЖКА (Тільки відсоток) ---
+        // --- 2. ТЕРМІН ДІЇ ЗАВДАННЯ ---
+        if (!item.taskExpiresAt.isNullOrBlank()) {
+            try {
+                val date = java.time.LocalDateTime.parse(item.taskExpiresAt)
+                val formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy")
+                holder.taskExpires.text = "Діє до: ${date.format(formatter)}"
+                holder.taskExpires.visibility = View.VISIBLE
+            } catch (e: Exception) {
+                holder.taskExpires.text = "Діє до: ${item.taskExpiresAt.take(10)}"
+                holder.taskExpires.visibility = View.VISIBLE
+            }
+        } else {
+            holder.taskExpires.visibility = View.GONE
+        }
+
+        // --- 3. ЗНИЖКА (Тільки відсоток) ---
         // Ми домовилися не показувати ліміт суми тут, щоб не захаращувати картку.
         // Деталі будуть у BottomSheet.
         holder.discount.text = "-${item.discountPercent.toInt()}%"
         holder.discount.textSize = 18f
 
-        // --- 3. ПРОГРЕС ТА СТАТУС ---
+        // --- 4. ПРОГРЕС ТА СТАТУС ---
         if (item.isRewardAvailable) {
             // Завдання виконано
             holder.progressText.text = "Готово! Знижка доступна"
@@ -62,8 +78,6 @@ class PromoAdapter(
             holder.itemView.setOnClickListener {
                 onPromoClick(item)
             }
-            // Можна додати візуальний ефект клікабельності (Ripple) у XML,
-            // або просто покладатися на стандартну поведінку.
 
         } else {
             // В процесі виконання

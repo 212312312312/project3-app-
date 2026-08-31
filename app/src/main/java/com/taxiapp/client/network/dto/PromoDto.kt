@@ -27,8 +27,8 @@ data class ClientPromoProgressDto(
     val isFullyCompleted: Boolean = false,
     val maxDiscountAmount: Double? = null,
 
-    // Нові поля
     val requiredDistanceMeters: Long = 0,
     val currentDistanceMeters: Long = 0,
-    val rewardExpiresAt: String? = null
+    val rewardExpiresAt: String? = null,
+    val taskExpiresAt: String? = null // <- ДОБАВЛЕНО: Срок действия задания
 )
