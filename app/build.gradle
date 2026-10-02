@@ -18,8 +18,8 @@ android {
         applicationId "com.taxiunit.unitapp"
         minSdk 24
         targetSdk 36
-        versionCode 20
-        versionName "1.0.20"
+        versionCode 23
+        versionName "1.0.23"
         buildConfigField "String", "GOOGLE_PLACES_API_KEY", "\"${properties.getProperty('GOOGLE_PLACES_API_KEY', '')}\""
 
         buildConfigField "String", "BASE_URL", "\"http://192.168.0.107:8080/\""
@@ -35,7 +35,8 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -72,6 +73,8 @@ dependencies {
     implementation 'com.google.android.gms:play-services-location:21.1.0'
     annotationProcessor libs.google.glide.compiler
     implementation libs.facebook.shimmer
+
+    implementation 'com.facebook.android:facebook-core:17.0.0'
 
     // <--- 2. ДОБАВЛЕНА БИБЛИОТЕКА FIREBASE MESSAGING
     implementation 'com.google.firebase:firebase-messaging:23.4.1'

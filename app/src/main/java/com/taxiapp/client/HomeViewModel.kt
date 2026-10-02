@@ -2,6 +2,10 @@ package com.taxiapp.client
 
 import android.app.Application
 import android.os.Handler
+import com.facebook.appevents.AppEventsLogger
+import com.facebook.appevents.AppEventsConstants
+import java.math.BigDecimal
+import java.util.Currency
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,6 +60,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _orderStatus = MutableLiveData<String>()
     val orderStatus: LiveData<String> get() = _orderStatus
+
+
+    private var lastTrackedCompletedOrderId: String? = null
 
     private val _routeInfo = MutableLiveData<Pair<Int, Int>>()
     val routeInfo: LiveData<Pair<Int, Int>> get() = _routeInfo
@@ -121,14 +128,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (activeOrderId == null || activeOrderId == order.id || activeOrderId == order.idLong.toString()) {
-                    if (order.status == "COMPLETED" || order.status == "CANCELLED") {
+                    if (order.status == "CANCELLED") {
+                        // При отмене сразу очищаем заказ
                         stopOrderStatusService(order.id)
                         clearOrderState()
                     } else {
+                        // Для обычных статусов И для COMPLETED обновляем заказ в UI
                         activeOrderId = order.id
                         sessionManager.saveActiveOrderId(order.id)
                         _activeOrder.postValue(order)
-                        updateOrderStatusService(order)
+
+                        if (order.status == "COMPLETED") {
+                            stopOrderStatusService(order.id)
+                            // 🟢 Фиксируем аналитику и конверсию покупки строго один раз
+                            trackOrderCompletedSafely(order)
+                        } else {
+                            updateOrderStatusService(order)
+                        }
                     }
                 }
             } else if (messageDto.action == "REMOVE") {
@@ -175,6 +191,36 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Ошибка проверки статуса заказа: ${e.message}")
             }
+        }
+    }
+
+    private fun trackOrderCompletedSafely(order: TaxiOrderDto) {
+        if (lastTrackedCompletedOrderId == order.id) return
+        lastTrackedCompletedOrderId = order.id
+
+        // 1. Собственная аналитика
+        com.taxiapp.client.analytics.AnalyticsManager.trackOrderCompleted(
+            orderId = order.id,
+            finalPrice = order.price,
+            orderNumber = order.driver?.completedRides ?: 1
+        )
+
+        // 2. Отправка покупки в Meta Ads SDK
+        try {
+            val logger = AppEventsLogger.newLogger(getApplication())
+            val params = android.os.Bundle().apply {
+                putString(AppEventsConstants.EVENT_PARAM_CURRENCY, "UAH")
+                putString(AppEventsConstants.EVENT_PARAM_CONTENT_TYPE, "ride")
+                putString(AppEventsConstants.EVENT_PARAM_CONTENT_ID, order.id)
+            }
+            logger.logPurchase(
+                BigDecimal.valueOf(order.price),
+                Currency.getInstance("UAH"),
+                params
+            )
+            Log.d("MetaAnalytics", "✅ Успешно отправлено событие Purchase: ${order.price} UAH")
+        } catch (e: Exception) {
+            Log.e("MetaAnalytics", "Ошибка отправки события в Meta: ${e.message}")
         }
     }
 

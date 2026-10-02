@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Unit</string>
-
+    <string name="facebook_app_id">1795833021604394</string>
+    <string name="facebook_client_token">897c46d9c5114b7be29c0d7a9fcae62e</string>
     <string name="privacy_disclaimer">Ти погоджуєшся на отримання повідомлень і на передачу персональних даних бізнес-партнерам відповідно до <a href="https://sites.google.com/view/unit-technologies/%D0%BF%D0%BE%D0%BB%D1%96%D1%82%D0%B8%D0%BA%D0%B0-%D0%BA%D0%BE%D0%BD%D1%84%D1%96%D0%B4%D0%B5%D0%BD%D1%86%D1%96%D0%B9%D0%BD%D0%BE%D1%81%D1%82%D1%96-%D0%BA%D0%BB%D1%96%D1%94%D0%BD%D1%82%D0%B0">Політики приватності</a>. Відмовитися від повідомлень можна в налаштуваннях профілю.</string>
     <string name="default_web_client_id" translatable="false">1097800629122-aqaunip6dcp6hrk8c1oe580n8kaapkg2.apps.googleusercontent.com</string>
     <string name="agreement_title">Угода користувача та Політика приватності</string>

@@ -879,7 +879,9 @@ private fun fetchAddressAtCurrentLocation() {
 
                     activeOrderCard.post {
                         if (!isDestroyed && !isFinishing) {
-                            updateMapPadding(activeOrderCard, extraBottomDp = 4f, topPaddingDp = 20f, recenterMap = true)
+                            // Фокусируемся только для поиска, для остальных статусов управляет updateStatusUI
+                            val shouldRecenter = (order.status == "REQUESTED" || order.status == "OFFERING")
+                            updateMapPadding(activeOrderCard, extraBottomDp = 4f, topPaddingDp = 20f, recenterMap = shouldRecenter)
                         }
                     }
                 }
@@ -4099,6 +4101,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         }
 
         // 3. Создаем маркер, если его еще не было
+        // 3. Создаем маркер, если его еще не было
         val carWidth = 40
         val carHeight = 40
 
@@ -4118,6 +4121,11 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                 .rotation(loc.bearing ?: 0f)
                 .zIndex(1100f)
         )
+
+        // Фокусируем камеру, если водитель только что назначен и заказ в статусе ACCEPTED
+        if (viewModel.activeOrder.value?.status == "ACCEPTED") {
+            focusOnPickupRoute(latLng)
+        }
     }
 
 
@@ -4387,15 +4395,19 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
             val boundsBuilder = LatLngBounds.Builder()
             var pointsCount = 0
 
-            // 1. Точки полилинии подачи
-            if (pickupRoutePoints.isNotEmpty()) {
-                pickupRoutePoints.forEach {
-                    boundsBuilder.include(it)
-                    pointsCount++
+            // 1. Точка посадки пассажира (Точка А)
+            val originPos = originPlace?.latLng
+                ?: viewModel.activeOrder.value?.let {
+                    if (it.originLat != null && it.originLng != null && it.originLat != 0.0 && it.originLng != 0.0)
+                        LatLng(it.originLat, it.originLng) else null
                 }
+
+            if (originPos != null) {
+                boundsBuilder.include(originPos)
+                pointsCount++
             }
 
-            // 2. Координаты водителя
+            // 2. Текущее положение водителя
             val driverPos = driverLatLng
                 ?: driverMarker?.position
                 ?: viewModel.activeOrder.value?.driver?.let {
@@ -4408,25 +4420,21 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                 pointsCount++
             }
 
-            // 3. Точка посадки клиента (Точка А)
-            val originPos = originPlace?.latLng
-                ?: viewModel.activeOrder.value?.let {
-                    if (it.originLat != null && it.originLng != null && it.originLat != 0.0 && it.originLng != 0.0)
-                        LatLng(it.originLat, it.originLng) else null
+            // 3. Все промежуточные точки маршрута подачи (от водителя к нам)
+            if (pickupRoutePoints.isNotEmpty()) {
+                pickupRoutePoints.forEach {
+                    boundsBuilder.include(it)
+                    pointsCount++
                 }
-
-            if (originPos != null) {
-                boundsBuilder.include(originPos)
-                pointsCount++
             }
 
-            // 4. Плавное центрирование с комфортным отступом 110dp
+            // 4. Плавно центрируем камеру так, чтобы всё поместилось в экран
             if (pointsCount >= 2) {
-                val paddingSide = convertDpToPixel(110f).toInt()
+                val paddingSide = convertDpToPixel(90f).toInt()
                 val bounds = boundsBuilder.build()
                 mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingSide), 800, null)
             } else if (driverPos != null) {
-                mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(driverPos, 14.5f), 800, null)
+                mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(driverPos, 16f), 800, null)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -5071,7 +5079,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
 
             pickupPolyline = mMap?.addPolyline(pickupOpts)
 
-            // ➕ Плавно переводим камеру на весь маршрут от водителя к нам
+            // Плавно подгоняем камеру под маршрут подачи и водителя
             focusOnPickupRoute()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -5827,12 +5835,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 resetOrderDetailsState()
                 orderStatusText.text = getString(R.string.status_completed)
 
-                // 📊 ТРЕКИНГ: Главная маркетинговая конверсия
-                com.taxiapp.client.analytics.AnalyticsManager.trackOrderCompleted(
-                    orderId = order.id,
-                    finalPrice = order.price,
-                    orderNumber = order.driver?.completedRides ?: 1
-                )
+                // 🟢 Вызов аналитики отсюда удален: он гарантированно уходит из HomeViewModel без дублей
 
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.GONE
@@ -6219,23 +6222,30 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 if (recenterMap) {
                     try {
                         mMap?.stopAnimation() // Защита от накладывающихся анимаций
-                        
+
                         val currentStatus = viewModel.activeOrder.value?.status
                         if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
-                            val targetLoc = originPlace?.latLng 
+                            val targetLoc = originPlace?.latLng
                                 ?: viewModel.activeOrder.value?.let { com.google.android.gms.maps.model.LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
-                            
+
                             if (targetLoc != null) {
                                 val cameraPosition = com.google.android.gms.maps.model.CameraPosition.Builder()
                                     .target(targetLoc)
                                     .zoom(16.0f)
-                                    .tilt(45f) // Удерживаем наклон 45 градусов, предотвращая сброс от Google SDK
+                                    .tilt(45f)
                                     .bearing(0f)
                                     .build()
                                 mMap?.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(cameraPosition), 400, null)
                             }
-                        } else if (viewModel.currentRoutePolyline != null) {
-                            // Стандартное плоское 2D-центрирование всей поездки для остальных состояний
+                        } else if (currentStatus == "ACCEPTED") {
+                            focusOnPickupRoute()
+                        } else if (currentStatus == "DRIVER_ARRIVED") {
+                            val pos = driverMarker?.position ?: originPlace?.latLng
+                            if (pos != null) {
+                                mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16.5f), 400, null)
+                            }
+                        } else if (currentStatus == "IN_PROGRESS" || activeOrderId == null) {
+                            // Полный маршрут центрируем только в поездке или при выборе тарифов
                             val boundsBuilder = LatLngBounds.Builder()
                             if (originPlace != null && destinationPlace != null) {
                                 boundsBuilder.include(originPlace!!.latLng!!)
