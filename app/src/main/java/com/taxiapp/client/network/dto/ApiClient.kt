@@ -194,10 +194,12 @@ object ApiClient {
                 val host = uri.host
                 if (host != null && host != "192.168.0.107" && !host.contains("localhost")) {
                     val certificatePinner = CertificatePinner.Builder()
-                        // 1. Точный хэш твоего сервера api.unitua.com из консоли
-                        .add(host, "sha256/9JyM4kaYamI9aABprfG+BPHoX11cJLif0m9Da2XoEDw=")
-                        // 2. Хэш промежуточного ЦА Google Trust Services (чтобы приложение не тыквынулось через 90 дней после авто-обновления SSL)
-                        .add(host, "sha256/kldp6NNEd8wsugYyyIYFsi1yIMCEd3hZbSR8ZFsa/A4=")
+                        // 1. Актуальный сертификат api.unitua.com (валиден до 06.01.2027)
+                        .add(host, "sha256/+HItYRvjasMipzdFALDcnxOY6SzYTephmJkdOc05PUg=")
+                        // 2. Исправленный хэш промежуточного ЦА GTS (WE1) — резервный
+                        .add(host, "sha256/kldp6NNEd8wsugYyyIYFsi1yIMCEDB3hZbSR8ZFsa/A4=")
+                        // 3. Корневой CA GTS Root R4 — долгоживущий резервный
+                        .add(host, "sha256/mEfIZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=")
                         .build()
                     certificatePinner(certificatePinner)
                 }
