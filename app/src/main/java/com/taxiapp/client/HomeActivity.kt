@@ -6,8 +6,11 @@ import android.text.Spannable
 import android.view.MotionEvent
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import android.transition.AutoTransition
 import android.transition.TransitionManager
 import com.facebook.shimmer.ShimmerFrameLayout
@@ -369,6 +372,8 @@ private lateinit var buttonsShimmer: ShimmerFrameLayout
     private var isSelectingOrigin = true
 
     private var isSuppressingGeocode = false
+    private var geocodeJob: Job? = null
+    private var mapPickerGeocodeJob: Job? = null
 
     private var selectedTariffItem: TariffItem? = null
 
@@ -622,12 +627,16 @@ private fun fetchAddressAtCurrentLocation() {
         }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        val isDark = sessionManager.isDarkMode()
-        val mode = if (isDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
-        if (AppCompatDelegate.getDefaultNightMode() != mode) {
-            AppCompatDelegate.setDefaultNightMode(mode)
+        val targetMode = if (!sessionManager.isManualThemeSelected()) {
+            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        } else {
+            if (sessionManager.isDarkMode()) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+        }
+        if (AppCompatDelegate.getDefaultNightMode() != targetMode) {
+            AppCompatDelegate.setDefaultNightMode(targetMode)
         }
 
+        val isDark = sessionManager.isDarkMode()
         setContentView(R.layout.activity_home)
 
         setupSystemBars(isDark)
@@ -2086,8 +2095,10 @@ btnChangePayment.setOnClickListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        geocodeJob?.cancel()
+        mapPickerGeocodeJob?.cancel()
         // 🔥 УМНАЯ ОЧИСТКА ПАМЯТИ: Тормозим таймер ожидания, убирая Runnable из очереди Handler
-        stopWaitingTimer() 
+        stopWaitingTimer()
         
         stopDriverTracking()
         stopBoostTimer()
@@ -2321,7 +2332,13 @@ btnChangePayment.setOnClickListener {
             if (viewModel.currentRoutePolyline == null && !isRouteMode) {
                 // РЕАГИРУЕМ ТОЛЬКО НА ПАЛЕЦ (REASON_GESTURE), чтобы избежать прыжков от авто-центровки
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
-                    tvOrigin.text = "Визначення..."
+                    geocodeJob?.cancel()
+                    if (isMapPickingMode) {
+                        mapPickerGeocodeJob?.cancel()
+                        tvMapPickerAddress.text = "Шукаємо адресу..."
+                    } else {
+                        tvOrigin.text = "Визначення..."
+                    }
 
                     if (isInterfaceRevealed || isMapPickingMode) {
                         centerPin.animate().cancel()
@@ -2415,7 +2432,7 @@ btnChangePayment.setOnClickListener {
 
             if (isMapPickingMode) {
                 tvMapPickerAddress.text = "Шукаємо адресу..."
-                getAddressFromLocation(target) { address ->
+                getAddressFromLocation(target, debounceMs = 400L) { address ->
                     tvMapPickerAddress.text = address ?: "Невідома адреса"
                 }
             } else {
@@ -2564,46 +2581,41 @@ btnChangePayment.setOnClickListener {
     // Круг 3
     setCircle(statusCircle3, statusIcon3, isFilled = step >= 3, isActiveOutline = step == 2)
 }
-    private fun getAddressForOrigin(latLng: LatLng) {
-    Thread {
-        try {
-            // 1. Берем текущий язык из нашей сессии ("uk" или "en")
-            val sessionManager = SessionManager(this)
-            val currentLang = sessionManager.getLanguage()
-            val locale = Locale(currentLang)
-
-            // 2. Передаем эту локаль в Geocoder
-            val geocoder = Geocoder(this, locale)
-            
-            @Suppress("DEPRECATION")
-            val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-            
-            // 3. Берем переведенный дефолтный текст
-            val defaultPointText = getString(R.string.point_on_map)
-            
-            val addressName = if (!addresses.isNullOrEmpty()) {
-                val raw = addresses[0].getAddressLine(0)
-                AddressUtils.formatAddress(raw)
-            } else defaultPointText
-            
-            Handler(Looper.getMainLooper()).post { 
-                if (viewModel.currentRoutePolyline == null) {
-                    tvOrigin.text = addressName
-                    originPlace = Place.builder().setName(addressName).setLatLng(latLng).build()
-                }
+    private fun getAddressForOrigin(latLng: LatLng, debounceMs: Long = 400L) {
+        geocodeJob?.cancel()
+        geocodeJob = lifecycleScope.launch {
+            if (debounceMs > 0) {
+                delay(debounceMs)
             }
-        } catch (e: Exception) { 
-            e.printStackTrace()
-            // Если ошибка сети - тоже ставим переведенный текст
-            val defaultPointText = getString(R.string.point_on_map)
-            Handler(Looper.getMainLooper()).post { 
-                if (viewModel.currentRoutePolyline == null) {
-                    tvOrigin.text = defaultPointText 
+            val addressName = withContext(Dispatchers.IO) {
+                try {
+                    withTimeoutOrNull(3500L) {
+                        val sessionManager = SessionManager(this@HomeActivity)
+                        val currentLang = sessionManager.getLanguage()
+                        val locale = Locale(currentLang)
+                        val geocoder = Geocoder(this@HomeActivity, locale)
+
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+
+                        if (!addresses.isNullOrEmpty()) {
+                            val raw = addresses[0].getAddressLine(0)
+                            AddressUtils.formatAddress(raw)
+                        } else {
+                            null
+                        }
+                    }
+                } catch (e: Exception) {
+                    null
                 }
-            } 
+            } ?: getString(R.string.point_on_map)
+
+            if (viewModel.currentRoutePolyline == null) {
+                tvOrigin.text = addressName
+                originPlace = Place.builder().setName(addressName).setLatLng(latLng).build()
+            }
         }
-    }.start()
-}
+    }
 
 // --- НОВЫЕ ФУНКЦИИ ДЛЯ РЕЖИМА ВЫБОРА НА КАРТЕ ---
 
@@ -2788,30 +2800,37 @@ private fun returnToAddressPicker() {
     addressPickerLauncher.launch(intent)
 }
 
-private fun getAddressFromLocation(latLng: LatLng, callback: (String?) -> Unit) {
-    // Используем lifecycleScope: корутина автоматически умрет вместе с Activity
-    lifecycleScope.launch(Dispatchers.IO) {
-        val result = try {
-            val geocoder = android.location.Geocoder(this@HomeActivity, java.util.Locale("uk", "UA"))
-            val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-            
-            if (!addresses.isNullOrEmpty()) {
-                val addressLine = addresses[0].getAddressLine(0)
-                // Твоя утилита очистки адреса
-                com.taxiapp.client.utils.AddressUtils.formatAddress(addressLine) 
-            } else {
-                null
+    private fun getAddressFromLocation(latLng: LatLng, debounceMs: Long = 0L, callback: (String?) -> Unit) {
+        mapPickerGeocodeJob?.cancel()
+        mapPickerGeocodeJob = lifecycleScope.launch {
+            if (debounceMs > 0) {
+                delay(debounceMs)
             }
-        } catch (e: Exception) {
-            null
-        }
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    withTimeoutOrNull(3500L) {
+                        val sessionManager = SessionManager(this@HomeActivity)
+                        val currentLang = sessionManager.getLanguage()
+                        val locale = Locale(currentLang)
+                        val geocoder = Geocoder(this@HomeActivity, locale)
 
-        // Безопасно возвращаемся на Главный поток для вызова коллбека интерфейса
-        withContext(Dispatchers.Main) {
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+
+                        if (!addresses.isNullOrEmpty()) {
+                            val addressLine = addresses[0].getAddressLine(0)
+                            AddressUtils.formatAddress(addressLine)
+                        } else {
+                            null
+                        }
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+            }
             callback(result)
         }
     }
-}
 class RoundedBackgroundSpan(
     private val backgroundColor: Int,
     private val textColor: Int,

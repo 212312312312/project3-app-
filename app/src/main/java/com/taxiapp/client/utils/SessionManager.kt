@@ -2,11 +2,11 @@ package com.taxiapp.client.utils
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import com.google.android.gms.maps.model.LatLng
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.android.libraries.places.api.model.Place
-
 // Допоміжний клас для передачі даних про знижку
 data class SessionPromoData(
     val discountPercent: Int,
@@ -37,6 +37,7 @@ class SessionManager(private val context: Context) {
         const val USER_CITY_LNG = "user_city_lng"
         const val USER_CITY_ZOOM = "user_city_zoom"
         const val ACTIVE_ORDER_ID = "active_order_id"
+        const val KEY_IS_MANUAL_THEME = "is_manual_theme"
         const val KEY_IS_DARK_MODE = "is_dark_mode"
         const val KEY_HOME_NAME = "home_name"
         const val KEY_HOME_LAT = "home_lat"
@@ -175,11 +176,22 @@ class SessionManager(private val context: Context) {
     }
 
     // --- THEME ---
+    fun isManualThemeSelected(): Boolean {
+        return prefs.getBoolean(KEY_IS_MANUAL_THEME, false)
+    }
+
     fun saveThemeMode(isDark: Boolean) {
-        prefs.edit().putBoolean(KEY_IS_DARK_MODE, isDark).apply()
+        prefs.edit()
+            .putBoolean(KEY_IS_MANUAL_THEME, true)
+            .putBoolean(KEY_IS_DARK_MODE, isDark)
+            .apply()
     }
 
     fun isDarkMode(): Boolean {
+        if (!isManualThemeSelected()) {
+            val nightModeFlags = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            return nightModeFlags == Configuration.UI_MODE_NIGHT_YES
+        }
         return prefs.getBoolean(KEY_IS_DARK_MODE, false)
     }
 

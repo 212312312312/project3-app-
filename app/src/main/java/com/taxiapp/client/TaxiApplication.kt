@@ -52,12 +52,15 @@ class TaxiApplication : Application() {
         })
 
         val sessionManager = SessionManager(this)
-        val isDark = sessionManager.isDarkMode()
-
-        if (isDark) {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        if (!sessionManager.isManualThemeSelected()) {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         } else {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+            val isDark = sessionManager.isDarkMode()
+            if (isDark) {
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+            } else {
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+            }
         }
     }
 }
