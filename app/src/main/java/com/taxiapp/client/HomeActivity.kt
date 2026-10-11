@@ -218,6 +218,9 @@ private lateinit var btnConfirmMapPicker: Button
     private lateinit var containerDestination: LinearLayout
     private lateinit var tvDestination: TextView
 
+    private val nearbyDriversHandler = Handler(Looper.getMainLooper())
+    private var nearbyDriversRunnable: Runnable? = null
+
     private var lastLocationUpdateTime = 0L
     private val LOCATION_UPDATE_INTERVAL = 7000L // Оновлення раз на 7 секунд
     private var lastLocationSent: LatLng? = null
@@ -618,9 +621,6 @@ private fun fetchAddressAtCurrentLocation() {
             android.util.Log.e("WS_TAXI_DEBUG", "❌ Токен пуст, не могу подключить сокет!")
         }
 
-        // А затем уже слушаем
-        viewModel.startListeningNearbyDrivers(webSocketManager)
-
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val isDark = sessionManager.isDarkMode()
         val mode = if (isDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
@@ -747,7 +747,7 @@ private fun fetchAddressAtCurrentLocation() {
         }
 
         // Фильтр отображения свободных машин в радиусе 500 метров
-        val SEARCH_RADIUS_METERS = 500.0
+        val SEARCH_RADIUS_METERS = 750.0 // Охватывает 500+- метров с учетом разброса сетки
         val driversInRange = drivers.filter { driver ->
             val driverPos = LatLng(driver.lat, driver.lng)
             val distance = com.google.maps.android.SphericalUtil.computeDistanceBetween(mapCenter, driverPos)
@@ -1076,6 +1076,7 @@ private fun fetchAddressAtCurrentLocation() {
         updateFavoriteButtonsUI()
         updateDrawerHeader()
         updatePaymentMethodFromSession()
+        startPeriodicNearbyDriversRefresh()
 
         if (tariffsPanel.visibility == View.VISIBLE) {
             fetchTariffsAndShowPanel()
@@ -2090,6 +2091,7 @@ btnChangePayment.setOnClickListener {
         
         stopDriverTracking()
         stopBoostTimer()
+        stopPeriodicNearbyDriversRefresh()
         viewModel.stopOrderSocketListening()
     }
 
@@ -3305,6 +3307,7 @@ class RoundedBackgroundSpan(
         if (route != null) {
             viewModel.loadTariffsAndCalculatePrice(route, dist)
         }
+        stopPeriodicNearbyDriversRefresh()
     }
 
     private fun showCustomScheduleDialog() {
@@ -3567,6 +3570,8 @@ private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
 }
 
+
+
 private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     val tomorrow = Calendar.getInstance()
     tomorrow.timeInMillis = now.timeInMillis
@@ -3765,6 +3770,31 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         routeAnimator?.start()
     }
 
+
+    private fun startPeriodicNearbyDriversRefresh() {
+        stopPeriodicNearbyDriversRefresh()
+        nearbyDriversRunnable = object : Runnable {
+            override fun run() {
+                val isMainScreen = activeOrderId == null &&
+                        !isRouteMode &&
+                        viewModel.currentRoutePolyline == null &&
+                        tariffsPanel.visibility != View.VISIBLE &&
+                        !isMapPickingMode
+
+                if (isMainScreen && mMap != null) {
+                    val target = mMap!!.cameraPosition.target
+                    viewModel.updateClientLocation(webSocketManager, target.latitude, target.longitude)
+                }
+                nearbyDriversHandler.postDelayed(this, 10000L) // Раз в 10 секунд (синхронно с Redis)
+            }
+        }
+        nearbyDriversHandler.postDelayed(nearbyDriversRunnable!!, 10000L)
+    }
+
+    private fun stopPeriodicNearbyDriversRefresh() {
+        nearbyDriversRunnable?.let { nearbyDriversHandler.removeCallbacks(it) }
+        nearbyDriversRunnable = null
+    }
     private fun showChangePaymentDialog() {
         // Создаем красивый BottomSheetDialog
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
@@ -5058,7 +5088,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
         tvCommentTitle.visibility = View.GONE
         layoutOrderCommentCard.visibility = View.GONE
     }
-
+        stopPeriodicNearbyDriversRefresh()
     updateStatusUI(order)
 }
     private fun drawPickupRoute(polylineStr: String?) {
@@ -6265,6 +6295,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
     private fun showAddressPanel() {
         mMap?.clear()
         isRouteMode = false
+        startPeriodicNearbyDriversRefresh()
 
         lastKnownDriverLatLng = null
         lastKnownDriverBearing = 0f

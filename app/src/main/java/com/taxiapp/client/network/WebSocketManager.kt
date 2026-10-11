@@ -32,6 +32,7 @@ data class CardBindSocketMessageDto(
 
 class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: androidx.lifecycle.LifecycleOwner) {
 
+    private var pendingLocationRequest: ClientLocationRequest? = null
     private var currentCardBindSub: Pair<Long, (CardBindSocketMessageDto) -> Unit>? = null
     private var nearbyDriversDisposable: io.reactivex.disposables.Disposable? = null
     private var driverTrackingDisposable: io.reactivex.disposables.Disposable? = null
@@ -81,6 +82,9 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
         currentOrderSub?.let { subscribeToClientOrders(it.first, it.second) }
         currentNearbyDriversSub?.let { subscribeToNearbyDrivers(it.first, it.second) }
         currentCardBindSub?.let { subscribeToCardBinding(it.first, it.second) }
+
+        // 🟢 Мгновенно отправляем координаты, если запрос пришел во время коннекта
+        pendingLocationRequest?.let { sendClientLocation(it) }
     }
 
     @SuppressLint("CheckResult")
@@ -115,11 +119,17 @@ class WebSocketManager(private val baseUrl: String, private val lifecycleOwner: 
     }
 
     fun sendClientLocation(request: ClientLocationRequest) {
+        pendingLocationRequest = request
         if (!isConnected()) return
+
         val jsonPayload = gson.toJson(request)
         stompClient?.send("/app/client/location", jsonPayload)
             ?.subscribeOn(Schedulers.io())
-            ?.subscribe({}, { err -> Log.e("WS_TAXI_DEBUG", "❌ Ошибка отправки координат", err) })
+            ?.subscribe({
+                pendingLocationRequest = null
+            }, { err ->
+                Log.e("WS_TAXI_DEBUG", "❌ Ошибка отправки координат", err)
+            })
             ?.let { compositeDisposable.add(it) }
     }
 
