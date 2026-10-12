@@ -334,21 +334,22 @@ private var mapPickerWaypointIndex = -1
     private var routeAnimator: ValueAnimator? = null
     private var isButtonsPanelLoading = false
 
+    private lateinit var layoutSearchControls: View
+    private lateinit var layoutDriverFoundState: View
+    private lateinit var btnCancelRideDriver: Button
 
-private lateinit var layoutSearchControls: LinearLayout
-private lateinit var layoutDriverFoundState: LinearLayout
-private lateinit var btnCancelRideDriver: Button // Нижня кнопка скасування з блоку водія
-    // Переменные для статус-пила
-private lateinit var statusCircle1: com.google.android.material.card.MaterialCardView
-private lateinit var statusIcon1: ImageView
-private lateinit var statusLine1: com.google.android.material.card.MaterialCardView
+private lateinit var tvSearchTariffSubtitle: TextView
+    private lateinit var tvSearchOrderPrice: TextView
+    private lateinit var animatedBorderHeader: com.taxiapp.client.ui.AnimatedBorderView
 
-private lateinit var statusCircle2: com.google.android.material.card.MaterialCardView
-private lateinit var statusIcon2: ImageView
-private lateinit var statusLine2: com.google.android.material.card.MaterialCardView
-
-private lateinit var statusCircle3: com.google.android.material.card.MaterialCardView
-private lateinit var statusIcon3: ImageView
+    // Новые элементы шапки и профиля водителя
+    private lateinit var layoutHeaderSearchContent: View
+    private lateinit var layoutHeaderDriverContent: View
+    private lateinit var orderStatusDriverText: TextView
+    private lateinit var tvDriverStatusSubtext: TextView
+    private lateinit var cardHeaderEtaPill: View
+    private lateinit var tvHeaderEtaTime: TextView
+    private lateinit var tvDriverRatingVal: TextView
 
 private var maxDetailsHeight = 0
 
@@ -938,6 +939,8 @@ private fun fetchAddressAtCurrentLocation() {
         }
     }
 
+
+
     private fun checkAndShowNotificationDialogWithDelay() {
         if (shouldShowNotificationDialog()) {
             Handler(Looper.getMainLooper()).postDelayed({
@@ -1210,18 +1213,17 @@ private fun stopRadarAnimation() {
         try { pinShadow.alpha = 0f } catch (e: Exception) {}
         pinContainer = findViewById(R.id.pin_container)
 
-        statusCircle1 = findViewById(R.id.status_circle_1)
-statusIcon1 = findViewById(R.id.status_icon_1)
-statusLine1 = findViewById(R.id.status_line_1)
+        tvSearchTariffSubtitle = findViewById(R.id.tv_search_tariff_subtitle)
+        tvSearchOrderPrice = findViewById(R.id.tv_search_order_price)
+        animatedBorderHeader = findViewById(R.id.animated_border_header)
 
-statusCircle2 = findViewById(R.id.status_circle_2)
-statusIcon2 = findViewById(R.id.status_icon_2)
-statusLine2 = findViewById(R.id.status_line_2)
-
-statusCircle3 = findViewById(R.id.status_circle_3)
-statusIcon3 = findViewById(R.id.status_icon_3)
-
-
+        layoutHeaderSearchContent = findViewById(R.id.layout_header_search_content)
+        layoutHeaderDriverContent = findViewById(R.id.layout_header_driver_content)
+        orderStatusDriverText = findViewById(R.id.order_status_driver_text)
+        tvDriverStatusSubtext = findViewById(R.id.tv_driver_status_subtext)
+        cardHeaderEtaPill = findViewById(R.id.card_header_eta_pill)
+        tvHeaderEtaTime = findViewById(R.id.tv_header_eta_time)
+        tvDriverRatingVal = findViewById(R.id.tv_driver_rating_val)
 
         mapLoadingCurtain = findViewById(R.id.map_loading_curtain)
         contentBottomSheet = findViewById(R.id.content_bottom_sheet)
@@ -1743,6 +1745,42 @@ btnChangePayment.setOnClickListener {
         
 
     
+    }
+
+    private fun getAddressForOrigin(latLng: LatLng, debounceMs: Long = 400L) {
+        geocodeJob?.cancel()
+        geocodeJob = lifecycleScope.launch {
+            if (debounceMs > 0) {
+                delay(debounceMs)
+            }
+            val addressName = withContext(Dispatchers.IO) {
+                try {
+                    withTimeoutOrNull(3500L) {
+                        val sessionManager = SessionManager(this@HomeActivity)
+                        val currentLang = sessionManager.getLanguage()
+                        val locale = Locale(currentLang)
+                        val geocoder = Geocoder(this@HomeActivity, locale)
+
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+
+                        if (!addresses.isNullOrEmpty()) {
+                            val raw = addresses[0].getAddressLine(0)
+                            AddressUtils.formatAddress(raw)
+                        } else {
+                            null
+                        }
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: getString(R.string.point_on_map)
+
+            if (viewModel.currentRoutePolyline == null) {
+                tvOrigin.text = addressName
+                originPlace = Place.builder().setName(addressName).setLatLng(latLng).build()
+            }
+        }
     }
 
     private fun setupProfileLogic() {
@@ -2526,6 +2564,25 @@ btnChangePayment.setOnClickListener {
         }
     }
 
+    private fun updateHeaderEta(order: TaxiOrderDto) {
+        val calendar = Calendar.getInstance()
+        val durationSec = if (order.status == "IN_PROGRESS") {
+            order.durationSeconds ?: routeDurationSeconds
+        } else {
+            // В статусе ACCEPTED (водитель едет на посадку):
+            if (pickupRoutePoints.isNotEmpty()) {
+                val meters = SphericalUtil.computeLength(pickupRoutePoints)
+                // Городская скорость с светофорами ~35 км/ч (~9.7 м/с)
+                (meters / 9.7).toInt().coerceAtLeast(180)
+            } else {
+                300 // Базовые 5 минут, если полилайн еще подгружается
+            }
+        }
+        calendar.add(Calendar.SECOND, durationSec)
+        val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+        tvHeaderEtaTime.text = sdf.format(calendar.time)
+    }
+
     private fun convertDpToPixel(dp: Float): Float {
         val metrics = resources.displayMetrics
         return dp * (metrics.densityDpi / 160f)
@@ -2535,88 +2592,7 @@ btnChangePayment.setOnClickListener {
         return AddressUtils.formatAddress(fullAddress)
     }
 
-    private fun updateOrderProgress(step: Int) {
-    val activeColor = androidx.core.content.ContextCompat.getColor(this, R.color.text_primary)
-    val inactiveColor = androidx.core.content.ContextCompat.getColor(this, R.color.divider_color)
-    val bgCardColor = androidx.core.content.ContextCompat.getColor(this, R.color.card_background)
-
-    fun setCircle(
-        card: com.google.android.material.card.MaterialCardView, 
-        icon: ImageView, 
-        isFilled: Boolean, 
-        isActiveOutline: Boolean
-    ) {
-        if (isFilled) {
-            card.setCardBackgroundColor(activeColor)
-            card.strokeWidth = 0
-            icon.visibility = View.VISIBLE
-        } else if (isActiveOutline) {
-            card.setCardBackgroundColor(bgCardColor)
-            card.strokeColor = activeColor
-            card.strokeWidth = convertDpToPixel(4f).toInt()
-            icon.visibility = View.GONE
-        } else {
-            card.setCardBackgroundColor(bgCardColor)
-            card.strokeColor = inactiveColor
-            card.strokeWidth = convertDpToPixel(4f).toInt()
-            icon.visibility = View.GONE
-        }
-    }
-
-    // Шаг 0 = Пошук (тільки контур 1-го круга)
-    // Шаг 1 = Знайдений/На місці (1-й зафарбований, лінія 1 горить, 2-й контур)
-    // Шаг 2 = В дорозі (1, 2 зафарбовані, обидві лінії горять, 3-й контур)
-    // Шаг 3 = Завершено (все зафарбовано)
-
-    // Круг 1
-    setCircle(statusCircle1, statusIcon1, isFilled = step >= 1, isActiveOutline = step == 0)
-    // Линия 1 (ведет ко второму кругу)
-    statusLine1.setCardBackgroundColor(if (step >= 1) activeColor else inactiveColor)
-
-    // Круг 2
-    setCircle(statusCircle2, statusIcon2, isFilled = step >= 2, isActiveOutline = step == 1)
-    // Линия 2 (ведет к третьему кругу)
-    statusLine2.setCardBackgroundColor(if (step >= 2) activeColor else inactiveColor)
-
-    // Круг 3
-    setCircle(statusCircle3, statusIcon3, isFilled = step >= 3, isActiveOutline = step == 2)
-}
-    private fun getAddressForOrigin(latLng: LatLng, debounceMs: Long = 400L) {
-        geocodeJob?.cancel()
-        geocodeJob = lifecycleScope.launch {
-            if (debounceMs > 0) {
-                delay(debounceMs)
-            }
-            val addressName = withContext(Dispatchers.IO) {
-                try {
-                    withTimeoutOrNull(3500L) {
-                        val sessionManager = SessionManager(this@HomeActivity)
-                        val currentLang = sessionManager.getLanguage()
-                        val locale = Locale(currentLang)
-                        val geocoder = Geocoder(this@HomeActivity, locale)
-
-                        @Suppress("DEPRECATION")
-                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-
-                        if (!addresses.isNullOrEmpty()) {
-                            val raw = addresses[0].getAddressLine(0)
-                            AddressUtils.formatAddress(raw)
-                        } else {
-                            null
-                        }
-                    }
-                } catch (e: Exception) {
-                    null
-                }
-            } ?: getString(R.string.point_on_map)
-
-            if (viewModel.currentRoutePolyline == null) {
-                tvOrigin.text = addressName
-                originPlace = Place.builder().setName(addressName).setLatLng(latLng).build()
-            }
-        }
-    }
-
+    
 // --- НОВЫЕ ФУНКЦИИ ДЛЯ РЕЖИМА ВЫБОРА НА КАРТЕ ---
 
 private fun showMapPickerMode(isOrigin: Boolean) {
@@ -5028,6 +5004,8 @@ ivMenuIcon.setColorFilter(adaptiveColor)
     try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
         tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
+        tvSearchOrderPrice.text = String.format("%.0f ₴", order.price)
+        tvSearchTariffSubtitle.text = order.tariffName ?: "Стандарт"
         val tvPaymentText = findViewById<TextView>(R.id.tv_active_order_payment_text)
 
         when (order.paymentMethod) {
@@ -5508,6 +5486,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         // 3. ПРОВЕРКА СТАТУСОВ заказа
         when(order.status) {
             "SCHEDULED" -> {
+                animatedBorderHeader.stopBorderAnimation()
                 stopRadarAnimation()
                 stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 isCameraFocusedOnSearch = false
@@ -5515,8 +5494,10 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
 
-                updateOrderProgress(0)
                 orderStatusText.text = "Заплановано"
+                tvSearchTariffSubtitle.text = order.tariffName ?: "Стандарт"
+                tvSearchTariffSubtitle.visibility = View.VISIBLE
+                tvSearchOrderPrice.text = String.format("%.0f ₴", order.price)
                 stopStatusBlinking()
 
                 layoutSearchControls.visibility = View.VISIBLE
@@ -5541,9 +5522,15 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             "REQUESTED", "OFFERING" -> {
                 checkAndScheduleBoostPrompt(order) // 👈 ЗАПУСК/ПЕРЕВІРКА ТАЙМЕРА БУСТУ НА 3-Й ХВИЛИНІ
 
-                updateOrderProgress(0)
-                orderStatusText.text = getString(R.string.status_searching_driver)
+                layoutHeaderSearchContent.visibility = View.VISIBLE
+                layoutHeaderDriverContent.visibility = View.GONE
+
+                orderStatusText.text = "Пошук вільного авто"
+                tvSearchTariffSubtitle.text = order.tariffName ?: "Стандарт"
+                tvSearchTariffSubtitle.visibility = View.VISIBLE
+                tvSearchOrderPrice.text = String.format("%.0f ₴", order.price)
                 startStatusBlinking()
+                animatedBorderHeader.startBorderAnimation()
 
                 layoutSearchControls.visibility = View.VISIBLE
                 layoutDriverFoundState.visibility = View.GONE
@@ -5623,6 +5610,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "ACCEPTED" -> {
+                animatedBorderHeader.stopBorderAnimation()
                 stopBoostTimer() // 👈 ЗУПИНКА БУСТУ (водій знайдений)
                 isCameraFocusedOnSearch = false
 
@@ -5658,9 +5646,19 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
 
-                updateOrderProgress(1)
+                
                 stopStatusBlinking()
-                orderStatusText.text = getString(R.string.status_driver_coming)
+
+                // Переключаем шапку на стиль с прибытием
+                layoutHeaderSearchContent.visibility = View.GONE
+                layoutHeaderDriverContent.visibility = View.VISIBLE
+                animatedBorderHeader.stopBorderAnimation()
+
+                orderStatusDriverText.text = "Їде до вас"
+                tvDriverStatusSubtext.text = "маршрут може змінюватися залежно від дорожніх умов"
+                tvDriverStatusSubtext.visibility = View.VISIBLE
+                cardHeaderEtaPill.visibility = View.VISIBLE
+                updateHeaderEta(order)
 
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.VISIBLE
@@ -5698,6 +5696,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "DRIVER_ARRIVED" -> {
+                animatedBorderHeader.stopBorderAnimation()
                 stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 isCameraFocusedOnSearch = false
 
@@ -5724,9 +5723,17 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
-                updateOrderProgress(1)
+                
                 stopStatusBlinking()
-                orderStatusText.text = getString(R.string.status_driver_arrived)
+
+                layoutHeaderSearchContent.visibility = View.GONE
+                layoutHeaderDriverContent.visibility = View.VISIBLE
+                animatedBorderHeader.stopBorderAnimation()
+
+                orderStatusDriverText.text = "Водій на місці"
+                tvDriverStatusSubtext.text = "водій очікує на вас у точці посадки"
+                tvDriverStatusSubtext.visibility = View.VISIBLE
+                cardHeaderEtaPill.visibility = View.GONE
 
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.VISIBLE
@@ -5763,6 +5770,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "IN_PROGRESS" -> {
+                animatedBorderHeader.stopBorderAnimation()
                 stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 pickupPolyline?.remove()
                 pickupPolyline = null
@@ -5773,9 +5781,18 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
 
-                updateOrderProgress(2)
+                
                 stopStatusBlinking()
-                orderStatusText.text = getString(R.string.status_in_progress)
+
+                layoutHeaderSearchContent.visibility = View.GONE
+                layoutHeaderDriverContent.visibility = View.VISIBLE
+                animatedBorderHeader.stopBorderAnimation()
+
+                orderStatusDriverText.text = "В дорозі"
+                tvDriverStatusSubtext.text = "маршрут може змінюватися залежно від дорожніх умов"
+                tvDriverStatusSubtext.visibility = View.VISIBLE
+                cardHeaderEtaPill.visibility = View.VISIBLE
+                updateHeaderEta(order)
 
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.VISIBLE
@@ -5875,11 +5892,12 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "COMPLETED" -> {
+                animatedBorderHeader.stopBorderAnimation()
                 stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 isCameraFocusedOnSearch = false
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
-                updateOrderProgress(3)
+                
                 stopStatusBlinking()
                 resetOrderDetailsState()
                 orderStatusText.text = getString(R.string.status_completed)
@@ -5929,6 +5947,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
 
             "CANCELLED" -> {
+                animatedBorderHeader.stopBorderAnimation()
                 stopBoostTimer() // 👈 ЗУПИНКА БУСТУ
                 pickupPolyline?.remove()
                 pickupPolyline = null
@@ -6091,10 +6110,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             tvCarPlateLarge.text = drv.carPlateNumber ?: "---"
 
             val colorPart = drv.carColor ?: ""
-            // 🟢 Очищаем название авто от телефона, если он попал в строку
             val rawModel = drv.carModel ?: "Авто"
             val modelPart = rawModel.replace(Regex("\\+?\\d{9,13}"), "").trim().trimEnd(',', '-')
-            val tariffPart = order.tariffName ?: "Standard"
+            val tariffPart = order.tariffName ?: "Стандарт"
 
             val subtitle = buildString {
                 if (colorPart.isNotEmpty()) append("$colorPart ")
@@ -6109,38 +6127,24 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             if (isPartner) {
                 tvChatBadge.visibility = View.GONE
             }
-            // 1. Имя водителя: убрана приписка "(Партнер)"
+
             tvDriverFirstName.text = if (isPartner) {
                 "Водій"
             } else {
                 drv.fullName.split(" ").firstOrNull() ?: drv.fullName
             }
 
-            // 2. Стаж / Принадлежность к службе: убираем текст "Партнерська мережа"
-            if (isPartner) {
-                tvDriverExperience.visibility = View.GONE
-            } else {
-                tvDriverExperience.visibility = View.VISIBLE
-                val months = drv.monthsInService
-                val expText = if (months < 1) "В службі < 1 міс." else "В службі $months міс."
-                tvDriverExperience.text = expText
-            }
+            // Оценка водителя в бейдж под аватаром
+            tvDriverRatingVal.text = String.format(Locale.US, "%.1f", drv.rating)
 
-            // 3. Рейтинг: оставляем отображение рейтинга
-            tvDriverRidesCount.visibility = View.VISIBLE
-            if (isPartner) {
-                val sizePx = convertDpToPixel(16f).toInt()
-                val starDrawable = ContextCompat.getDrawable(this, R.drawable.ic_stat_star)?.mutate()?.apply {
-                    setTint(ContextCompat.getColor(this@HomeActivity, R.color.taxi_yellow))
-                    setBounds(0, 0, sizePx, sizePx)
-                }
-                tvDriverRidesCount.setCompoundDrawablesRelative(starDrawable, null, null, null)
-                tvDriverRidesCount.compoundDrawablePadding = convertDpToPixel(4f).toInt()
-                tvDriverRidesCount.text = String.format(Locale.US, "%.1f", drv.rating)
-            } else {
-                tvDriverRidesCount.setCompoundDrawablesRelative(null, null, null, null)
-                tvDriverRidesCount.text = "Поїздок: ${drv.completedRides}"
+            // Склонение числа поездок (например: 2 поїздки, 5 поїздок)
+            val count = drv.completedRides
+            val ridesText = when {
+                count % 10 == 1 && count % 100 != 11 -> "$count поїздка"
+                count % 10 in 2..4 && count % 100 !in 12..14 -> "$count поїздки"
+                else -> "$count поїздок"
             }
+            tvDriverRidesCount.text = ridesText
 
             activeOrderCard.tag = drv.phoneNumber
 
@@ -6404,6 +6408,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         } catch (e: Exception) {}
 
         stopRadarAnimation()
+        animatedBorderHeader.stopBorderAnimation()
 
         // 🔥 СИНХРОНИЗАЦИЯ: Включаем блокировку промежуточного геокодинга и центрируем строго после расчета паддинга
         isSuppressingGeocode = true
