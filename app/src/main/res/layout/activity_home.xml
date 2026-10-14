@@ -1647,15 +1647,16 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <FrameLayout
+                    android:id="@+id/layout_cancel_buttons_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="16dp"
-                    android:layout_marginBottom="16dp">
+                    android:layout_marginHorizontal="16dp">
                     
                     <Button
                         android:id="@+id/btn_cancel_order"
                         android:layout_width="match_parent"
                         android:layout_height="56dp"
+                        android:layout_marginBottom="16dp"
                         android:text="@string/btn_cancel_order"
                         android:textColor="@color/taxi_red_cancel"  
                         android:textSize="16sp"
@@ -1679,6 +1680,7 @@
                         android:id="@+id/btn_cancel_ride_driver"
                         android:layout_width="match_parent"
                         android:layout_height="56dp"
+                        android:layout_marginBottom="16dp"
                         android:text="@string/btn_cancel_trip"
                         android:textColor="@color/taxi_red_cancel"  
                         android:textSize="16sp"
@@ -1707,26 +1709,49 @@
                     android:orientation="vertical"
                     android:visibility="gone"
                     android:layout_marginHorizontal="16dp"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="0dp"
                     android:gravity="center_horizontal">
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/card_payment_completed_amount"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/label_to_pay"
-                        android:textSize="16sp"
-                        android:textColor="@color/text_secondary" />
-
-                    <TextView
-                        android:id="@+id/tv_final_payment_price"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        tools:text="0 ₴"
-                        android:textSize="40sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary"
                         android:layout_marginTop="4dp"
-                        android:layout_marginBottom="24dp" />
+                        android:layout_marginBottom="12dp"
+                        app:cardCornerRadius="14dp"
+                        app:cardElevation="0dp"
+                        app:cardBackgroundColor="@color/input_background"
+                        app:strokeWidth="0dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:paddingVertical="14dp"
+                            android:paddingHorizontal="16dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/label_to_pay"
+                                android:textSize="13sp"
+                                android:textColor="@color/text_secondary"
+                                android:includeFontPadding="false" />
+
+                            <TextView
+                                android:id="@+id/tv_final_payment_price"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                tools:text="0 ₴"
+                                android:textSize="32sp"
+                                android:textStyle="bold"
+                                android:fontFamily="sans-serif-bold"
+                                android:includeFontPadding="false"
+                                android:textColor="@color/text_primary"
+                                android:layout_marginTop="4dp" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:layout_width="match_parent"

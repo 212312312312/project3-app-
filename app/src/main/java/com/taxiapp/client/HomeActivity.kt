@@ -340,6 +340,7 @@ private var mapPickerWaypointIndex = -1
 
 private lateinit var tvSearchTariffSubtitle: TextView
     private lateinit var tvSearchOrderPrice: TextView
+    private var ratingDialogInstance: Dialog? = null
     private lateinit var animatedBorderHeader: com.taxiapp.client.ui.AnimatedBorderView
 
     // Новые элементы шапки и профиля водителя
@@ -709,16 +710,19 @@ private fun fetchAddressAtCurrentLocation() {
         } 
         // 3. Якщо показана картка активного замовлення (ТУТ НАШЕ ОНОВЛЕННЯ)
         else if (activeOrderCard.visibility == View.VISIBLE) {
+            val currentOrder = viewModel.activeOrder.value
+            val targetOrderId = currentOrder?.id ?: activeOrderId
+
             if (isOrderDetailsExpanded) {
                 animateOrderDetailsToState(false)
+            } else if (currentOrder?.status == "COMPLETED" && targetOrderId != null) {
+                // 🛡️ Якщо клієнт натиснув "Назад" на екрані завершення — зараховуємо 5 зірок та скидаємо
+                autoRateAndDismissCompletedOrder(targetOrderId)
             } else {
                 sessionManager.clearActiveOrderId()
                 viewModel.clearOrderState()
                 
-                // 🔥 БЕЗОПАСНЫЙ ФИКС: Указываем контекст класса HomeActivity, 
-                // так как мы находимся внутри анонимного OnBackPressedCallback
                 this@HomeActivity.activeOrderId = null 
-                
                 showAddressPanel()
             }
         }
@@ -1073,10 +1077,8 @@ private fun fetchAddressAtCurrentLocation() {
         // --- ОПТИМИЗАЦИЯ: Повторный вызов startOrderSocketListening вырезан, оставлен только один главный шлюз ---
         viewModel.startOrderSocketListening(webSocketManager)
 
-        val currentStatus = viewModel.activeOrder.value?.status
-        if (currentStatus == "REQUESTED" || currentStatus == "OFFERING") {
-            viewModel.checkOrderStatusOnce()
-        }
+        // 🚀 СИНХРОНИЗАЦИЯ ПРИ ВОЗВРАТЕ ИЗ ФОНА: Всегда проверяем статус активного/завершенного заказа
+        viewModel.syncActiveOrder()
 
         val savedLanguage = sessionManager.getLanguage()
         if (currentActiveLanguage != savedLanguage) {
@@ -1535,10 +1537,17 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
 
         btnMenu.setOnClickListener {
             if (activeOrderCard.visibility == View.VISIBLE) {
-                // Вирішення 4: Працює як кнопка НАЗАД (Згортає активне замовлення)
-                sessionManager.clearActiveOrderId()
-                viewModel.clearOrderState()
-                showAddressPanel()
+                val currentOrder = viewModel.activeOrder.value
+                val targetOrderId = currentOrder?.id ?: activeOrderId
+
+                if (currentOrder?.status == "COMPLETED" && targetOrderId != null) {
+                    // 🛡️ Автоматично зараховуємо 5 зірок та очищаємо стан
+                    autoRateAndDismissCompletedOrder(targetOrderId)
+                } else {
+                    sessionManager.clearActiveOrderId()
+                    viewModel.clearOrderState()
+                    showAddressPanel()
+                }
             } else if (tariffsPanel.visibility == View.VISIBLE) {
                 // Працює як кнопка НАЗАД (Виходить з тариФів)
                 showAddressPanel()
@@ -2142,6 +2151,18 @@ btnChangePayment.setOnClickListener {
         stopBoostTimer()
         stopPeriodicNearbyDriversRefresh()
         viewModel.stopOrderSocketListening()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 🛡️ Якщо клієнт згорнув або закрив додаток під час екрану завершення — авто-оцінка 5 зірок та очищення
+        val currentOrder = viewModel.activeOrder.value
+        if (currentOrder?.status == "COMPLETED") {
+            val targetOrderId = currentOrder.id ?: activeOrderId
+            if (targetOrderId != null) {
+                autoRateAndDismissCompletedOrder(targetOrderId)
+            }
+        }
     }
 
     private fun recenterMapOnUser() {
@@ -2774,6 +2795,28 @@ private fun returnToAddressPicker() {
     intent.putStringArrayListExtra("prefill_waypoints_names", data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES))
     
     addressPickerLauncher.launch(intent)
+}
+
+// 🚀 АВТОМАТИЧНА ОЦІНКА 5 ЗІРОК ТА ЗАКРИТТЯ ЗАВЕРШЕНОГО ЗАМОВЛЕННЯ ПРИ НАТИСКАННІ "НАЗАД"
+private fun autoRateAndDismissCompletedOrder(orderId: String) {
+    try {
+        ratingDialogInstance?.dismiss()
+    } catch (e: Exception) {}
+    ratingDialogInstance = null
+    isRatingDialogVisible = false
+
+    val token = sessionManager.fetchAuthToken()
+    if (token != null) {
+        val request = RateDriverRequest(orderId, 5, null)
+        ApiClient.instance.rateDriver(request).enqueue(object : Callback<MessageResponse> {
+            override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {}
+            override fun onFailure(call: Call<MessageResponse>, t: Throwable) {}
+        })
+    }
+    viewModel.dismissCompletedOrder(orderId)
+    viewModel.clearOrderState()
+    activeOrderId = null
+    showAddressPanel()
 }
 
     private fun getAddressFromLocation(latLng: LatLng, debounceMs: Long = 0L, callback: (String?) -> Unit) {
@@ -5321,11 +5364,18 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
     dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     dialog.setCancelable(false)
 
+    // 🛡️ Дозволяємо скасування кнопкою "Назад", але забороняємо випадковий клік повз діалог
+    dialog.setCancelable(true)
+    dialog.setCanceledOnTouchOutside(false)
+    dialog.setOnCancelListener {
+        dialog.dismiss()
+        isRatingDialogVisible = false
+        autoRateAndDismissCompletedOrder(orderId)
+    }
+
     val etComment = dialog.findViewById<EditText>(R.id.et_comment)
     val btnSubmit = dialog.findViewById<Button>(R.id.btn_submit_rating)
     
-    // TextView для заголовка більше не чіпаємо, він автоматично покаже "Оцініть поїздку" з XML
-
     val stars = listOf(
         dialog.findViewById<ImageView>(R.id.star_1),
         dialog.findViewById<ImageView>(R.id.star_2),
@@ -5394,6 +5444,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                     showToast("Дякуємо за відгук!")
                     try { dialog.dismiss() } catch (e: Exception) {}
                     isRatingDialogVisible = false
+
+                    // 🚀 Очищаем кэш завершенного заказа в Redis
+                    viewModel.dismissCompletedOrder(orderId)
 
                     // Очистка состояния через ViewModel
                     viewModel.clearOrderState()
@@ -5897,12 +5950,22 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 isCameraFocusedOnSearch = false
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
-                
+
                 stopStatusBlinking()
                 resetOrderDetailsState()
-                orderStatusText.text = getString(R.string.status_completed)
 
-                // 🟢 Вызов аналитики отсюда удален: он гарантированно уходит из HomeViewModel без дублей
+                // 🚀 ОНОВЛЮЄМО ШАПКУ НА СТАТУС ЗАВЕРШЕННЯ
+                layoutHeaderSearchContent.visibility = View.GONE
+                layoutHeaderDriverContent.visibility = View.VISIBLE
+                animatedBorderHeader.stopBorderAnimation()
+
+                orderStatusDriverText.text = "Завершено"
+                tvDriverStatusSubtext.text = "Фініш маршруту. Сподіваємось, вам усе сподобалось!"
+                tvDriverStatusSubtext.visibility = View.VISIBLE
+
+                // 🛡️ ХОВАЄМО ТАЙМЕР ПРИБУТТЯ (ETA) ТА ТАЙМЕР ОЧІКУВАННЯ
+                cardHeaderEtaPill.visibility = View.GONE
+                cardWaitingTimer.visibility = View.GONE
 
                 layoutSearchControls.visibility = View.GONE
                 layoutDriverFoundState.visibility = View.GONE
@@ -5934,6 +5997,9 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 btnUnderstandPayment.setOnClickListener {
                     layoutPaymentCompleted.visibility = View.GONE
+
+                    // 🚀 Очищаем кэш завершенного заказа в Redis
+                    viewModel.dismissCompletedOrder(order.id)
 
                     if (!order.isRatedByClient) {
                         val driverName = order.driver?.fullName ?: getString(R.string.default_driver_name)

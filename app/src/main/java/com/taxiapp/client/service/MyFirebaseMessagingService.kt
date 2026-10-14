@@ -54,9 +54,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val title = remoteMessage.data["title"] ?: "Оновлення статусу"
             val body = remoteMessage.data["body"] ?: ""
 
-            if (orderIdStr != null && status != null) {
-                val orderId = orderIdStr.toLongOrNull() ?: return
-
+            if (!orderIdStr.isNullOrEmpty() && !status.isNullOrEmpty()) {
                 if (status == "COMPLETED" || status == "CANCELLED") {
                     val stopIntent = Intent(this, OrderStatusService::class.java).apply {
                         action = OrderStatusService.ACTION_STOP
@@ -73,7 +71,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     }
                 } else {
                     val updateIntent = Intent(this, OrderStatusService::class.java).apply {
-                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderId)
+                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderIdStr)
                         putExtra(OrderStatusService.EXTRA_STATUS, status)
                         putExtra("custom_title", title)
                         putExtra("custom_body", body)

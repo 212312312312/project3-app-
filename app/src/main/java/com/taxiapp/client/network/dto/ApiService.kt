@@ -82,6 +82,13 @@ interface ApiService {
     @GET("client/orders/{id}")
     suspend fun getOrder(@Path("id") id: String): Response<TaxiOrderDto>
 
+    // 🚀 СИНХРОНІЗАЦІЯ АКТИВНОГО / ЩОЙНО ЗАВЕРШЕНОГО ЗАМОВЛЕННЯ (REDIS)
+    @GET("client/orders/active")
+    suspend fun getActiveOrder(): Response<TaxiOrderDto>
+
+    @POST("client/orders/{id}/dismiss")
+    suspend fun dismissOrder(@Path("id") id: String): Response<MessageResponse>
+
     // --- ЗАМОВЛЕННЯ (ІСТОРІЯ З ПАГІНАЦІЄЮ) ---
     @GET("orders/history")
     fun getHistory(

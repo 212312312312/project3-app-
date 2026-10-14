@@ -84,9 +84,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val savedId = sessionManager.fetchActiveOrderId()
         if (!savedId.isNullOrEmpty()) {
             activeOrderId = savedId
-            checkOrderStatusOnce()
         }
         currentCity = sessionManager.fetchUserCity()
+
+        // 🚀 Первичная синхронизация через Redis
+        syncActiveOrder()
 
         // 🟢 Подписываемся на сигналы отмены от FCM Push-сервиса
         com.taxiapp.client.network.OrderStatusBus.orderCanceledEvent.observeForever { canceledId ->
@@ -107,8 +109,58 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         com.taxiapp.client.network.OrderStatusBus.orderUpdatedEvent.observeForever { updatedId ->
             if (!updatedId.isNullOrEmpty()) {
                 Log.d("HomeViewModel", "🔔 Получен Push-сигнал обновления заказа $updatedId. Синхронизируем статус...")
-                checkOrderStatusOnce(updatedId)
+                syncActiveOrder()
                 com.taxiapp.client.network.OrderStatusBus.resetEvent()
+            }
+        }
+    }
+
+
+    // 🚀 СВЕРХБЫСТРАЯ СИНХРОНИЗАЦИЯ АКТИВНОГО / ЗАВЕРШЕННОГО ЗАКАЗА (ЧЕРЕЗ REDIS СЕРВЕРА)
+    // 🚀 СВЕРХБЫСТРАЯ СИНХРОНИЗАЦИЯ АКТИВНОГО / ЗАВЕРШЕННОГО ЗАКАЗА (ЧЕРЕЗ REDIS СЕРВЕРА)
+    fun syncActiveOrder() {
+        viewModelScope.launch {
+            try {
+                val response = ApiClient.instance.getActiveOrder()
+                if (response.isSuccessful) {
+                    val order = response.body()
+                    if (order != null) {
+                        if (order.status == "COMPLETED") {
+                            // 🛡️ НЕ зберігаємо в sessionManager, щоб при перезапуску не було циклу!
+                            sessionManager.clearActiveOrderId()
+                            activeOrderId = order.id
+                            stopOrderStatusService(order.id)
+                            trackOrderCompletedSafely(order)
+                            _activeOrder.value = order
+                        } else if (order.status == "CANCELLED") {
+                            stopOrderStatusService(order.id)
+                            clearOrderState()
+                        } else {
+                            activeOrderId = order.id
+                            sessionManager.saveActiveOrderId(order.id)
+                            _activeOrder.value = order
+                            updateOrderStatusService(order)
+                        }
+                    } else {
+                        // 204 No Content: активных или недавних заказов нет
+                        if (activeOrderId != null || _activeOrder.value != null) {
+                            clearOrderState()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Помилка синхронізації активного замовлення: ${e.message}")
+            }
+        }
+    }
+
+    // 🚀 ОЧИСТКА ВРЕМЕННОГО КЭША ЗАВЕРШЕННОГО ЗАКАЗА НА СЕРВЕРЕ
+    fun dismissCompletedOrder(orderId: String) {
+        viewModelScope.launch {
+            try {
+                ApiClient.instance.dismissOrder(orderId)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Помилка dismissOrder: ${e.message}")
             }
         }
     }
@@ -132,19 +184,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         // При отмене сразу очищаем заказ
                         stopOrderStatusService(order.id)
                         clearOrderState()
+                    } else if (order.status == "COMPLETED") {
+                        // 🛡️ НЕ ЗБЕРІГАЄМО завершене замовлення в sessionManager!
+                        sessionManager.clearActiveOrderId()
+                        activeOrderId = order.id
+                        stopOrderStatusService(order.id)
+                        trackOrderCompletedSafely(order)
+                        _activeOrder.postValue(order)
                     } else {
-                        // Для обычных статусов И для COMPLETED обновляем заказ в UI
+                        // Для обычных статусов обновляем заказ в UI
                         activeOrderId = order.id
                         sessionManager.saveActiveOrderId(order.id)
                         _activeOrder.postValue(order)
-
-                        if (order.status == "COMPLETED") {
-                            stopOrderStatusService(order.id)
-                            // 🟢 Фиксируем аналитику и конверсию покупки строго один раз
-                            trackOrderCompletedSafely(order)
-                        } else {
-                            updateOrderStatusService(order)
-                        }
+                        updateOrderStatusService(order)
                     }
                 }
             } else if (messageDto.action == "REMOVE") {
