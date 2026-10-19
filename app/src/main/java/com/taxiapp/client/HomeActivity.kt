@@ -366,6 +366,8 @@ private lateinit var buttonsShimmer: ShimmerFrameLayout
 
     private lateinit var btnAddNewOrder: ImageButton
 
+    private lateinit var ivAssignedCar3d: ImageView
+
     private val MODE_ORIGIN = 1
     private val MODE_DESTINATION = 2
     private val MODE_ADD_HOME = 3
@@ -1524,6 +1526,7 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         
         layoutDriverDetails = findViewById(R.id.layout_driver_assigned_details)
         tvCarPlateLarge = findViewById(R.id.tv_car_plate_large)
+        ivAssignedCar3d = findViewById(R.id.iv_assigned_car_3d)
         tvCarDetailsSubtitle = findViewById(R.id.tv_car_details_subtitle)
         tvDriverFirstName = findViewById(R.id.tv_driver_first_name)
         tvDriverExperience = findViewById(R.id.tv_driver_experience)
@@ -6187,6 +6190,12 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 append(tariffPart)
             }
             tvCarDetailsSubtitle.text = subtitle
+            Car3dModelHelper.bindCar3dImage(
+                context = this@HomeActivity,
+                imageView = ivAssignedCar3d,
+                visualTypeRaw = drv.carVisualType,
+                colorKeyRaw = drv.carColorKey
+            )
 
             val isPartner = (drv.id == -1L)
             btnChatDriver.alpha = if (isPartner) 0.5f else 1.0f

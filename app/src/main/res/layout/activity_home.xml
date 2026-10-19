@@ -1023,9 +1023,11 @@
                     android:layout_height="wrap_content"
                     android:layout_marginHorizontal="16dp"
                     android:layout_marginBottom="8dp"
-                    app:cardCornerRadius="14dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="0dp"
                     app:cardBackgroundColor="@color/input_background"
+                    android:clipToOutline="true"
+                    app:cardPreventCornerOverlap="false"
                     android:visibility="gone"
                     tools:visibility="visible">
 
@@ -1034,43 +1036,99 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="16dp">
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="0dp">
 
-                        <!-- Номер авто: крупный, жирный, белый, без синей рамки флага -->
-                        <TextView
-                            android:id="@+id/tv_car_plate_large"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            tools:text="AA3215AP"
-                            android:textSize="24sp"
-                            android:textStyle="bold"
-                            android:fontFamily="sans-serif-bold"
-                            android:includeFontPadding="false"
-                            android:textColor="@color/text_primary" />
+                        <!-- Верхний блок: высота 52dp, текст не зависит от картинки -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:clipChildren="false"
+                            android:clipToPadding="false">
 
-                        <!-- Описание авто: Цвет Модель • Тариф -->
-                        <TextView
-                            android:id="@+id/tv_car_details_subtitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            tools:text="Коричневий Nissan TIDA • Стандарт"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary"
-                            android:includeFontPadding="false"
-                            android:layout_marginTop="4dp" />
+                            <!-- Текстовый блок: забирает всю ширину до бампера машинки (marginEnd="88dp") -->
+                            <LinearLayout
+                                android:id="@+id/ll_car_text_block"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentStart="true"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true"
+                                android:layout_marginEnd="88dp"
+                                android:orientation="vertical">
 
-                        <!-- Тонкая разделительная полоса -->
+                                <!-- Номер авто -->
+                                <TextView
+                                    android:id="@+id/tv_car_plate_large"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    tools:text="AA1234MC"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:includeFontPadding="false"
+                                    android:singleLine="true"
+                                    android:textColor="@color/text_primary" />
+
+                                <!-- Описание авто: теперь вся строка влезает полностью без "Ст..." -->
+                                <TextView
+                                    android:id="@+id/tv_car_details_subtitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    tools:text="Сріблястий Acura EL • Стандарт"
+                                    android:textSize="13sp"
+                                    android:textColor="@color/text_secondary"
+                                    android:includeFontPadding="false"
+                                    android:singleLine="true"
+                                    android:ellipsize="end"
+                                    android:layout_marginTop="2dp" />
+                            </LinearLayout>
+
+                            <!-- Мягкая тень под автомобилем (расположена строго под колёсами) -->
+                            <ImageView
+                                android:id="@+id/iv_assigned_car_shadow"
+                                android:layout_width="125dp"
+                                android:layout_height="18dp"
+                                android:layout_alignParentEnd="true"
+                                android:layout_alignParentBottom="true"
+                                android:layout_marginBottom="0dp"
+                                android:scaleType="fitXY"
+                                android:translationX="38dp"
+                                android:translationY="-2dp"
+                                android:alpha="0.45"
+                                android:src="@drawable/bg_car_3d_shadow" />
+
+                            <!-- Крупная 3D-модель авто: накладывается поверх тени -->
+                            <ImageView
+                                android:id="@+id/iv_assigned_car_3d"
+                                android:layout_width="140dp"
+                                android:layout_height="66dp"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true"
+                                android:scaleType="fitEnd"
+                                android:scaleX="1.45"
+                                android:scaleY="1.45"
+                                android:translationX="8dp"
+                                android:translationY="-6dp"
+                                android:src="@drawable/ic_taxi_model_standard" />
+                        </RelativeLayout>
+
+                        <!-- Тонкая разделительная полоса: прижата сразу под текстом без зазоров -->
                         <View
                             android:layout_width="match_parent"
                             android:layout_height="1dp"
                             android:background="@color/divider_color"
-                            android:layout_marginTop="14dp"
-                            android:layout_marginBottom="14dp" />
+                            android:layout_marginTop="10dp"
+                            android:layout_marginBottom="12dp"
+                            android:layout_marginEnd="16dp" />
 
-                        <!-- Строка информации о водителе -->
+                        <!-- Строка информации о водителе (с сохраненным отступом справа 16dp) -->
                         <RelativeLayout
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
+                            android:layout_height="wrap_content"
+                            android:paddingEnd="16dp">
 
                             <!-- Аватар с плашкой рейтинга снизу -->
                             <FrameLayout
@@ -1096,14 +1154,16 @@
                                         android:scaleType="centerCrop" />
                                 </androidx.cardview.widget.CardView>
 
-                                <com.google.android.material.card.MaterialCardView
+                               <com.google.android.material.card.MaterialCardView
                                     android:id="@+id/card_driver_rating_pill"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_gravity="bottom|center_horizontal"
                                     android:layout_marginTop="34dp"
-                                    app:cardCornerRadius="8dp"
-                                    app:cardElevation="2dp"
+                                    app:cardCornerRadius="4dp"
+                                    app:cardElevation="0dp"
+                                    app:cardMaxElevation="0dp"
+                                    app:strokeWidth="0dp"
                                     app:cardBackgroundColor="@color/card_background">
 
                                     <LinearLayout

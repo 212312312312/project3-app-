@@ -21,6 +21,12 @@ data class OrderDriverDto(
     @SerializedName("carPlateNumber")
     val carPlateNumber: String? = null,
 
+    @SerializedName("carColorKey")
+    val carColorKey: String? = "WHITE",
+
+    @SerializedName("carVisualType")
+    val carVisualType: String? = "STANDARD",
+
     @SerializedName("photoUrl")
     val photoUrl: String? = null,
 
