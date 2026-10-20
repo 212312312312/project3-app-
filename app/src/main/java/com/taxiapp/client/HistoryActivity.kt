@@ -49,19 +49,25 @@ class HistoryActivity : BaseActivity() {
     private val allLoadedOrders = mutableListOf<TaxiOrderDto>()
     private var fullOrderList: List<TaxiOrderDto> = emptyList()
 
+    private var activeHistoryCall: Call<List<TaxiOrderDto>>? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) {}
         setContentView(R.layout.activity_history)
 
         sessionManager = SessionManager(this)
-
         initUI()
     }
 
     override fun onResume() {
         super.onResume()
         loadHistory(page = 0, isInitial = true)
+    }
+
+    override fun onDestroy() {
+        activeHistoryCall?.cancel()
+        super.onDestroy()
     }
 
     private fun initUI() {
@@ -80,11 +86,9 @@ class HistoryActivity : BaseActivity() {
 
             for (i in 0 until tabLayout.tabCount) {
                 val tabView = tabLayout.getTabAt(i)?.view
-
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     tabView?.tooltipText = null
                 }
-
                 tabView?.setOnLongClickListener { true }
             }
 
@@ -113,7 +117,10 @@ class HistoryActivity : BaseActivity() {
                     val totalItemCount = layoutManager.itemCount
                     val firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
 
-                    if ((visibleItemCount + firstVisibleItemPosition) >= totalItemCount - 4 && firstVisibleItemPosition >= 0) {
+                    if (totalItemCount >= 5 &&
+                        (visibleItemCount + firstVisibleItemPosition) >= totalItemCount - 4 &&
+                        firstVisibleItemPosition >= 0
+                    ) {
                         loadHistory(page = currentPage + 1, isInitial = false)
                     }
                 }
@@ -124,7 +131,7 @@ class HistoryActivity : BaseActivity() {
             orders = emptyList(),
             onItemClick = { orderId ->
                 val currentTab = try { tabLayout.selectedTabPosition } catch (e: Exception) { 0 }
-                if (currentTab == 0) { // Вкладка "Активні"
+                if (currentTab == 0) {
                     sessionManager.saveActiveOrderId(orderId)
                     val intent = Intent(this@HistoryActivity, HomeActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -143,17 +150,20 @@ class HistoryActivity : BaseActivity() {
     }
 
     private fun loadHistory(page: Int = 0, isInitial: Boolean = true) {
-        if (isLoading) return
-        isLoading = true
-
+        if (isLoading && !isInitial) return
         if (isInitial) {
-            progressBar.visibility = View.VISIBLE
+            activeHistoryCall?.cancel()
             currentPage = 0
             isLastPage = false
+            progressBar.visibility = View.VISIBLE
         }
+        isLoading = true
 
-        ApiClient.instance.getHistory(page = page, size = pageSize).enqueue(object : Callback<List<TaxiOrderDto>> {
+        val call = ApiClient.instance.getHistory(page = page, size = pageSize)
+        activeHistoryCall = call
+        call.enqueue(object : Callback<List<TaxiOrderDto>> {
             override fun onResponse(call: Call<List<TaxiOrderDto>>, response: Response<List<TaxiOrderDto>>) {
+                if (call.isCanceled || isFinishing || isDestroyed) return
                 isLoading = false
                 progressBar.visibility = View.GONE
 
@@ -166,12 +176,16 @@ class HistoryActivity : BaseActivity() {
                     if (isInitial) {
                         allLoadedOrders.clear()
                         allLoadedOrders.addAll(fetched)
-                        fullOrderList = allLoadedOrders
                     } else {
-                        allLoadedOrders.addAll(fetched)
-                        fullOrderList = allLoadedOrders
+                        val existingIds = allLoadedOrders.mapTo(HashSet()) { it.id }
+                        fetched.forEach { order ->
+                            if (existingIds.add(order.id)) {
+                                allLoadedOrders.add(order)
+                            }
+                        }
                         currentPage = page
                     }
+                    fullOrderList = allLoadedOrders.toList()
 
                     val currentTab = try { tabLayout.selectedTabPosition } catch (e: Exception) { 0 }
                     filterList(currentTab)
@@ -183,6 +197,7 @@ class HistoryActivity : BaseActivity() {
             }
 
             override fun onFailure(call: Call<List<TaxiOrderDto>>, t: Throwable) {
+                if (call.isCanceled || isFinishing || isDestroyed) return
                 isLoading = false
                 progressBar.visibility = View.GONE
                 if (isInitial && allLoadedOrders.isEmpty()) {
@@ -194,7 +209,6 @@ class HistoryActivity : BaseActivity() {
 
     private fun filterList(tabIndex: Int) {
         val filtered = if (tabIndex == 0) {
-            // АКТИВНІ
             fullOrderList.filter {
                 it.status == "SCHEDULED" ||
                         it.status == "REQUESTED" ||
@@ -205,7 +219,6 @@ class HistoryActivity : BaseActivity() {
                         it.status == "ARRIVED_AT_WAYPOINT"
             }
         } else {
-            // АРХІВ
             fullOrderList.filter {
                 it.status == "COMPLETED" ||
                         it.status == "CANCELLED"
@@ -217,6 +230,7 @@ class HistoryActivity : BaseActivity() {
             emptyView.visibility = View.GONE
             recyclerView.visibility = View.VISIBLE
         } else {
+            adapter.submitList(emptyList())
             showEmpty()
         }
     }
@@ -227,6 +241,7 @@ class HistoryActivity : BaseActivity() {
     }
 
     private fun showCancelReasonDialog(orderId: String) {
+        if (isFinishing || isDestroyed) return
         val dialog = Dialog(this).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
             setContentView(R.layout.dialog_cancel_reason)
@@ -242,6 +257,7 @@ class HistoryActivity : BaseActivity() {
 
         ApiClient.instance.getCancellationReasons("CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
             override fun onResponse(call: Call<List<CancellationReasonDto>>, response: Response<List<CancellationReasonDto>>) {
+                if (isFinishing || isDestroyed || !dialog.isShowing) return
                 if (response.isSuccessful) {
                     val reasons = response.body()?.filter { it.isActive } ?: emptyList()
                     rgReasons.removeAllViews()
@@ -267,6 +283,7 @@ class HistoryActivity : BaseActivity() {
             }
 
             override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
+                if (isFinishing || isDestroyed) return
                 Toast.makeText(this@HistoryActivity, "Помилка мережі при завантаженні причин", Toast.LENGTH_SHORT).show()
             }
         })
@@ -293,8 +310,12 @@ class HistoryActivity : BaseActivity() {
 
         ApiClient.instance.cancelOrder(orderId, reasonText).enqueue(object : Callback<TaxiOrderDto> {
             override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+                if (isFinishing || isDestroyed) return
                 if (response.isSuccessful) {
                     Toast.makeText(this@HistoryActivity, "Замовлення скасовано", Toast.LENGTH_SHORT).show()
+                    if (sessionManager.fetchActiveOrderId() == orderId) {
+                        sessionManager.clearActiveOrderId()
+                    }
                     loadHistory(page = 0, isInitial = true)
                 } else {
                     val msg = try { response.errorBody()?.string() } catch (e: Exception) { response.message() }
@@ -303,6 +324,7 @@ class HistoryActivity : BaseActivity() {
             }
 
             override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
+                if (isFinishing || isDestroyed) return
                 Toast.makeText(this@HistoryActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
             }
         })

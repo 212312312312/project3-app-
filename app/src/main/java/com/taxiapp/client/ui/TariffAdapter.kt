@@ -2,6 +2,7 @@ package com.taxiapp.client.ui
 
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -9,11 +10,19 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import com.google.android.material.card.MaterialCardView
 import com.taxiapp.client.R
+import com.taxiapp.client.analytics.AnalyticsManager
+import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.CarTariffDto
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 data class TariffItem(
@@ -68,59 +77,57 @@ class TariffAdapter(
             }
 
             // --- BETA БЕЙДЖ ---
-            if (tariff.isBeta) {
-                betaBadge.visibility = View.VISIBLE
-            } else {
-                betaBadge.visibility = View.GONE
-            }
+            betaBadge.visibility = if (tariff.isBeta) View.VISIBLE else View.GONE
 
-            // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
-            // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
-            // 1. Повертаємо фоновий скелетон перед початком завантаження
-            iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
-
+            // --- ЗАВАНТАЖЕННЯ КАРТИНКИ (без зайвого миготіння скелетона при кліку) ---
             if (!tariff.imageUrl.isNullOrEmpty()) {
                 val rawUrl = tariff.imageUrl
-
                 val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
                     rawUrl
                 } else {
                     val cleanPath = rawUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
-                    val baseUrlRoot = com.taxiapp.client.network.ApiClient.BASE_URL.substringBefore("api/v1/")
+                    val baseUrlRoot = ApiClient.BASE_URL.substringBefore("api/v1/")
                     "${baseUrlRoot}${cleanPath}"
                 }
 
-                Glide.with(itemView.context)
-                    .load(fullUrl)
-                    .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
-                        override fun onLoadFailed(
-                            e: com.bumptech.glide.load.engine.GlideException?,
-                            model: Any?,
-                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
-                            isFirstResource: Boolean
-                        ): Boolean {
-                            // При помилці мережі залишаємо скелетон
-                            iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
-                            return false
-                        }
+                if (image.tag != fullUrl || image.drawable == null) {
+                    iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
+                    image.tag = fullUrl
 
-                        override fun onResourceReady(
-                            resource: android.graphics.drawable.Drawable,
-                            model: Any,
-                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
-                            dataSource: com.bumptech.glide.load.DataSource,
-                            isFirstResource: Boolean
-                        ): Boolean {
-                            // 🟢 Картинка завантажилася — миттєво знімаємо фоновий скелетон
-                            iconContainer.background = null
-                            return false
-                        }
-                    })
-                    .into(image)
+                    Glide.with(itemView.context)
+                        .load(fullUrl)
+                        .listener(object : RequestListener<Drawable> {
+                            override fun onLoadFailed(
+                                e: GlideException?,
+                                model: Any?,
+                                target: Target<Drawable>,
+                                isFirstResource: Boolean
+                            ): Boolean {
+                                iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
+                                return false
+                            }
+
+                            override fun onResourceReady(
+                                resource: Drawable,
+                                model: Any,
+                                target: Target<Drawable>?,
+                                dataSource: DataSource,
+                                isFirstResource: Boolean
+                            ): Boolean {
+                                iconContainer.background = null
+                                return false
+                            }
+                        })
+                        .into(image)
+                } else {
+                    iconContainer.background = null
+                }
             } else {
+                image.tag = null
                 image.setImageDrawable(null)
                 iconContainer.setBackgroundResource(R.drawable.bg_car_placeholder)
             }
+
             // --- Знижки та Стара ціна ---
             if (item.oldPriceValue != null && item.oldPriceValue > item.priceValue && item.priceValue > 0) {
                 oldPrice.visibility = View.VISIBLE
@@ -150,7 +157,6 @@ class TariffAdapter(
             cardView.clearAnimation()
 
             if (item.priceValue < 0) {
-                // Блокировка UI при ошибке просчета сервера
                 price.text = "Помилка"
                 price.setTextColor(Color.RED)
 
@@ -204,18 +210,21 @@ class TariffAdapter(
             cardView.setOnClickListener {
                 if (tariff.isUnavailable || item.priceValue < 0) return@setOnClickListener
 
-                val prev = selectedPosition
-                selectedPosition = bindingAdapterPosition
+                val clickedPos = bindingAdapterPosition
+                if (clickedPos == RecyclerView.NO_POSITION) return@setOnClickListener
 
-                if (prev != androidx.recyclerview.widget.RecyclerView.NO_POSITION && prev < items.size) {
+                val prev = selectedPosition
+                selectedPosition = clickedPos
+
+                if (prev != RecyclerView.NO_POSITION && prev < items.size) {
                     notifyItemChanged(prev)
                 }
-                if (selectedPosition != androidx.recyclerview.widget.RecyclerView.NO_POSITION) {
+                if (selectedPosition != RecyclerView.NO_POSITION && selectedPosition < items.size) {
                     notifyItemChanged(selectedPosition)
                 }
 
-                com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariff_select", tariff.name)
-                onTariffSelected(item)
+                AnalyticsManager.trackCustomEvent("tariff_select", tariff.name)
+                onTariffSelected(items[selectedPosition])
             }
         }
     }
@@ -238,18 +247,19 @@ class TariffAdapter(
         errorToastShown = false
         recalculateItems()
 
-        // ВЫЗЫВАЕМ ТОЛЬКО ЕСЛИ СПИСОК НЕ ПУСТОЙ:
         if (tariffs.isNotEmpty()) {
             onImagesLoaded()
         }
     }
 
-    fun updatePrices(newPrices: Map<Long, Double>) { }
+    fun updatePrices(newPrices: Map<Long, Double>) {
+        // Совместимость с HomeActivity: расчет цен выполняется централизованно на сервере
+    }
 
     fun setDiscount(percent: Double, limit: Double) {
         this.currentDiscountPercent = percent
         this.maxDiscountAmount = limit
-        notifyDataSetChanged()
+        recalculateItems()
     }
 
     fun updateExtraCost(cost: Double) {
@@ -294,7 +304,8 @@ class TariffAdapter(
     }
 
     private fun recalculateItems() {
-        items = rawTariffs.map { tariff ->
+        val oldItems = items
+        val newItems = rawTariffs.map { tariff ->
             val basePriceForCalc = if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
                 tariff.calculatedPrice!!
             } else if (currentDistanceMeters > 0) {
@@ -303,20 +314,54 @@ class TariffAdapter(
                 tariff.basePrice
             }
 
-            val finalPrice = if (basePriceForCalc > 0) {
-                basePriceForCalc + currentExtraCost + (customPrices[tariff.id] ?: 0.0)
+            val extraAndCustom = currentExtraCost + (customPrices[tariff.id] ?: 0.0)
+
+            val finalPrice: Double
+            val finalOldPrice: Double?
+
+            if (basePriceForCalc <= 0) {
+                finalPrice = -1.0
+                finalOldPrice = null
+            } else if (tariff.oldPrice != null && tariff.oldPrice!! > basePriceForCalc) {
+                // Скидка уже посчитана сервером в calculatedPrice и oldPrice
+                finalPrice = basePriceForCalc + extraAndCustom
+                finalOldPrice = tariff.oldPrice!! + extraAndCustom
+            } else if (currentDiscountPercent > 0.0) {
+                // Локальный расчет скидки (если установлена через setDiscount)
+                val rawDiscount = basePriceForCalc * (currentDiscountPercent / 100.0)
+                val cappedDiscount = if (maxDiscountAmount > 0.0) min(rawDiscount, maxDiscountAmount) else rawDiscount
+                val discountedBase = (basePriceForCalc - cappedDiscount).coerceAtLeast(1.0)
+                finalPrice = discountedBase + extraAndCustom
+                finalOldPrice = if (cappedDiscount >= 1.0) basePriceForCalc + extraAndCustom else null
             } else {
-                -1.0
+                finalPrice = basePriceForCalc + extraAndCustom
+                finalOldPrice = null
             }
 
             val priceString = if (finalPrice > 0) String.format("%.0f", finalPrice) else "—"
 
-            val finalOldPrice = if (finalPrice > 0 && tariff.oldPrice != null && tariff.oldPrice!! > 0) {
-                tariff.oldPrice!! + currentExtraCost + (customPrices[tariff.id] ?: 0.0)
-            } else null
-
-            TariffItem(tariff, priceString, finalPrice, customPrices[tariff.id] ?: 0.0, finalOldPrice)
+            TariffItem(
+                tariff = tariff,
+                priceString = priceString,
+                priceValue = finalPrice,
+                addedValue = customPrices[tariff.id] ?: 0.0,
+                oldPriceValue = finalOldPrice
+            )
         }
-        notifyDataSetChanged()
+
+        items = newItems
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = oldItems.size
+            override fun getNewListSize(): Int = newItems.size
+
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return oldItems[oldItemPosition].tariff.id == newItems[newItemPosition].tariff.id
+            }
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return oldItems[oldItemPosition] == newItems[newItemPosition]
+            }
+        })
+        diff.dispatchUpdatesTo(this)
     }
 }

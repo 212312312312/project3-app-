@@ -1,11 +1,10 @@
 package com.taxiapp.client.ui
 
-import android.graphics.Typeface
-import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.R
 import java.util.Locale
@@ -32,7 +31,6 @@ class PlacesAdapter(
 
         holder.primaryText.text = item.title
 
-        // Формуємо "1.2 км • Адреса"
         val distanceStr = if (item.distanceMeters != null) {
             if (item.distanceMeters < 1000) {
                 "${item.distanceMeters} м"
@@ -59,7 +57,20 @@ class PlacesAdapter(
     override fun getItemCount(): Int = items.size
 
     fun submitList(newItems: List<PlaceSuggestion>) {
+        val oldItems = items
         items = newItems
-        notifyDataSetChanged()
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = oldItems.size
+            override fun getNewListSize(): Int = newItems.size
+
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return oldItems[oldItemPosition].placeId == newItems[newItemPosition].placeId
+            }
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return oldItems[oldItemPosition] == newItems[newItemPosition]
+            }
+        })
+        diff.dispatchUpdatesTo(this)
     }
 }

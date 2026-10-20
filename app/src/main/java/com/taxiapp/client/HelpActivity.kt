@@ -1,56 +1,51 @@
 package com.taxiapp.client
 
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
+import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
-import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
-import com.taxiapp.client.utils.ViewUtils // <--- ВАЖЛИВИЙ ІМПОРТ
+import com.taxiapp.client.utils.ViewUtils
 
 class HelpActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContentView(R.layout.activity_help)
 
-        // --- ВИПРАВЛЕННЯ ---
-        // Використовуємо наш універсальний клас, який вміє малювати під "челкою"
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) { e.printStackTrace() }
-        // -------------------
 
-        // 2. Кнопка Назад
         findViewById<ImageView>(R.id.btn_back).setOnClickListener {
             finish()
         }
 
-        // 3. Кнопка "Зв'язатися з нами"
         findViewById<MaterialCardView>(R.id.btn_support_action).setOnClickListener {
             showSupportBottomSheet()
         }
 
-        // 4. Заглушки
+
 
         findViewById<LinearLayout>(R.id.btn_payment)?.setOnClickListener {
-            val intent = Intent(this, HelpPaymentActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, HelpPaymentActivity::class.java))
         }
+
         findViewById<LinearLayout>(R.id.btn_waiting)?.setOnClickListener {
-            val intent = Intent(this, HelpWaitingActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, HelpWaitingActivity::class.java))
         }
     }
-
-    // Метод hideSystemUI видалено, бо він застарів і замінений на ViewUtils
 
     private fun showSupportBottomSheet() {
         val dialog = BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.layout_bottom_sheet_support, null)
 
-        // Клики
         view.findViewById<LinearLayout>(R.id.bs_btn_telegram).setOnClickListener {
             dialog.dismiss()
             openTelegram()
@@ -62,21 +57,18 @@ class HelpActivity : BaseActivity() {
 
         dialog.setContentView(view)
 
-        // --- 1. УБИРАЕМ ФОН КОНТЕЙНЕРА ---
-        dialog.findViewById<android.view.View>(com.google.android.material.R.id.design_bottom_sheet)
-            ?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            ?.setBackgroundColor(Color.TRANSPARENT)
 
-        // --- 2. ЯДЕРНОЕ РЕШЕНИЕ (Убираем отступ снизу) ---
         dialog.window?.let { window ->
             window.setFlags(
-                android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
             )
 
-            // Скрываем сами бары (визуально)
-            val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
-            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
         dialog.show()

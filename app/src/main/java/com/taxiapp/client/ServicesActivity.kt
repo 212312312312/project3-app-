@@ -7,7 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -16,12 +16,11 @@ import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.ui.ServicesAdapter
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ServicesActivity : BaseActivity()  {
+class ServicesActivity : BaseActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ServicesAdapter
@@ -38,6 +37,7 @@ class ServicesActivity : BaseActivity()  {
 
         sessionManager = SessionManager(this)
 
+        @Suppress("DEPRECATION")
         val list = intent.getSerializableExtra("SELECTED_IDS") as? ArrayList<Long>
         if (list != null) {
             preSelectedIds = list
@@ -54,20 +54,13 @@ class ServicesActivity : BaseActivity()  {
             returnResult()
         }
 
-        // Кнопка теперь всегда активна при старте
         updateButtonState()
-
         loadServices()
     }
 
-    // !!! ИСПРАВЛЕНИЕ ЗДЕСЬ !!!
-    // Кнопка теперь ВСЕГДА активна, чтобы можно было снять все галочки и нажать "Готово"
     private fun updateButtonState() {
-        btnApply.isEnabled = true // Разрешаем клик всегда
-
+        btnApply.isEnabled = true
         val isDark = sessionManager.isDarkMode()
-
-        // Убираем обводку, делаем кнопку сплошной и красивой всегда
         btnApply.strokeWidth = 0
 
         if (isDark) {
@@ -80,12 +73,14 @@ class ServicesActivity : BaseActivity()  {
     }
 
     private fun loadServices() {
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val token = sessionManager.fetchAuthToken()
                 if (token.isNullOrEmpty()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ServicesActivity, "Помилка авторизації", Toast.LENGTH_SHORT).show()
+                        if (!isFinishing && !isDestroyed) {
+                            Toast.makeText(this@ServicesActivity, "Помилка авторизації", Toast.LENGTH_SHORT).show()
+                        }
                     }
                     return@launch
                 }
@@ -95,7 +90,6 @@ class ServicesActivity : BaseActivity()  {
                 if (response.isSuccessful && response.body() != null) {
                     val services = response.body()!!
 
-                    // Восстанавливаем галочки
                     services.forEach { service ->
                         if (preSelectedIds.contains(service.id)) {
                             service.isSelected = true
@@ -103,25 +97,31 @@ class ServicesActivity : BaseActivity()  {
                     }
 
                     withContext(Dispatchers.Main) {
+                        if (isFinishing || isDestroyed) return@withContext
                         servicesList.clear()
                         servicesList.addAll(services)
 
                         adapter = ServicesAdapter(servicesList) { clickedService ->
-                            // Переключаем выбор
                             clickedService.isSelected = !clickedService.isSelected
-                            adapter.notifyItemChanged(servicesList.indexOf(clickedService))
-                            // Кнопку обновлять не обязательно (она всегда активна), но если захочешь менять текст - можно
+                            val idx = servicesList.indexOf(clickedService)
+                            if (idx != -1) {
+                                adapter.notifyItemChanged(idx)
+                            }
                         }
                         recyclerView.adapter = adapter
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ServicesActivity, "Помилка сервера", Toast.LENGTH_SHORT).show()
+                        if (!isFinishing && !isDestroyed) {
+                            Toast.makeText(this@ServicesActivity, "Помилка сервера", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ServicesActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
+                    if (!isFinishing && !isDestroyed) {
+                        Toast.makeText(this@ServicesActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }

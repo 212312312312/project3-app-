@@ -2,6 +2,7 @@ package com.taxiapp.client
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Geocoder
@@ -10,17 +11,19 @@ import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.LocationServices
@@ -35,11 +38,11 @@ import com.google.android.libraries.places.api.net.PlacesClient
 import com.taxiapp.client.ui.PlaceSuggestion
 import com.taxiapp.client.ui.PlacesAdapter
 import com.taxiapp.client.utils.AddressUtils
-import android.view.MotionEvent
-import android.content.Context
-import android.view.inputmethod.InputMethodManager
 import com.taxiapp.client.utils.LocationValidator
 import com.taxiapp.client.utils.ViewUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 class AddressPickerActivity : BaseActivity() {
@@ -109,6 +112,7 @@ class AddressPickerActivity : BaseActivity() {
 
     private val searchHandler = Handler(Looper.getMainLooper())
     private var searchRunnable: Runnable? = null
+    private var latestSearchQuery: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -164,6 +168,11 @@ class AddressPickerActivity : BaseActivity() {
             )
             insets
         }
+    }
+
+    override fun onDestroy() {
+        searchHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     private fun initUI(isOriginMode: Boolean, hideMyLocation: Boolean, currentAddressA: String?, currentLatA: Double, currentLngA: Double) {
@@ -300,7 +309,7 @@ class AddressPickerActivity : BaseActivity() {
         val iconView = findViewById<ImageView>(R.id.iv_dest_icon)
         try {
             iconView?.setImageResource(iconRes)
-            iconView?.setColorFilter(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
+            iconView?.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
         } catch (e: Exception) {}
     }
 
@@ -393,6 +402,9 @@ class AddressPickerActivity : BaseActivity() {
     }
 
     private fun performSearch(query: String) {
+        if (isFinishing || isDestroyed) return
+        latestSearchQuery = query
+
         val searchBiasCenter = LatLng(cityLat, cityLng)
         val radiusKm = 50.0
         val latRadian = Math.toRadians(searchBiasCenter.latitude)
@@ -415,6 +427,7 @@ class AddressPickerActivity : BaseActivity() {
 
         placesClient.findAutocompletePredictions(request)
             .addOnSuccessListener { response ->
+                if (isFinishing || isDestroyed || query != latestSearchQuery) return@addOnSuccessListener
                 val suggestions = mutableListOf<PlaceSuggestion>()
                 for (prediction in response.autocompletePredictions) {
                     val rawAddress = prediction.getSecondaryText(null).toString()
@@ -464,7 +477,10 @@ class AddressPickerActivity : BaseActivity() {
 
                 updateButtonsVisibility(intent.getBooleanExtra(EXTRA_HIDE_MY_LOCATION, false))
                 if (editText.text.isEmpty()) adapter.submitList(emptyList())
-                else { layoutQuickActions.visibility = View.GONE; performSearch(editText.text.toString()) }
+                else {
+                    layoutQuickActions.visibility = View.GONE
+                    performSearch(editText.text.toString())
+                }
             }
         }
 
@@ -476,20 +492,15 @@ class AddressPickerActivity : BaseActivity() {
                     val query = s.toString()
                     fieldCoordinates.remove(editText)
 
-                    // Вызываем единую функцию управления видимостью
                     updateButtonsVisibility(intent.getBooleanExtra(EXTRA_HIDE_MY_LOCATION, false))
+                    searchRunnable?.let { searchHandler.removeCallbacks(it) }
 
-                    if (query.isEmpty()) {
-                        adapter.submitList(emptyList())
+                    if (query.length >= 2) {
+                        searchRunnable = Runnable { performSearch(query) }
+                        searchHandler.postDelayed(searchRunnable!!, 300)
                     } else {
-                        if (query.length >= 2) {
-                            searchRunnable?.let { searchHandler.removeCallbacks(it) }
-                            searchRunnable = Runnable { performSearch(query) }
-                            searchHandler.postDelayed(searchRunnable!!, 300)
-                        } else {
-                            // Если ввели 1 символ, очищаем старый список, чтобы не висел
-                            adapter.submitList(emptyList())
-                        }
+                        latestSearchQuery = ""
+                        adapter.submitList(emptyList())
                     }
                 }
             }
@@ -500,7 +511,6 @@ class AddressPickerActivity : BaseActivity() {
         val isEmpty = activeEditText?.text.isNullOrEmpty()
 
         if (isEmpty) {
-            // Если поле пустое, показываем быстрые действия
             layoutQuickActions.visibility = View.VISIBLE
             if (isOrigin && activeEditText == etOrigin && !hideMyLocation) {
                 btnMyLocation.visibility = View.VISIBLE
@@ -508,13 +518,9 @@ class AddressPickerActivity : BaseActivity() {
                 btnMyLocation.visibility = View.GONE
             }
         } else {
-            // Текст пошел — скрываем быстрые действия,
-            // но чтобы верхняя панель не «прыгала», мы можем использовать View.INVISIBLE вместо GONE,
-            // либо зафиксировать высоту. Давай сделаем GONE, но зафиксируем поведение в инпуте.
             layoutQuickActions.visibility = View.GONE
         }
 
-        // Нижняя кнопка "Указать на карте" всегда активна и видна
         btnPickOnMap.visibility = View.VISIBLE
     }
 
@@ -552,13 +558,13 @@ class AddressPickerActivity : BaseActivity() {
         val placeFields = listOf(Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG, Place.Field.ADDRESS)
         val request = FetchPlaceRequest.builder(placeId, placeFields).setSessionToken(sessionToken).build()
         placesClient.fetchPlace(request).addOnSuccessListener { response ->
+            if (isFinishing || isDestroyed) return@addOnSuccessListener
             val place = response.place
             val latLng = place.latLng
             var fullText = ""
             val name = place.name
             val address = place.address
 
-            // Перевіряємо, чи містить адреса назву місця, щоб уникнути дублювання типу "14А, вул. Дзюби, 14А"
             if (!address.isNullOrEmpty()) {
                 if (!name.isNullOrEmpty() && !address.lowercase().contains(name.lowercase())) {
                     fullText = "$name, $address"
@@ -577,7 +583,9 @@ class AddressPickerActivity : BaseActivity() {
                 if (isFinishConditionMet()) returnResultData()
             }
         }.addOnFailureListener {
-            Toast.makeText(this, "Помилка деталей місця", Toast.LENGTH_SHORT).show()
+            if (!isFinishing && !isDestroyed) {
+                Toast.makeText(this, "Помилка деталей місця", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -612,23 +620,31 @@ class AddressPickerActivity : BaseActivity() {
         }
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            // 🔥 ЗАЩИТА ОТ РЭБ
+            if (isFinishing || isDestroyed) return@addOnSuccessListener
             if (location != null && LocationValidator.isValidLocation(location.latitude, location.longitude)) {
-                userLatLng = LatLng(location.latitude, location.longitude)
+                val latLng = LatLng(location.latitude, location.longitude)
+                userLatLng = latLng
 
-                try {
-                    val geocoder = Geocoder(this, Locale("uk", "UA"))
-                    val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
-                    val addressName = if (!addresses.isNullOrEmpty()) AddressUtils.formatAddress(addresses[0].getAddressLine(0)) else "Моє місцезнаходження"
-
-                    if (activeEditText != null) {
-                        saveCoordinateForField(activeEditText!!, addressName, LatLng(location.latitude, location.longitude))
-                        if (isFinishConditionMet()) returnResultData()
+                // Выполняем блокирующий Geocoder в фоновом потоке Dispatchers.IO, чтобы не вызывать ANR
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val resolvedAddress = try {
+                        val geocoder = Geocoder(this@AddressPickerActivity, Locale("uk", "UA"))
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+                        if (!addresses.isNullOrEmpty()) {
+                            AddressUtils.formatAddress(addresses[0].getAddressLine(0))
+                        } else {
+                            "Моє місцезнаходження"
+                        }
+                    } catch (e: Exception) {
+                        "Моє місцезнаходження"
                     }
-                } catch (e: Exception) {
-                    if (activeEditText != null) {
-                        saveCoordinateForField(activeEditText!!, "Моє місцезнаходження", LatLng(location.latitude, location.longitude))
-                        if (isFinishConditionMet()) returnResultData()
+
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing && !isDestroyed && activeEditText != null) {
+                            saveCoordinateForField(activeEditText!!, resolvedAddress, latLng)
+                            if (isFinishConditionMet()) returnResultData()
+                        }
                     }
                 }
             } else {

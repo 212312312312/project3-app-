@@ -18,7 +18,7 @@
     <string name="payment_method_cash">Cash</string>
     <string name="payment_method_card">Card binding</string>
     <string name="payment_method_driver_card">To driver\'s card</string>
-    <string name="payment_method_card_short">Card</string>gradlew signingReport
+    <string name="payment_method_card_short">Card</string>
     <string name="title_add_home">Add Home</string>
     <string name="hint_add_home">Enter home address</string>
     <string name="title_add_work">Add Work</string>
@@ -146,7 +146,7 @@
     <string name="payment_method_title">Payment method</string>
     <string name="payment_method_subtitle">Default order payment</string>
     <string name="payment_cash">Cash</string>
-    <string name="payment_card">Transfer to driver\'s card</string>
+    <string name="payment_card">Card</string>
     <string name="payment_card_format">Card %s</string>
     <string name="title_choose_payment_type">Choose payment method</string>
     <string name="promo_tasks_title">Promotional tasks</string>
@@ -286,7 +286,3 @@
 
 
 </resources>
-
-
-
-

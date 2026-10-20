@@ -5,49 +5,58 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessagingService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import com.taxiapp.client.ChatEventBus
 import com.google.firebase.messaging.RemoteMessage
+import com.taxiapp.client.ChatEventBus
 import com.taxiapp.client.MainActivity
 import com.taxiapp.client.R
+import com.taxiapp.client.analytics.AnalyticsManager
+import com.taxiapp.client.network.ApiClient
+import com.taxiapp.client.network.OrderStatusBus
+import com.taxiapp.client.utils.SessionManager
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 import kotlin.random.Random
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
-    // Цей метод викликається, коли приходить повідомлення, а додаток відкритий
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
         val type = remoteMessage.data["type"]
 
-        // 📊 ТРЕКИНГ: Логирование триггерных пушей скидок и удержания
-        val triggerType = remoteMessage.data["trigger_type"] ?: remoteMessage.data["type"]
+        // 1. Трекинг маркетинговых и триггерных пушей скидок
+        val triggerType = remoteMessage.data["trigger_type"] ?: type
         if (triggerType == "push_discount_sent" || triggerType == "48h_after_first_ride" || triggerType == "DISCOUNT_PROMO") {
-            val sessionManager = com.taxiapp.client.utils.SessionManager(applicationContext)
-            com.taxiapp.client.analytics.AnalyticsManager.trackPushDiscountSent(
+            val sessionManager = SessionManager(applicationContext)
+            AnalyticsManager.trackPushDiscountSent(
                 userId = sessionManager.fetchUserId(),
                 triggerType = triggerType
             )
         }
 
-        // 1. Обробка повідомлень чату
+        // 2. Обработка сообщений чата (в реальном времени + счетчик непрочитанных + системное уведомление вне чата)
         if (type == "CHAT_MESSAGE") {
-            if (com.taxiapp.client.ChatEventBus.isChatScreenOpen) {
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    com.taxiapp.client.ChatEventBus.triggerUpdate()
-                }
-                return
+            ChatEventBus.triggerUpdateAsync()
+            if (!ChatEventBus.isChatScreenOpen) {
+                val title = remoteMessage.data["title"]
+                    ?: remoteMessage.notification?.title
+                    ?: "Нове повідомлення від водія"
+                val body = remoteMessage.data["body"]
+                    ?: remoteMessage.data["message"]
+                    ?: remoteMessage.notification?.body
+                    ?: "Відкрийте чат замовлення"
+                showNotification(title, body)
             }
+            return
         }
 
-        // =======================================================================
-        // 2. Обробка тихого пуша зі зміною статусу замовлення
-        // =======================================================================
+        // 3. Обработка тихого пуша со сменой статуса заказа
         if (type == "ORDER_STATUS_UPDATE") {
             val orderIdStr = remoteMessage.data["orderId"]
             val status = remoteMessage.data["status"]
@@ -63,11 +72,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     startService(stopIntent)
 
                     if (status == "COMPLETED") {
-                        com.taxiapp.client.network.OrderStatusBus.notifyOrderUpdated(orderIdStr)
+                        OrderStatusBus.notifyOrderUpdated(orderIdStr)
                     } else {
-                        val sessionManager = com.taxiapp.client.utils.SessionManager(applicationContext)
+                        val sessionManager = SessionManager(applicationContext)
                         sessionManager.clearActiveOrderId()
-                        com.taxiapp.client.network.OrderStatusBus.notifyOrderCanceled(orderIdStr)
+                        OrderStatusBus.notifyOrderCanceled(orderIdStr)
                     }
                 } else {
                     val updateIntent = Intent(this, OrderStatusService::class.java).apply {
@@ -82,17 +91,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         startService(updateIntent)
                     }
 
-                    com.taxiapp.client.network.OrderStatusBus.notifyOrderUpdated(orderIdStr)
+                    OrderStatusBus.notifyOrderUpdated(orderIdStr)
                 }
             }
             return
         }
-        // =======================================================================
 
-        // 3. Якщо є стандартна нотифікація (наприклад, Новини)
+        // 4. Стандартная нотификация (например, Новости и Акции)
         if (remoteMessage.notification != null) {
-            showNotification(remoteMessage.notification?.title ?: "Сповіщення", remoteMessage.notification?.body ?: "")
-        } else if (remoteMessage.data.isNotEmpty() && type != "CHAT_MESSAGE") {
+            showNotification(
+                remoteMessage.notification?.title ?: "Сповіщення",
+                remoteMessage.notification?.body ?: ""
+            )
+        } else if (remoteMessage.data.isNotEmpty()) {
             val title = remoteMessage.data["title"] ?: "Сповіщення"
             val body = remoteMessage.data["body"]
             if (body != null) {
@@ -101,31 +112,42 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    // Цей метод викликається, коли Firebase оновлює токен (рідко)
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        // Тут ми можемо зберегти токен локально, щоб потім відправити на сервер
-        // Але краще ми будемо примусово відправляти його при кожному запуску App
+        val sessionManager = SessionManager(applicationContext)
+        if (!sessionManager.fetchAuthToken().isNullOrEmpty()) {
+            try {
+                val body = mapOf("fcmToken" to token)
+                ApiClient.instance.updateFcmToken(body).enqueue(
+                    object : Callback<Void> {
+                        override fun onResponse(call: Call<Void>, response: Response<Void>) {}
+                        override fun onFailure(call: Call<Void>, t: Throwable) {}
+                    }
+                )
+            } catch (_: Exception) {}
+        }
     }
 
     private fun showNotification(title: String, message: String) {
         val channelId = "taxi_news_channel"
 
-        // Що відкривати при кліку на сповіщення (Головний екран)
-        val intent = Intent(this, MainActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
 
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
+            this,
+            0,
+            intent,
             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val largeIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+        val largeIconBitmap = BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setLargeIcon(largeIconBitmap)
-            .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.notification_icon_bg))
+            .setColor(ContextCompat.getColor(this, R.color.notification_icon_bg))
             .setContentTitle(title)
             .setContentText(message)
             .setAutoCancel(true)
@@ -134,7 +156,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Для Android 8+ (Oreo) потрібен канал
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,

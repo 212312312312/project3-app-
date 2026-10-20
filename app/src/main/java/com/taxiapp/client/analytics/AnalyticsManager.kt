@@ -3,47 +3,72 @@ package com.taxiapp.client.analytics
 import android.util.Log
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.ClientEventBatchRequest
+import com.taxiapp.client.network.dto.CustomEventDto
 import com.taxiapp.client.network.dto.ScreenEventDto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.UUID
 
 object AnalyticsManager {
     private const val TAG = "AnalyticsManager"
+    private const val BATCH_THRESHOLD = 10
+    private const val MAX_BUFFER_SIZE = 100
 
-    // Уникальная сессия при запуске приложения
+    // Унікальна сесія при запуску додатку
     val sessionId: String = UUID.randomUUID().toString()
 
-    // Сюда можно засетить UTM при парсинге Интента/Диплинка в SplashActivity
+    // UTM-мітки з Deep Link у SplashActivity
     var utmSource: String? = null
     var utmMedium: String? = null
     var utmCampaign: String? = null
-    private val customEventBuffer = mutableListOf<com.taxiapp.client.network.dto.CustomEventDto>()
+
+    private val customEventBuffer = mutableListOf<CustomEventDto>()
     private val eventBuffer = mutableListOf<ScreenEventDto>()
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Synchronized
     fun trackScreenDuration(screenName: String, durationSeconds: Long) {
-        if (durationSeconds < 1) return // Пропускаем мгновенные скачки экранов
+        if (durationSeconds < 1) return
 
+        if (eventBuffer.size >= MAX_BUFFER_SIZE) {
+            eventBuffer.removeAt(0)
+        }
         eventBuffer.add(ScreenEventDto(screenName, durationSeconds))
-        Log.d(TAG, "Buffered: $screenName for $durationSeconds sec")
 
-        // Отправляем батч пачкой по 5 событий
-        if (eventBuffer.size >= 5) {
+        if (eventBuffer.size + customEventBuffer.size >= BATCH_THRESHOLD) {
             flushEvents()
         }
     }
+
     @Synchronized
     fun trackCustomEvent(eventName: String, eventValue: String? = null) {
-        customEventBuffer.add(com.taxiapp.client.network.dto.CustomEventDto(eventName, eventValue))
-        Log.d(TAG, "Buffered Custom Event: $eventName -> $eventValue")
+        if (customEventBuffer.size >= MAX_BUFFER_SIZE) {
+            customEventBuffer.removeAt(0)
+        }
+        customEventBuffer.add(CustomEventDto(eventName, eventValue))
+
+        if (eventBuffer.size + customEventBuffer.size >= BATCH_THRESHOLD) {
+            flushEvents()
+        }
+    }
+
+    @Synchronized
+    private fun restoreFailedBatch(
+        failedScreens: List<ScreenEventDto>,
+        failedCustom: List<CustomEventDto>
+    ) {
+        if (eventBuffer.size + failedScreens.size <= MAX_BUFFER_SIZE) {
+            eventBuffer.addAll(0, failedScreens)
+        }
+        if (customEventBuffer.size + failedCustom.size <= MAX_BUFFER_SIZE) {
+            customEventBuffer.addAll(0, failedCustom)
+        }
     }
 
     @Synchronized
     fun flushEvents() {
-        // Отправляем, если есть ХОТЯ БЫ одно событие экрана или кастомный клик
         if (eventBuffer.isEmpty() && customEventBuffer.isEmpty()) return
 
         val eventsToSend = ArrayList(eventBuffer)
@@ -58,19 +83,25 @@ object AnalyticsManager {
             utmMedium = utmMedium,
             utmCampaign = utmCampaign,
             events = eventsToSend,
-            customEvents = customEventsToSend // Прикрепили клики к пакету
+            customEvents = customEventsToSend
         )
 
         scope.launch {
             try {
-                val response = com.taxiapp.client.network.ApiClient.instance.sendAnalyticsEvents(request).execute()
+                val response = ApiClient.instance.sendAnalyticsEvents(request).execute()
                 if (response.isSuccessful) {
-                    Log.d(TAG, "Analytics batch sent successfully. Screens: ${eventsToSend.size}, Actions: ${customEventsToSend.size}")
+                    if (com.taxiapp.client.BuildConfig.DEBUG) {
+                        Log.d(TAG, "Analytics batch sent. Screens: ${eventsToSend.size}, Actions: ${customEventsToSend.size}")
+                    }
                 } else {
-                    Log.e(TAG, "Failed to send analytics: ${response.code()}")
+                    Log.w(TAG, "Analytics batch rejected (${response.code()}), re-queueing")
+                    if (response.code() >= 500) {
+                        restoreFailedBatch(eventsToSend, customEventsToSend)
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error flushing analytics packet", e)
+                Log.w(TAG, "Network error flushing analytics packet, re-queueing", e)
+                restoreFailedBatch(eventsToSend, customEventsToSend)
             }
         }
     }
@@ -81,11 +112,12 @@ object AnalyticsManager {
 
     fun trackUserRegistered(userId: Long, source: String?) {
         trackCustomEvent("user_registered", "user:$userId,source:${source ?: "organic"}")
+        flushEvents()
     }
 
     fun trackOrderFailed(orderId: String, reason: String, searchDurationSec: Long) {
         trackCustomEvent("order_failed", "order:$orderId,reason:$reason,duration:${searchDurationSec}s")
-        flushEvents() // 👈 Мгновенная отправка пакета на сервер
+        flushEvents()
     }
 
     fun trackBoostClicked(orderId: String, boostAmount: Double, timeSinceCreationSec: Long) {
@@ -98,11 +130,12 @@ object AnalyticsManager {
 
     fun trackOrderCompleted(orderId: String, finalPrice: Double, orderNumber: Int) {
         trackCustomEvent("order_completed", "order:$orderId,price:$finalPrice,ride_num:$orderNumber")
+        flushEvents()
     }
 
     fun trackOrderCreated(orderId: String, district: String?, basePrice: Double) {
         trackCustomEvent("order_created", "order:$orderId,district:${district ?: "city"},base:$basePrice")
-        flushEvents() // 👈 Мгновенная отправка пакета на сервер
+        flushEvents()
     }
 
     fun trackPushDiscountSent(userId: Long, triggerType: String) {

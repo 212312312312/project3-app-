@@ -1,31 +1,44 @@
 package com.taxiapp.client
 
 import android.app.Application
-import android.os.Handler
-import com.facebook.appevents.AppEventsLogger
-import com.facebook.appevents.AppEventsConstants
-import java.math.BigDecimal
-import java.util.Currency
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.util.Log
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.Observer
 import androidx.lifecycle.viewModelScope
+import com.facebook.appevents.AppEventsConstants
+import com.facebook.appevents.AppEventsLogger
+import com.google.android.gms.maps.model.LatLng
+import com.google.gson.JsonParser
+import com.google.maps.android.PolyUtil
+import com.taxiapp.client.analytics.AnalyticsManager
+import com.taxiapp.client.network.ApiClient
+import com.taxiapp.client.network.DirectionsApiClient
+import com.taxiapp.client.network.OrderStatusBus
+import com.taxiapp.client.network.WebSocketManager
+import com.taxiapp.client.network.dto.*
+import com.taxiapp.client.service.OrderStatusService
+import com.taxiapp.client.utils.CityData
+import com.taxiapp.client.utils.LocationValidator
+import com.taxiapp.client.utils.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.os.Looper
-import android.util.Log
-import androidx.lifecycle.AndroidViewModel
-import android.content.Context
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import com.google.android.gms.maps.model.LatLng
-import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.DirectionsApiClient
-import com.taxiapp.client.network.dto.*
-import com.taxiapp.client.utils.SessionManager
-import com.taxiapp.client.utils.CityData
-import com.taxiapp.client.utils.LocationValidator
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.math.BigDecimal
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.util.Currency
+import java.util.UUID
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -44,7 +57,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeOrder = MutableLiveData<TaxiOrderDto?>()
     val activeOrder: LiveData<TaxiOrderDto?> get() = _activeOrder
 
-    private val mapSessionId = java.util.UUID.randomUUID().toString()
+    private val mapSessionId = UUID.randomUUID().toString()
     private val _nearbyDrivers = MutableLiveData<List<DriverLocationDto>>()
     val nearbyDrivers: LiveData<List<DriverLocationDto>> get() = _nearbyDrivers
 
@@ -61,7 +74,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _orderStatus = MutableLiveData<String>()
     val orderStatus: LiveData<String> get() = _orderStatus
 
-
     private var lastTrackedCompletedOrderId: String? = null
 
     private val _routeInfo = MutableLiveData<Pair<Int, Int>>()
@@ -77,8 +89,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     var currentCity: CityData? = null
     var currentRoutePolyline: String? = null
 
-    // 🔥 ИСПРАВЛЕНО: Храним ссылку на менеджер сокетов внутри ViewModel для очистки в onCleared()
-    private var observedWebSocketManager: com.taxiapp.client.network.WebSocketManager? = null
+    private var observedWebSocketManager: WebSocketManager? = null
+    private var activeDirectionsCall: Call<DirectionsResponse>? = null
+    private var activeCalculatePriceCall: Call<List<CarTariffDto>>? = null
+
+    // Именованные Observer'ы для корректной отписки в onCleared() (устранение утечки памяти)
+    private val orderCanceledObserver = Observer<String?> { canceledId ->
+        if (!canceledId.isNullOrEmpty()) {
+            val currentOrder = _activeOrder.value
+            val isMatch = canceledId == activeOrderId ||
+                    canceledId == currentOrder?.id ||
+                    canceledId == currentOrder?.idLong?.toString()
+
+            if (isMatch || currentOrder != null) {
+                Log.d("HomeViewModel", "🔔 Получен Push-сигнал отмены для заказа $canceledId. Очищаем UI.")
+                clearOrderState()
+                OrderStatusBus.resetCanceledEvent()
+            }
+        }
+    }
+
+    private val orderUpdatedObserver = Observer<String?> { updatedId ->
+        if (!updatedId.isNullOrEmpty()) {
+            Log.d("HomeViewModel", "🔔 Получен Push-сигнал обновления заказа $updatedId. Синхронизируем статус...")
+            syncActiveOrder()
+            OrderStatusBus.resetUpdatedEvent()
+        }
+    }
 
     init {
         val savedId = sessionManager.fetchActiveOrderId()
@@ -87,64 +124,108 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
         currentCity = sessionManager.fetchUserCity()
 
-        // 🚀 Первичная синхронизация через Redis
+        // Первичная синхронизация активного заказа
         syncActiveOrder()
 
-        // 🟢 Подписываемся на сигналы отмены от FCM Push-сервиса
-        com.taxiapp.client.network.OrderStatusBus.orderCanceledEvent.observeForever { canceledId ->
-            if (!canceledId.isNullOrEmpty()) {
-                val currentOrder = _activeOrder.value
-                val isMatch = canceledId == activeOrderId ||
-                        canceledId == currentOrder?.id ||
-                        canceledId == currentOrder?.idLong?.toString()
+        // Подписываемся на сигналы от FCM Push-сервиса
+        OrderStatusBus.orderCanceledEvent.observeForever(orderCanceledObserver)
+        OrderStatusBus.orderUpdatedEvent.observeForever(orderUpdatedObserver)
+    }
 
-                if (isMatch || currentOrder != null) {
-                    Log.d("HomeViewModel", "🔔 Получен Push-сигнал отмены для заказа $canceledId. Очищаем UI.")
-                    clearOrderState()
-                    com.taxiapp.client.network.OrderStatusBus.resetEvent()
-                }
+    /**
+     * Безопасный парсинг серверного времени создания заказа (UTC) и расчет прошедших секунд.
+     * Исправляет баг часового пояса (+2/+3 часа разницы между UTC сервера и LocalDateTime телефона).
+     */
+    private fun calculateElapsedSecondsFromUtc(createdAtStr: String?, fallbackSec: Long = 0L): Long {
+        if (createdAtStr.isNullOrBlank()) return fallbackSec
+        return try {
+            val createdEpochMs = when {
+                createdAtStr.endsWith("Z", ignoreCase = true) -> Instant.parse(createdAtStr).toEpochMilli()
+                createdAtStr.contains("+") || (createdAtStr.length > 19 && createdAtStr.substring(19).contains("-")) ->
+                    OffsetDateTime.parse(createdAtStr).toInstant().toEpochMilli()
+                else -> LocalDateTime.parse(createdAtStr.take(19)).toInstant(ZoneOffset.UTC).toEpochMilli()
             }
-        }
-
-        com.taxiapp.client.network.OrderStatusBus.orderUpdatedEvent.observeForever { updatedId ->
-            if (!updatedId.isNullOrEmpty()) {
-                Log.d("HomeViewModel", "🔔 Получен Push-сигнал обновления заказа $updatedId. Синхронизируем статус...")
-                syncActiveOrder()
-                com.taxiapp.client.network.OrderStatusBus.resetEvent()
-            }
+            val diffSec = (System.currentTimeMillis() - createdEpochMs) / 1000L
+            diffSec.coerceAtLeast(0L)
+        } catch (e: Exception) {
+            fallbackSec
         }
     }
 
-
-    // 🚀 СВЕРХБЫСТРАЯ СИНХРОНИЗАЦИЯ АКТИВНОГО / ЗАВЕРШЕННОГО ЗАКАЗА (ЧЕРЕЗ REDIS СЕРВЕРА)
-    // 🚀 СВЕРХБЫСТРАЯ СИНХРОНИЗАЦИЯ АКТИВНОГО / ЗАВЕРШЕННОГО ЗАКАЗА (ЧЕРЕЗ REDIS СЕРВЕРА)
+    // Умная синхронизация заказа:
+    // Если клиент свернул заказ кнопкой "Назад" (sessionManager.fetchActiveOrderId() == null),
+    // мы НЕ возвращаем активный заказ принудительно на главный экран (он остается в "Мої поїздки"),
+    // а показываем только завершенный (COMPLETED) заказ для расчета/оценки либо тот заказ, который выбран явно.
     fun syncActiveOrder() {
+        val pinnedOrderId = sessionManager.fetchActiveOrderId()
+        activeOrderId = pinnedOrderId
+
         viewModelScope.launch {
             try {
+                // 1. Если у клиента явно открыт конкретный заказ (создан только что или выбран в "Мої поїздки")
+                if (!pinnedOrderId.isNullOrEmpty()) {
+                    val specificResp = ApiClient.instance.getOrder(pinnedOrderId)
+                    if (specificResp.isSuccessful && specificResp.body() != null) {
+                        val order = specificResp.body()!!
+                        when (order.status) {
+                            "COMPLETED" -> {
+                                sessionManager.clearActiveOrderId()
+                                activeOrderId = order.id
+                                stopOrderStatusService(order.id)
+                                trackOrderCompletedSafely(order)
+                                _activeOrder.value = order
+                            }
+                            "CANCELLED" -> {
+                                stopOrderStatusService(order.id)
+                                dismissCompletedOrder(order.id)
+                                clearOrderState()
+                            }
+                            else -> {
+                                activeOrderId = order.id
+                                sessionManager.saveActiveOrderId(order.id)
+                                _activeOrder.value = order
+                                updateOrderStatusService(order)
+                            }
+                        }
+                        return@launch
+                    } else if (specificResp.code() == 404) {
+                        clearOrderState()
+                        return@launch
+                    }
+                }
+
+                // 2. Если pinnedOrderId == null (клиент вышел из заказа кнопкой "Назад" на главный экран):
+                // проверяем сервер только ради финального окна COMPLETED (если поездка завершилась в фоне)
                 val response = ApiClient.instance.getActiveOrder()
                 if (response.isSuccessful) {
                     val order = response.body()
                     if (order != null) {
-                        if (order.status == "COMPLETED") {
-                            // 🛡️ НЕ зберігаємо в sessionManager, щоб при перезапуску не було циклу!
-                            sessionManager.clearActiveOrderId()
-                            activeOrderId = order.id
-                            stopOrderStatusService(order.id)
-                            trackOrderCompletedSafely(order)
-                            _activeOrder.value = order
-                        } else if (order.status == "CANCELLED") {
-                            stopOrderStatusService(order.id)
-                            clearOrderState()
-                        } else {
-                            activeOrderId = order.id
-                            sessionManager.saveActiveOrderId(order.id)
-                            _activeOrder.value = order
-                            updateOrderStatusService(order)
+                        when (order.status) {
+                            "COMPLETED" -> {
+                                sessionManager.clearActiveOrderId()
+                                activeOrderId = order.id
+                                stopOrderStatusService(order.id)
+                                trackOrderCompletedSafely(order)
+                                _activeOrder.value = order
+                            }
+                            "CANCELLED" -> {
+                                stopOrderStatusService(order.id)
+                                dismissCompletedOrder(order.id)
+                                if (activeOrderId == order.id) {
+                                    clearOrderState()
+                                }
+                            }
+                            else -> {
+                                // Заказ активен, но клиент скрыл его с главного экрана в "Мої поїздки":
+                                // обновляем только фоновое уведомление в шторке, НЕ открывая панель заказа на карте!
+                                updateOrderStatusService(order)
+                            }
                         }
                     } else {
-                        // 204 No Content: активных или недавних заказов нет
-                        if (activeOrderId != null || _activeOrder.value != null) {
-                            clearOrderState()
+                        if (_activeOrder.value?.status != "COMPLETED") {
+                            if (activeOrderId != null || _activeOrder.value != null) {
+                                clearOrderState()
+                            }
                         }
                     }
                 }
@@ -154,7 +235,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 🚀 ОЧИСТКА ВРЕМЕННОГО КЭША ЗАВЕРШЕННОГО ЗАКАЗА НА СЕРВЕРЕ
     fun dismissCompletedOrder(orderId: String) {
         viewModelScope.launch {
             try {
@@ -165,7 +245,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startOrderSocketListening(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
+    fun startOrderSocketListening(webSocketManager: WebSocketManager?) {
         val clientId = sessionManager.fetchUserId()
         if (clientId == -1L) return
 
@@ -174,29 +254,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         webSocketManager?.subscribeToClientOrders(clientId) { messageDto ->
             val order = messageDto.order
             if (order != null) {
-                // 🛡️ БРОНЯ: Игнорируем сокеты по закрытым или отмененным заказам, если мы их уже сбросили
-                if ((order.status == "COMPLETED" || order.status == "CANCELLED") && activeOrderId == null) {
-                    return@subscribeToClientOrders
-                }
+                val isCurrentlyPinned = activeOrderId != null &&
+                        (activeOrderId == order.id || activeOrderId == order.idLong?.toString())
 
-                if (activeOrderId == null || activeOrderId == order.id || activeOrderId == order.idLong.toString()) {
-                    if (order.status == "CANCELLED") {
-                        // При отмене сразу очищаем заказ
+                when (order.status) {
+                    "CANCELLED" -> {
                         stopOrderStatusService(order.id)
-                        clearOrderState()
-                    } else if (order.status == "COMPLETED") {
-                        // 🛡️ НЕ ЗБЕРІГАЄМО завершене замовлення в sessionManager!
+                        if (isCurrentlyPinned) {
+                            clearOrderState()
+                        }
+                    }
+                    "COMPLETED" -> {
+                        // Когда поездка завершена водителем — всегда показываем итоговый чек и оценку
                         sessionManager.clearActiveOrderId()
                         activeOrderId = order.id
                         stopOrderStatusService(order.id)
                         trackOrderCompletedSafely(order)
                         _activeOrder.postValue(order)
-                    } else {
-                        // Для обычных статусов обновляем заказ в UI
-                        activeOrderId = order.id
-                        sessionManager.saveActiveOrderId(order.id)
-                        _activeOrder.postValue(order)
+                    }
+                    else -> {
+                        // Обновляем шторку уведомлений всегда, но карточку на главном экране —
+                        // ТОЛЬКО если этот заказ сейчас открыт у клиента (не свернут кнопкой "Назад")
                         updateOrderStatusService(order)
+                        if (isCurrentlyPinned) {
+                            activeOrderId = order.id
+                            sessionManager.saveActiveOrderId(order.id)
+                            _activeOrder.postValue(order)
+                        }
                     }
                 }
             } else if (messageDto.action == "REMOVE") {
@@ -204,7 +288,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (currentOrder != null) {
                     val isMatch = messageDto.orderId == activeOrderId ||
                             messageDto.orderId == currentOrder.id ||
-                            messageDto.orderId == currentOrder.idLong.toString()
+                            messageDto.orderId == currentOrder.idLong?.toString()
 
                     if (isMatch) {
                         Log.d("WS_ORDER_DEBUG", "🧹 Удаление заказа через сокет REMOVE (${messageDto.orderId}). Сбрасываем UI.")
@@ -215,11 +299,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 🔥 ИСПРАВЛЕНО: Метод теперь принимает вызов без параметров и безопасно очищает топики
     fun stopOrderSocketListening() {
         Log.d("WS_ORDER_DEBUG", "🛑 Прекращаем слушать обновления сокетов для заказов")
         observedWebSocketManager?.unsubscribeFromClientOrders()
-        observedWebSocketManager = null
     }
 
     fun checkOrderStatusOnce(forcedOrderId: String? = null) {
@@ -228,17 +310,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             ?: activeOrderId
             ?: return
 
-        // ИСПРАВЛЕНО: Запуск происходит на Main, так как suspend метод getOrder безопасен для UI
         viewModelScope.launch {
             try {
-                // ИСПРАВЛЕНО: Прямой неблокирующий вызов Retrofit
-                val response = com.taxiapp.client.network.ApiClient.instance.getOrder(orderId)
-
+                val response = ApiClient.instance.getOrder(orderId)
                 if (response.isSuccessful && response.body() != null) {
                     val loadedOrder = response.body()
                     activeOrderId = loadedOrder?.id
                     _activeOrder.value = loadedOrder
-                    Log.d("HomeViewModel", "Принудительно синхронизирован статус заказа после перезапуска (ID: $orderId): ${loadedOrder?.status}")
+                    Log.d("HomeViewModel", "Принудительно синхронизирован статус заказа (ID: $orderId): ${loadedOrder?.status}")
                 }
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Ошибка проверки статуса заказа: ${e.message}")
@@ -250,17 +329,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (lastTrackedCompletedOrderId == order.id) return
         lastTrackedCompletedOrderId = order.id
 
+        // Инкрементируем собственный счетчик поездок клиента (вместо ошибочного order.driver?.completedRides)
+        val prefs = getApplication<Application>().getSharedPreferences("taxi_session", Context.MODE_PRIVATE)
+        val clientOrderNumber = prefs.getInt("client_completed_rides_count", 0) + 1
+        prefs.edit().putInt("client_completed_rides_count", clientOrderNumber).apply()
+
         // 1. Собственная аналитика
-        com.taxiapp.client.analytics.AnalyticsManager.trackOrderCompleted(
+        AnalyticsManager.trackOrderCompleted(
             orderId = order.id,
             finalPrice = order.price,
-            orderNumber = order.driver?.completedRides ?: 1
+            orderNumber = clientOrderNumber
         )
 
         // 2. Отправка покупки в Meta Ads SDK
         try {
             val logger = AppEventsLogger.newLogger(getApplication())
-            val params = android.os.Bundle().apply {
+            val params = Bundle().apply {
                 putString(AppEventsConstants.EVENT_PARAM_CURRENCY, "UAH")
                 putString(AppEventsConstants.EVENT_PARAM_CONTENT_TYPE, "ride")
                 putString(AppEventsConstants.EVENT_PARAM_CONTENT_ID, order.id)
@@ -276,27 +360,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startListeningNearbyDrivers(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
+    fun startListeningNearbyDrivers(webSocketManager: WebSocketManager?) {
         webSocketManager?.subscribeToNearbyDrivers(mapSessionId) { drivers ->
             _nearbyDrivers.postValue(drivers)
         }
     }
 
-    fun updateClientLocation(webSocketManager: com.taxiapp.client.network.WebSocketManager?, lat: Double, lng: Double) {
-        // Передаем 2 параметра (lat, lng) вместо 3
+    fun updateClientLocation(webSocketManager: WebSocketManager?, lat: Double, lng: Double) {
         if (!LocationValidator.isValidLocation(lat, lng)) return
-
         val request = ClientLocationRequest(mapSessionId, lat, lng)
         webSocketManager?.sendClientLocation(request)
     }
-    fun stopListeningNearbyDrivers(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
+
+    fun stopListeningNearbyDrivers(webSocketManager: WebSocketManager?) {
         webSocketManager?.unsubscribeFromNearbyDrivers()
     }
 
     // --- API: Тарифы и Цена ---
     fun loadTariffsAndCalculatePrice(routePolyline: String?, distanceMeters: Int, waypointsCount: Int = 0) {
         _isLoading.value = true
-        val promoPercent = sessionManager.fetchPromoDiscount()
+        activeCalculatePriceCall?.cancel()
 
         if (routePolyline != null && distanceMeters > 0) {
             val fakeWaypointsList = if (waypointsCount > 0) List(waypointsCount) { "wp" } else emptyList()
@@ -308,8 +391,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 waypoints = fakeWaypointsList
             )
 
-            ApiClient.instance.calculatePrice(request).enqueue(object : Callback<List<CarTariffDto>> {
+            val call = ApiClient.instance.calculatePrice(request)
+            activeCalculatePriceCall = call
+            call.enqueue(object : Callback<List<CarTariffDto>> {
                 override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
+                    if (call.isCanceled) return
                     _isLoading.value = false
                     if (response.isSuccessful && response.body() != null) {
                         _availableTariffs.value = response.body()
@@ -318,6 +404,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
+                    if (call.isCanceled) return
                     _isLoading.value = false
                     loadBaseTariffs()
                 }
@@ -328,25 +415,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadBaseTariffs() {
-        ApiClient.instance.getActiveTariffs().enqueue(object : Callback<List<CarTariffDto>> {
+        val call = ApiClient.instance.getActiveTariffs()
+        activeCalculatePriceCall = call
+        call.enqueue(object : Callback<List<CarTariffDto>> {
             override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
+                if (call.isCanceled) return
                 _isLoading.value = false
                 if (response.isSuccessful) {
                     _availableTariffs.value = response.body() ?: emptyList()
                 }
             }
             override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
+                if (call.isCanceled) return
+                _isLoading.value = false
             }
         })
     }
 
-    fun startCheckingCardBinding(webSocketManager: com.taxiapp.client.network.WebSocketManager?) {
+    fun startCheckingCardBinding(webSocketManager: WebSocketManager?) {
         val clientId = sessionManager.fetchUserId()
         if (clientId == -1L) {
             Log.e("HomeViewModel", "Cannot subscribe to card bind: clientId is -1")
             return
         }
 
+        this.observedWebSocketManager = webSocketManager
         Log.d("WS_BIND_DEBUG", "🎧 Подписываемся на WebSocket привязки карты для клиента: $clientId")
         webSocketManager?.subscribeToCardBinding(clientId) { messageDto ->
             Log.d("WS_BIND_DEBUG", "⚡ Получен сокет-апдейт привязки карты! Status: ${messageDto.status}")
@@ -362,6 +455,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopCheckingCardBinding() {
         Log.d("WS_BIND_DEBUG", "🛑 Прекращаем ожидать привязку карты")
+        observedWebSocketManager?.unsubscribeFromCardBinding()
     }
 
     fun resetCardBoundEvent() {
@@ -371,6 +465,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // --- API: Маршрут ---
     fun fetchDirections(origin: LatLng, dest: LatLng, waypoints: List<Pair<LatLng, String>>) {
         currentRoutePolyline = null
+        activeDirectionsCall?.cancel()
 
         val originStr = "${origin.latitude},${origin.longitude}"
         val destStr = "${dest.latitude},${dest.longitude}"
@@ -380,53 +475,55 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         val myApiKey = BuildConfig.GOOGLE_PLACES_API_KEY
 
-        DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
-            .enqueue(object : Callback<DirectionsResponse> {
-                override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                    if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
-                        val route = response.body()!!.routes[0]
-                        val polylinePoints = route.overviewPolyline.points
-                        currentRoutePolyline = polylinePoints
+        val call = DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
+        activeDirectionsCall = call
+        call.enqueue(object : Callback<DirectionsResponse> {
+            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
+                if (call.isCanceled) return
+                if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
+                    val route = response.body()!!.routes[0]
+                    val polylinePoints = route.overviewPolyline.points
+                    currentRoutePolyline = polylinePoints
 
-                        viewModelScope.launch(Dispatchers.Default) {
-                            var dist = 0L
-                            var dur = 0L
-                            route.legs.forEach {
-                                dist += it.distance.meters
-                                dur += it.duration.seconds
-                            }
-
-                            val finalDist = dist.toInt()
-                            val finalDur = dur.toInt()
-
-                            val decoded = com.google.maps.android.PolyUtil.decode(polylinePoints)
-
-                            withContext(Dispatchers.Main) {
-                                _routeInfo.value = Pair(finalDist, finalDur)
-                                _decodedRoute.value = decoded
-                                loadTariffsAndCalculatePrice(polylinePoints, finalDist, waypoints.size)
-                            }
+                    viewModelScope.launch(Dispatchers.Default) {
+                        var dist = 0L
+                        var dur = 0L
+                        route.legs.forEach {
+                            dist += it.distance.meters
+                            dur += it.duration.seconds
                         }
-                    } else {
-                        _errorMessage.value = "Маршрут не знайдено"
-                    }
-                }
 
-                override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
-                    _errorMessage.value = "Не вдалося побудувати маршрут"
+                        val finalDist = dist.toInt()
+                        val finalDur = dur.toInt()
+                        val decoded = PolyUtil.decode(polylinePoints)
+
+                        withContext(Dispatchers.Main) {
+                            _routeInfo.value = Pair(finalDist, finalDur)
+                            _decodedRoute.value = decoded
+                            loadTariffsAndCalculatePrice(polylinePoints, finalDist, waypoints.size)
+                        }
+                    }
+                } else {
+                    _errorMessage.value = "Маршрут не знайдено"
                 }
-            })
+            }
+
+            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
+                if (call.isCanceled) return
+                _errorMessage.value = "Не вдалося побудувати маршрут"
+            }
+        })
     }
 
     // --- УПРАВЛЕНИЕ ВИДЖЕТОМ (СЕРВИСОМ) ---
     private fun updateOrderStatusService(order: TaxiOrderDto) {
         val context = getApplication<Application>()
-        val intent = android.content.Intent(context, com.taxiapp.client.service.OrderStatusService::class.java).apply {
-            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_ORDER_ID, order.id)
-            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_STATUS, order.status)
-            putExtra(com.taxiapp.client.service.OrderStatusService.EXTRA_ADDRESS, order.toAddress)
+        val intent = Intent(context, OrderStatusService::class.java).apply {
+            putExtra(OrderStatusService.EXTRA_ORDER_ID, order.id)
+            putExtra(OrderStatusService.EXTRA_STATUS, order.status)
+            putExtra(OrderStatusService.EXTRA_ADDRESS, order.toAddress)
         }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
         } else {
             context.startService(intent)
@@ -435,7 +532,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelOrder(reasonText: String? = null) {
         val id = activeOrderId ?: return
-        val currentOrder = _activeOrder.value
         _isLoading.value = true
 
         ApiClient.instance.cancelOrder(id, reasonText).enqueue(object : Callback<TaxiOrderDto> {
@@ -444,16 +540,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful && response.body() != null) {
                     val order = response.body()!!
 
-                    // Расчет длительности поиска для аналитики
-                    val durationSec = if (order.createdAt != null) {
-                        try {
-                            val created = java.time.LocalDateTime.parse(order.createdAt)
-                            java.time.Duration.between(created, java.time.LocalDateTime.now()).seconds
-                        } catch (e: Exception) { 0L }
-                    } else 0L
+                    val durationSec = calculateElapsedSecondsFromUtc(order.createdAt, 0L)
 
-                    // Фиксация события отмены в аналитике
-                    com.taxiapp.client.analytics.AnalyticsManager.trackOrderFailed(
+                    AnalyticsManager.trackOrderFailed(
                         orderId = id,
                         reason = reasonText ?: "Скасовано клієнтом",
                         searchDurationSec = durationSec
@@ -473,20 +562,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
+    // Без-аргументная перегрузка для совместимости, делегирующая в полную очистку состояния
+    fun cancelOrder() {
+        cancelOrder(reasonText = null)
+    }
 
     fun applyBoostPrice(boostAmount: Double = 20.0) {
         val order = _activeOrder.value ?: return
         val newAddedValue = order.addedValue + boostAmount
 
-        val durationSec = if (order.createdAt != null) {
-            try {
-                val created = java.time.LocalDateTime.parse(order.createdAt)
-                java.time.Duration.between(created, java.time.LocalDateTime.now()).seconds
-            } catch (e: Exception) { 180L }
-        } else 180L
+        val durationSec = calculateElapsedSecondsFromUtc(order.createdAt, 180L)
 
-        // Фіксація в продуктовій аналітиці
-        com.taxiapp.client.analytics.AnalyticsManager.trackBoostClicked(
+        AnalyticsManager.trackBoostClicked(
             orderId = order.id,
             boostAmount = newAddedValue,
             timeSinceCreationSec = durationSec
@@ -495,17 +582,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         updateActiveOrderPrice(newAddedValue)
     }
 
-
     private fun stopOrderStatusService(orderId: String) {
         val context = getApplication<Application>()
-        val intent = android.content.Intent(context, com.taxiapp.client.service.OrderStatusService::class.java)
+        val intent = Intent(context, OrderStatusService::class.java)
         context.stopService(intent)
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         manager.cancel(orderId.hashCode())
     }
 
-    // 🔄 ЗАМЕНИТЬ В HomeViewModel.kt:
     fun createOrder(request: CreateOrderRequestDto) {
         _isLoading.value = true
         ApiClient.instance.createOrder(request).enqueue(object : Callback<TaxiOrderDto> {
@@ -514,7 +599,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful && response.body() != null) {
                     val order = response.body()!!
 
-                    // Единая логика для всех созданных заказов (включая SCHEDULED)
                     activeOrderId = order.id
                     sessionManager.saveActiveOrderId(order.id)
                     _activeOrder.value = order
@@ -522,7 +606,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     val errorJson = response.errorBody()?.string()
                     val msg = try {
-                        val jsonObject = com.google.gson.JsonParser.parseString(errorJson).asJsonObject
+                        val jsonObject = JsonParser.parseString(errorJson).asJsonObject
                         if (jsonObject.has("message")) {
                             jsonObject.get("message").asString
                         } else {
@@ -541,28 +625,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
-    // --- API: Отмена заказа без причин ----
-    fun cancelOrder() {
-        val id = activeOrderId ?: return
-        _isLoading.value = true
-
-        ApiClient.instance.cancelOrder(id).enqueue(object : Callback<TaxiOrderDto> {
-            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
-                _isLoading.value = false
-                if (response.isSuccessful && response.body() != null) {
-                    _activeOrder.value = response.body()
-                } else {
-                    _errorMessage.value = "Не вдалося скасувати"
-                }
-            }
-            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
-                _isLoading.value = false
-                _errorMessage.value = "Помилка мережі"
-            }
-        })
-    }
-
     fun startStatusPolling() {}
+
+    private fun extractServerErrorMessage(response: Response<*>, defaultMsg: String): String {
+        return try {
+            val raw = response.errorBody()?.string()
+            if (raw.isNullOrBlank()) return defaultMsg
+            val json = JsonParser.parseString(raw).asJsonObject
+            when {
+                json.has("message") && !json.get("message").isJsonNull -> json.get("message").asString
+                json.has("reason") && !json.get("reason").isJsonNull -> json.get("reason").asString
+                json.has("error") && !json.get("error").isJsonNull -> json.get("error").asString
+                else -> defaultMsg
+            }
+        } catch (e: Exception) {
+            defaultMsg
+        }
+    }
 
     // --- API: Смена типа оплаты "на лету" ---
     fun updateActiveOrderPaymentMethod(method: String) {
@@ -572,16 +651,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful) {
+                    sessionManager.savePaymentMethod(method)
                     _activeOrder.value?.let { currentOrder ->
                         _activeOrder.value = currentOrder.copy(paymentMethod = method)
                     }
                 } else {
-                    _errorMessage.value = "Помилка зміни оплати"
+                    val serverMsg = extractServerErrorMessage(response, "Помилка зміни оплати")
+                    _errorMessage.value = serverMsg
+                    // Принудительно триггерим текущий заказ, чтобы иконка оплаты вернулась к реальному значению
+                    _activeOrder.value = _activeOrder.value
                 }
             }
             override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
                 _isLoading.value = false
                 _errorMessage.value = "Помилка мережі"
+                _activeOrder.value = _activeOrder.value
             }
         })
     }
@@ -589,21 +673,32 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // --- API: Изменение цены "на лету" ---
     fun updateActiveOrderPrice(addedValue: Double) {
         val id = activeOrderId ?: return
+        val currentOrder = _activeOrder.value
+        if (currentOrder != null && currentOrder.addedValue == addedValue) {
+            return
+        }
         _isLoading.value = true
         ApiClient.instance.updateOrderPrice(id, addedValue).enqueue(object : Callback<MessageResponseDto> {
             override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
                 _isLoading.value = false
                 if (response.isSuccessful) {
-                    _activeOrder.value?.let { currentOrder ->
-                        val basePrice = currentOrder.price - currentOrder.addedValue
+                    _activeOrder.value?.let { ord ->
+                        val basePrice = ord.price - ord.addedValue
                         val newPrice = basePrice + addedValue
-                        _activeOrder.value = currentOrder.copy(
+                        val newClientPay = if (ord.appliedDiscount > 0.0) {
+                            (newPrice - ord.appliedDiscount).coerceAtLeast(1.0)
+                        } else {
+                            newPrice
+                        }
+                        _activeOrder.value = ord.copy(
                             price = newPrice,
+                            clientPayAmount = newClientPay,
                             addedValue = addedValue
                         )
                     }
                 } else {
-                    _errorMessage.value = "Помилка зміни ціни"
+                    val serverMsg = extractServerErrorMessage(response, "Помилка зміни ціни")
+                    _errorMessage.value = serverMsg
                 }
             }
             override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
@@ -615,12 +710,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopStatusPolling() {}
 
-    // Замените метод clearOrderState() в HomeViewModel.kt:
+    /**
+     * Скрывает карточку текущего заказа с главного экрана (при нажатии "Назад" или "Нове замовлення"),
+     * оставляя сам заказ активным в "Мої поїздки" и в шторке уведомлений.
+     */
+    fun hideOrderFromMainScreen() {
+        activeOrderId = null
+        sessionManager.clearActiveOrderId()
+        val prefs = getApplication<Application>().applicationContext.getSharedPreferences("taxi_session", Context.MODE_PRIVATE)
+        prefs.edit().remove("active_order_id").apply()
+        _activeOrder.value = null
+        isBoostPromptShown = false
+    }
+
     fun clearOrderState() {
         activeOrderId?.let { stopOrderStatusService(it) }
         activeOrderId = null
         sessionManager.clearActiveOrderId()
-        // Принудительно очищаем SharedPreferences от зависших ключей заказов
+
         val prefs = getApplication<Application>().applicationContext.getSharedPreferences("taxi_session", Context.MODE_PRIVATE)
         prefs.edit().remove("active_order_id").apply()
 
@@ -628,9 +735,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         isBoostPromptShown = false
     }
 
-    // 🔥 ИСПРАВЛЕНО: Безопасный вызов без аргументов очистит сокет, предотвращая утечку памяти
     override fun onCleared() {
         super.onCleared()
+        OrderStatusBus.orderCanceledEvent.removeObserver(orderCanceledObserver)
+        OrderStatusBus.orderUpdatedEvent.removeObserver(orderUpdatedObserver)
+        activeDirectionsCall?.cancel()
+        activeCalculatePriceCall?.cancel()
+        stopCheckingCardBinding()
         stopOrderSocketListening()
+        observedWebSocketManager = null
     }
 }

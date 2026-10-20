@@ -1,14 +1,17 @@
 package com.taxiapp.client
 
+import android.app.Activity
 import android.app.Dialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.view.Window
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
@@ -20,6 +23,7 @@ import android.widget.Toast
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.ClientProfileResponse
 import com.taxiapp.client.network.InitBindCardResponse
+import com.taxiapp.client.network.WebSocketManager
 import com.taxiapp.client.network.dto.MessageResponseDto
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
@@ -30,21 +34,19 @@ import retrofit2.Response
 class PaymentActivity : BaseActivity() {
 
     private lateinit var sessionManager: SessionManager
+    private var webSocketManager: WebSocketManager? = null
 
     private lateinit var tvCardTitle: TextView
     private lateinit var ivUnbindCard: ImageView
     private lateinit var ivCheckCash: ImageView
     private lateinit var ivCheckCard: ImageView
 
-    // Элементы для способа "Водію на картку" и контейнеры кнопок
     private var ivCheckDriverCard: ImageView? = null
     private var btnCard: RelativeLayout? = null
     private var btnDriverCard: RelativeLayout? = null
 
-    // --- ПЕРЕМЕННЫЕ ДЛЯ УМНОГО ПОЛЛИНГА ---
-    private var pollingHandler = Handler(Looper.getMainLooper())
-    private var pollingRunnable: Runnable? = null
-    private var isPolling = false
+    private var activeWebViewDialog: Dialog? = null
+    private var activeWebView: WebView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,81 +55,91 @@ class PaymentActivity : BaseActivity() {
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) { e.printStackTrace() }
 
         sessionManager = SessionManager(this)
+        webSocketManager = WebSocketManager(ApiClient.BASE_URL, this)
 
         tvCardTitle = findViewById(R.id.tv_card_title)
         ivUnbindCard = findViewById(R.id.iv_unbind_card)
         ivCheckCash = findViewById(R.id.iv_check_cash)
         ivCheckCard = findViewById(R.id.iv_check_card)
 
-        // Находим элементы нового способа оплаты и кнопки
         ivCheckDriverCard = findViewById(R.id.iv_check_driver_card)
         btnCard = findViewById(R.id.btn_card)
         btnDriverCard = findViewById(R.id.btn_driver_card)
 
-        // 🛡️ ЗАЩИТА ОТ МИГАНИЯ: Изначально прячем опциональные способы оплаты
         btnCard?.visibility = View.GONE
         btnDriverCard?.visibility = View.GONE
 
-        findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
+        findViewById<ImageView>(R.id.btn_back).setOnClickListener { finishWithSelectedMethod() }
 
-        // Клик по "Наличные"
         findViewById<RelativeLayout>(R.id.btn_cash).setOnClickListener {
-            sessionManager.savePaymentMethod("CASH")
-            updateUI()
+            selectPaymentMethod("CASH")
         }
 
-        // Клик по "Привязка карты"
         btnCard?.setOnClickListener {
             val mask = sessionManager.getCardMask()
             if (mask.isNullOrEmpty()) {
                 bindNewCard()
             } else {
-                sessionManager.savePaymentMethod("CARD")
-                updateUI()
+                selectPaymentMethod("CARD")
             }
         }
 
-        // Клик по "Водію на картку"
         btnDriverCard?.setOnClickListener {
-            sessionManager.savePaymentMethod("DRIVER_CARD")
-            updateUI()
+            selectPaymentMethod("DRIVER_CARD")
         }
 
-        // Клик по крестику (Отвязать карту)
         ivUnbindCard.setOnClickListener {
             showUnbindCardDialog()
         }
 
-        // Загружаем настройки способов оплаты с сервера и обновляем UI
         fetchPaymentSettings()
+        fetchClientProfile()
         updateUI()
+    }
+
+    private fun selectPaymentMethod(method: String) {
+        sessionManager.savePaymentMethod(method)
+        syncResultIntent()
+        updateUI()
+    }
+
+    private fun syncResultIntent() {
+        val resultIntent = Intent().apply {
+            putExtra("EXTRA_PAYMENT_METHOD", sessionManager.fetchPaymentMethod())
+        }
+        setResult(Activity.RESULT_OK, resultIntent)
+    }
+
+    private fun finishWithSelectedMethod() {
+        syncResultIntent()
+        finish()
     }
 
     private fun fetchPaymentSettings() {
         ApiClient.instance.getPaymentMethodsSettings().enqueue(object : Callback<Map<String, Boolean>> {
             override fun onResponse(call: Call<Map<String, Boolean>>, response: Response<Map<String, Boolean>>) {
+                if (isFinishing || isDestroyed) return
                 if (response.isSuccessful && response.body() != null) {
                     val settings = response.body()!!
                     val isCardEnabled = settings["enable_card_payment"] ?: true
                     val isDriverCardEnabled = settings["enable_driver_card_payment"] ?: true
 
-                    // Показываем ТОЛЬКО если разрешено сервером
                     btnCard?.visibility = if (isCardEnabled) View.VISIBLE else View.GONE
                     btnDriverCard?.visibility = if (isDriverCardEnabled) View.VISIBLE else View.GONE
 
                     val currentMethod = sessionManager.fetchPaymentMethod()
                     if ((currentMethod == "CARD" && !isCardEnabled) ||
-                        (currentMethod == "DRIVER_CARD" && !isDriverCardEnabled)) {
+                        (currentMethod == "DRIVER_CARD" && !isDriverCardEnabled)
+                    ) {
                         sessionManager.savePaymentMethod("CASH")
+                        syncResultIntent()
                     }
 
                     updateUI()
                 }
             }
 
-            override fun onFailure(call: Call<Map<String, Boolean>>, t: Throwable) {
-                t.printStackTrace()
-            }
+            override fun onFailure(call: Call<Map<String, Boolean>>, t: Throwable) {}
         })
     }
 
@@ -144,6 +156,7 @@ class PaymentActivity : BaseActivity() {
 
             if (method == "CARD") {
                 sessionManager.savePaymentMethod("CASH")
+                syncResultIntent()
             }
         }
 
@@ -171,17 +184,18 @@ class PaymentActivity : BaseActivity() {
 
             ApiClient.instance.unbindCard().enqueue(object : Callback<MessageResponseDto> {
                 override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
+                    if (isFinishing || isDestroyed) return
                     dialog.dismiss()
                     if (response.isSuccessful) {
                         sessionManager.saveCardMask(null)
-                        sessionManager.savePaymentMethod("CASH")
-                        updateUI()
+                        selectPaymentMethod("CASH")
                     } else {
                         Toast.makeText(this@PaymentActivity, "Помилка при видаленні", Toast.LENGTH_SHORT).show()
                     }
                 }
 
                 override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
+                    if (isFinishing || isDestroyed) return
                     dialog.dismiss()
                     Toast.makeText(this@PaymentActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
                 }
@@ -190,40 +204,39 @@ class PaymentActivity : BaseActivity() {
         dialog.show()
     }
 
-    override fun onResume() {
-        super.onResume()
-        Handler(Looper.getMainLooper()).postDelayed({
-            fetchClientProfile()
-        }, 1000)
-    }
-
     override fun onDestroy() {
+        cleanupWebViewDialog()
+        webSocketManager?.unsubscribeFromCardBinding()
+        webSocketManager?.destroy()
+        webSocketManager = null
         super.onDestroy()
-        stopPolling()
     }
 
     private fun fetchClientProfile() {
         ApiClient.instance.getClientProfile().enqueue(object : Callback<ClientProfileResponse> {
             override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
+                if (isFinishing || isDestroyed) return
                 if (response.isSuccessful && response.body() != null) {
                     val profile = response.body()!!
+                    sessionManager.saveUserId(profile.id)
                     sessionManager.saveCardMask(profile.cardMask)
 
                     if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
                         sessionManager.savePaymentMethod("CASH")
                     }
+                    syncResultIntent()
                     updateUI()
                 }
             }
-            override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {
-                t.printStackTrace()
-            }
+
+            override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {}
         })
     }
 
     private fun bindNewCard() {
         ApiClient.instance.initBindCard().enqueue(object : Callback<InitBindCardResponse> {
             override fun onResponse(call: Call<InitBindCardResponse>, response: Response<InitBindCardResponse>) {
+                if (isFinishing || isDestroyed) return
                 if (response.isSuccessful && response.body() != null) {
                     val url = response.body()!!.paymentUrl
                     showLiqPayWebView(url)
@@ -233,18 +246,42 @@ class PaymentActivity : BaseActivity() {
             }
 
             override fun onFailure(call: Call<InitBindCardResponse>, t: Throwable) {
+                if (isFinishing || isDestroyed) return
                 Toast.makeText(this@PaymentActivity, getString(R.string.card_bind_error), Toast.LENGTH_SHORT).show()
             }
         })
     }
 
+    private fun isSafePaymentRedirectUrl(rawUrl: String): Boolean {
+        val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { return false }
+        val scheme = uri.scheme?.lowercase() ?: return false
+        val host = uri.host?.lowercase() ?: return false
+        if (scheme != "https") return false
+
+        // Дозволяємо LiqPay та 3D-Secure банківські шлюзи по HTTPS
+        return host == "liqpay.ua" ||
+                host.endsWith(".liqpay.ua") ||
+                host.endsWith(".privatbank.ua") ||
+                host.endsWith(".monobank.ua") ||
+                (BuildConfig.DEBUG && host.endsWith(".ngrok-free.dev"))
+    }
+
     private fun showLiqPayWebView(url: String) {
+        if (!isSafePaymentRedirectUrl(url)) {
+            Toast.makeText(this, "Недозволене посилання для оплати", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        cleanupWebViewDialog()
+
         val dialog = Dialog(this, android.R.style.Theme_Light_NoTitleBar)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog.setContentView(R.layout.dialog_liqpay_webview)
+        activeWebViewDialog = dialog
 
         val btnClose = dialog.findViewById<ImageView>(R.id.btn_close_webview)
         val webView = dialog.findViewById<WebView>(R.id.liqpay_webview)
+        activeWebView = webView
 
         webView.settings.apply {
             javaScriptEnabled = true
@@ -254,11 +291,10 @@ class PaymentActivity : BaseActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val overrideUrl = request?.url?.toString() ?: return false
-                val isAllowed = overrideUrl.contains("liqpay.ua") || overrideUrl.contains("ngrok-free.dev")
-
-                if (!isAllowed) {
+                val uri = request.url
+                if (uri.scheme?.lowercase() != "https") {
                     return true
                 }
                 return super.shouldOverrideUrlLoading(view, request)
@@ -271,60 +307,54 @@ class PaymentActivity : BaseActivity() {
         }
 
         dialog.setOnDismissListener {
-            stopPolling()
+            webSocketManager?.unsubscribeFromCardBinding()
+            try {
+                (webView.parent as? ViewGroup)?.removeView(webView)
+                webView.stopLoading()
+                webView.destroy()
+            } catch (_: Exception) {}
+            if (activeWebView === webView) activeWebView = null
+            if (activeWebViewDialog === dialog) activeWebViewDialog = null
             fetchClientProfile()
+        }
+
+        // Замість агресивного HTTP-поллінгу кожні 2 сек підписуємося на існуючий WebSocket-топік
+        val clientId = sessionManager.fetchUserId()
+        val token = sessionManager.fetchAuthToken()
+        if (clientId != -1L && !token.isNullOrEmpty()) {
+            webSocketManager?.connect(token)
+            webSocketManager?.subscribeToCardBinding(clientId) { messageDto ->
+                if (!isFinishing && !isDestroyed) {
+                    if (messageDto.status == "SUCCESS" && !messageDto.cardMask.isNullOrEmpty()) {
+                        sessionManager.saveCardMask(messageDto.cardMask)
+                        selectPaymentMethod("CARD")
+                        Toast.makeText(this@PaymentActivity, getString(R.string.card_bound_successfully), Toast.LENGTH_SHORT).show()
+                        dialog.dismiss()
+                    } else if (messageDto.status == "ERROR" || messageDto.status == "FAILED") {
+                        Toast.makeText(this@PaymentActivity, messageDto.message ?: getString(R.string.card_bind_error), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         }
 
         webView.loadUrl(url)
         dialog.show()
-
-        startPollingCardStatus(dialog)
     }
 
-    // ==========================================
-    // ЛОГИКА УМНОГО ПОЛЛИНГА
-    // ==========================================
-    private fun startPollingCardStatus(dialog: Dialog) {
-        isPolling = true
-        pollingRunnable = object : Runnable {
-            override fun run() {
-                if (!isPolling) return
-
-                ApiClient.instance.getClientProfile().enqueue(object : Callback<ClientProfileResponse> {
-                    override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
-                        if (response.isSuccessful && response.body() != null) {
-                            val profile = response.body()!!
-
-                            if (!profile.cardMask.isNullOrEmpty()) {
-                                stopPolling()
-                                dialog.dismiss()
-
-                                sessionManager.saveCardMask(profile.cardMask)
-                                sessionManager.savePaymentMethod("CARD")
-                                updateUI()
-                                return
-                            }
-                        }
-
-                        if (isPolling) {
-                            pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
-                        }
-                    }
-
-                    override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {
-                        if (isPolling) {
-                            pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
-                        }
-                    }
-                })
+    private fun cleanupWebViewDialog() {
+        activeWebView?.let { wv ->
+            try {
+                (wv.parent as? ViewGroup)?.removeView(wv)
+                wv.stopLoading()
+                wv.destroy()
+            } catch (_: Exception) {}
+        }
+        activeWebView = null
+        activeWebViewDialog?.let { dlg ->
+            if (dlg.isShowing) {
+                try { dlg.dismiss() } catch (_: Exception) {}
             }
         }
-
-        pollingRunnable?.let { pollingHandler.postDelayed(it, 2000) }
-    }
-
-    private fun stopPolling() {
-        isPolling = false
-        pollingRunnable?.let { pollingHandler.removeCallbacks(it) }
+        activeWebViewDialog = null
     }
 }

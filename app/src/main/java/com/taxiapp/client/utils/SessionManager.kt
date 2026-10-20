@@ -3,25 +3,30 @@ package com.taxiapp.client.utils
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
-import com.google.android.gms.maps.model.LatLng
+import android.provider.Settings
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.google.android.gms.maps.model.LatLng
 import com.google.android.libraries.places.api.model.Place
+import java.util.UUID
+
 // Допоміжний клас для передачі даних про знижку
 data class SessionPromoData(
     val discountPercent: Int,
     val maxDiscountAmount: Double
 )
 
-class SessionManager(private val context: Context) {
+class SessionManager(context: Context) {
 
-    private var prefs: SharedPreferences
+    private val appContext: Context = context.applicationContext ?: context
+    private val prefs: SharedPreferences = getOrCreateSharedPreferences(appContext)
 
     companion object {
+        private const val TAG = "SessionManager"
         const val PREFS_NAME = "TaxiAppPrefs"
 
         const val KEY_LANGUAGE = "app_language"
-
         const val KEY_DEVICE_ID = "app_device_id"
         const val KEY_UTM_SOURCE = "utm_source"
         const val KEY_UTM_MEDIUM = "utm_medium"
@@ -29,7 +34,7 @@ class SessionManager(private val context: Context) {
 
         const val KEY_USER_ID = "user_id"
         const val USER_TOKEN = "user_token"
-        const val REFRESH_TOKEN = "refresh_token" // <-- ДОБАВЛЕН REFRESH TOKEN
+        const val REFRESH_TOKEN = "refresh_token"
         const val USER_FULL_NAME = "user_full_name"
         const val USER_PHONE = "user_phone"
         const val USER_CITY_NAME = "user_city_name"
@@ -48,52 +53,86 @@ class SessionManager(private val context: Context) {
         const val KEY_PAYMENT_METHOD = "payment_method"
         const val KEY_PROMO_DISCOUNT = "promo_discount_percent"
         const val KEY_PROMO_LIMIT = "promo_discount_limit"
-        const val KEY_CARD_MASK = "card_mask" // <-- ДОБАВЛЕНО
-    }
+        const val KEY_CARD_MASK = "card_mask"
 
-    init {
-        try {
-            // Создаем аппаратно защищенный мастер-ключ AES-256
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
+        private val initLock = Any()
 
-            // Инициализируем зашифрованное хранилище
-            prefs = EncryptedSharedPreferences.create(
-                context,
-                PREFS_NAME,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Exception) {
-            // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Меняем имя файла на "${PREFS_NAME}_Plain".
-            
-            // Если при сбое Keystore открыть исходный зашифрованный файл через обычные Prefs,
-            // они попытаются прочитать шифрованный XML как чистый текст, не найдут ключей и вернут null,
-            // что приведёт к моментальному разлогину! Новый файл изолирует фолбэк.
-            prefs = context.getSharedPreferences("${PREFS_NAME}_Plain", Context.MODE_PRIVATE)
+        @Volatile
+        private var sharedPrefsInstance: SharedPreferences? = null
+
+        // In-memory кеш токенів, щоб AuthInterceptor не розшифровував XML при кожному HTTP-запиті
+        @Volatile
+        private var cachedAuthToken: String? = null
+
+        @Volatile
+        private var cachedRefreshToken: String? = null
+
+        @Volatile
+        private var isTokenCacheInitialized = false
+
+        private fun getOrCreateSharedPreferences(context: Context): SharedPreferences {
+            sharedPrefsInstance?.let { return it }
+
+            synchronized(initLock) {
+                sharedPrefsInstance?.let { return it }
+
+                val created = try {
+                    val masterKey = MasterKey.Builder(context)
+                        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                        .build()
+
+                    EncryptedSharedPreferences.create(
+                        context,
+                        PREFS_NAME,
+                        masterKey,
+                        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "EncryptedSharedPreferences init failed, falling back to isolated prefs", e)
+                    context.getSharedPreferences("${PREFS_NAME}_Plain", Context.MODE_PRIVATE)
+                }
+
+                cachedAuthToken = created.getString(USER_TOKEN, null)
+                cachedRefreshToken = created.getString(REFRESH_TOKEN, null)
+                isTokenCacheInitialized = true
+                sharedPrefsInstance = created
+                return created
+            }
         }
     }
 
     // --- TOKENS ---
     fun saveAuthToken(token: String) {
+        cachedAuthToken = token
+        isTokenCacheInitialized = true
         prefs.edit().putString(USER_TOKEN, token).apply()
     }
 
     fun fetchAuthToken(): String? {
-        return prefs.getString(USER_TOKEN, null)
+        if (isTokenCacheInitialized) {
+            return cachedAuthToken
+        }
+        val token = prefs.getString(USER_TOKEN, null)
+        cachedAuthToken = token
+        isTokenCacheInitialized = true
+        return token
     }
 
-    // <-- НОВЫЕ МЕТОДЫ ДЛЯ REFRESH TOKEN -->
     fun saveRefreshToken(token: String) {
+        cachedRefreshToken = token
+        isTokenCacheInitialized = true
         prefs.edit().putString(REFRESH_TOKEN, token).apply()
     }
 
     fun fetchRefreshToken(): String? {
-        return prefs.getString(REFRESH_TOKEN, null)
+        if (isTokenCacheInitialized && cachedRefreshToken != null) {
+            return cachedRefreshToken
+        }
+        val token = prefs.getString(REFRESH_TOKEN, null)
+        cachedRefreshToken = token
+        return token
     }
-    // <------------------------------------>
 
     // --- USER INFO ---
     fun saveUserInfo(name: String, phone: String) {
@@ -103,6 +142,7 @@ class SessionManager(private val context: Context) {
             apply()
         }
     }
+
     fun saveUserId(id: Long) {
         prefs.edit().putLong(KEY_USER_ID, id).apply()
     }
@@ -110,6 +150,7 @@ class SessionManager(private val context: Context) {
     fun fetchUserId(): Long {
         return prefs.getLong(KEY_USER_ID, -1L)
     }
+
     fun getUserName(): String = prefs.getString(USER_FULL_NAME, "Райдер") ?: "Райдер"
     fun getUserPhone(): String = prefs.getString(USER_PHONE, "") ?: ""
 
@@ -127,14 +168,15 @@ class SessionManager(private val context: Context) {
     fun fetchDeviceId(): String {
         var deviceId = prefs.getString(KEY_DEVICE_ID, null)
         if (deviceId.isNullOrEmpty()) {
-            val androidId = android.provider.Settings.Secure.getString(
-                context.contentResolver,
-                android.provider.Settings.Secure.ANDROID_ID
-            )
+            val androidId = try {
+                Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
+            } catch (e: Exception) {
+                null
+            }
             deviceId = if (!androidId.isNullOrEmpty() && androidId != "9774d56d682e549c") {
                 androidId
             } else {
-                java.util.UUID.randomUUID().toString()
+                UUID.randomUUID().toString()
             }
             prefs.edit().putString(KEY_DEVICE_ID, deviceId).apply()
         }
@@ -162,12 +204,12 @@ class SessionManager(private val context: Context) {
         )
     }
 
-    // --- ACTIVE ORDER (ИЗМЕНЕНО НА STRING/UUID СОВМЕСТИМОСТЬ) ---
-    fun saveActiveOrderId(id: String) { // <-- Принимаем строку UUID
+    // --- ACTIVE ORDER ---
+    fun saveActiveOrderId(id: String) {
         prefs.edit().putString(ACTIVE_ORDER_ID, id).apply()
     }
 
-    fun fetchActiveOrderId(): String? { // <-- Возвращаем String? вместо Long
+    fun fetchActiveOrderId(): String? {
         return prefs.getString(ACTIVE_ORDER_ID, null)
     }
 
@@ -189,7 +231,7 @@ class SessionManager(private val context: Context) {
 
     fun isDarkMode(): Boolean {
         if (!isManualThemeSelected()) {
-            val nightModeFlags = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            val nightModeFlags = appContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
             return nightModeFlags == Configuration.UI_MODE_NIGHT_YES
         }
         return prefs.getBoolean(KEY_IS_DARK_MODE, false)
@@ -207,12 +249,15 @@ class SessionManager(private val context: Context) {
         }
     }
 
+    // --- LANGUAGE (Нормалізація ISO-коду "uk" замість застарілого "ua") ---
     fun saveLanguage(languageCode: String) {
-        prefs.edit().putString(KEY_LANGUAGE, languageCode).apply()
+        val normalized = if (languageCode == "ua") "uk" else languageCode
+        prefs.edit().putString(KEY_LANGUAGE, normalized).apply()
     }
 
     fun getLanguage(): String {
-        return prefs.getString(KEY_LANGUAGE, "ua") ?: "ua"
+        val raw = prefs.getString(KEY_LANGUAGE, "uk") ?: "uk"
+        return if (raw == "ua") "uk" else raw
     }
 
     fun getHomeAddress(): Place? {
@@ -243,6 +288,9 @@ class SessionManager(private val context: Context) {
 
     // --- LOGOUT ---
     fun clearSession() {
+        cachedAuthToken = null
+        cachedRefreshToken = null
+        isTokenCacheInitialized = true
         prefs.edit().apply {
             remove(USER_TOKEN)
             remove(REFRESH_TOKEN)

@@ -8,21 +8,22 @@ data class OrderServiceDto(
     val price: Double
 )
 
-// Специальный DTO для пассажира, чтобы Gson знал, как его парсить
 data class OrderPassengerDto(
     val id: Long,
     val fullName: String
 )
 
 data class TaxiOrderDto(
-    val id: String,                  // Публичный UUID от сервера
-    val idLong: Long?,               // Внутренний ID (для совместимости)
-    val client: OrderPassengerDto?,  // ИСПРАВЛЕНО: Вместо Any? теперь четкий класс!
+    val id: String,
+    val idLong: Long?,
+    val client: OrderPassengerDto?,
     val driver: OrderDriverDto?,
     val status: String,
     val fromAddress: String,
     val toAddress: String,
     val price: Double,
+    val clientPayAmount: Double? = null,
+    val appliedDiscount: Double = 0.0,
     val tariffName: String?,
     val originLat: Double?,
     val originLng: Double?,
@@ -37,6 +38,8 @@ data class TaxiOrderDto(
     val paymentMethod: String? = "CASH",
     val serviceIds: List<Long>? = null,
     val comment: String? = null,
+
+    @SerializedName(value = "addedValue", alternate = ["boostAmount", "added_value"])
     val addedValue: Double = 0.0,
 
     @SerializedName("services")
@@ -50,10 +53,12 @@ data class TaxiOrderDto(
     val freeWaitingMinutes: Int = 3,
     val pricePerWaitingMinute: Double = 0.0,
     val cancellationReason: String? = null,
-
-    // --- НОВОЕ ПОЛЕ ---
     val scheduledAt: String? = null,
-
-    // ➕ ДОБАВЛЕНО: Полилиния маршрута подачи водителя к клиенту
     val driverToPickupPolyline: String? = null
-)
+) {
+    /**
+     * Итоговая сумма к оплате для клиента с учетом промокода / скидки.
+     */
+    val effectiveClientPrice: Double
+        get() = if (clientPayAmount != null && clientPayAmount > 0.0) clientPayAmount else price
+}

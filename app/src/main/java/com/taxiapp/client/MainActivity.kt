@@ -1,17 +1,18 @@
 package com.taxiapp.client
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
-import android.os.Bundle
+import android.content.IntentFilter
 import android.graphics.Color
+import android.os.Build
+import android.os.Bundle
 import android.os.CountDownTimer
-import com.google.android.gms.auth.api.phone.SmsRetriever
-import com.google.android.gms.common.api.CommonStatusCodes
-import com.google.android.gms.common.api.Status
-import com.taxiapp.client.utils.AppSignatureHelper
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.text.method.LinkMovementMethod
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -26,17 +27,22 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
+import com.google.android.gms.auth.api.phone.SmsRetriever
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import com.google.firebase.messaging.FirebaseMessaging
+import com.taxiapp.client.analytics.AnalyticsManager
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.GoogleAuthRequestDto
 import com.taxiapp.client.network.MessageResponse
 import com.taxiapp.client.network.dto.LoginResponseDto
 import com.taxiapp.client.network.dto.SmsRequestDto
 import com.taxiapp.client.network.dto.SmsVerifyDto
+import com.taxiapp.client.utils.AppSignatureHelper
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
 import retrofit2.Call
@@ -47,24 +53,20 @@ class MainActivity : BaseActivity() {
 
     private lateinit var sessionManager: SessionManager
 
-    // Маркетингове джерело установки для аналітики
     private var marketingSource: String? = null
-
     private var lastGoogleClickTime: Long = 0
     private lateinit var tvPrivacyDisclaimer: TextView
-    // UI Секции
+
     private lateinit var layoutPhone: LinearLayout
     private lateinit var layoutSms: LinearLayout
-    private lateinit var layoutLinkPhone: LinearLayout // <-- НОВЫЙ ЭКРАН ДОЗАПОЛНЕНИЯ
+    private lateinit var layoutLinkPhone: LinearLayout
     private lateinit var progressBar: ProgressBar
 
-    // UI Элементы
     private lateinit var etPhoneNumber: EditText
     private lateinit var btnGetCode: Button
     private lateinit var btnVerify: Button
     private lateinit var btnGoogleSignIn: Button
 
-    // UI Элементы для дозаполнения
     private lateinit var etLinkPhoneNumber: EditText
     private lateinit var btnLinkPhone: Button
 
@@ -74,7 +76,6 @@ class MainActivity : BaseActivity() {
 
     private lateinit var googleSignInClient: GoogleSignInClient
 
-    // Toast
     private lateinit var customToastContainer: CardView
     private lateinit var tvToastMessage: TextView
     private lateinit var ivToastIcon: ImageView
@@ -83,8 +84,6 @@ class MainActivity : BaseActivity() {
 
     private var fullPhoneNumber: String = ""
     private var resendTimer: CountDownTimer? = null
-
-    // Флаг, который показывает, что мы сейчас привязываем номер, а не просто логинимся
     private var isLinkingPhoneState = false
 
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -99,7 +98,6 @@ class MainActivity : BaseActivity() {
                     showToast("Помилка: Google не повернув токен")
                 }
             } catch (e: ApiException) {
-                // 🔥 ИСПРАВЛЕНО: Даже при RESULT_OK проверяем на отмену (редкий системный кейс)
                 if (e.statusCode == 12501) {
                     Log.d("GoogleAuth", "Вход отменен пользователем (12501)")
                 } else {
@@ -112,8 +110,6 @@ class MainActivity : BaseActivity() {
             try {
                 task.getResult(ApiException::class.java)
             } catch (e: ApiException) {
-                // 🔥 ИСПРАВЛЕНО: Если код 12501 (SIGN_IN_CANCELLED), просто пишем в лог для отладки,
-                // но НЕ показываем пользователю раздражающий Toast
                 if (e.statusCode == 12501) {
                     Log.d("GoogleAuth", "Пользователь закрыл шторку выбора аккаунта Google (12501)")
                 } else {
@@ -128,11 +124,8 @@ class MainActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
 
         sessionManager = SessionManager(applicationContext)
-
-        // Отримуємо джерело залучення, яке передав SplashActivity
         marketingSource = intent.getStringExtra("EXTRA_ACQUISITION_SOURCE")
 
-        // Если токен ЕСТЬ и телефон ЕСТЬ, пускаем дальше.
         val token = sessionManager.fetchAuthToken()
         val phone = sessionManager.getUserPhone()
         if (token != null && phone.isNotEmpty()) {
@@ -140,44 +133,52 @@ class MainActivity : BaseActivity() {
             goToHomeActivity()
             return
         } else if (token != null) {
-            // 🔥 ИСПРАВЛЕНО: Стираем сессию ТОЛЬКО при холодном старте приложения.
-            // Если это пересоздание экрана (savedInstanceState != null), то сессию НЕ трогаем!
             if (savedInstanceState == null) {
                 sessionManager.clearSession()
             }
         }
         setContentView(R.layout.activity_main)
 
-        // 🔥 ИСПРАВЛЕНО: Если сокет/экран пересоздался в процессе привязки номера, возвращаем нужный UI
         if (token != null && phone.isEmpty() && savedInstanceState != null) {
             showLinkPhoneScreen()
         }
         try { ViewUtils.setupEdgeToEdge(this) } catch (e: Exception) { e.printStackTrace() }
 
-        // НАСТРОЙКА GOOGLE SIGN IN
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(getString(R.string.default_web_client_id)) // 👈 Теперь берется из ресурсов
+            .requestIdToken(getString(R.string.default_web_client_id))
             .requestEmail()
             .build()
         googleSignInClient = GoogleSignIn.getClient(this, gso)
 
-        if (com.taxiapp.client.BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
             val appSignatureHelper = AppSignatureHelper(this)
             for (signature in appSignatureHelper.appSignatures) {
                 Log.d("MY_APP_HASH", "ТВОЙ ХЭШ ДЛЯ СМС: $signature")
             }
         }
 
-        // Регистрируем слушатель
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(smsRetrieverReceiver, android.content.IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION), RECEIVER_EXPORTED)
+        // Безпечна реєстрація SMS Retriever з системним дозволом SmsRetriever.SEND_PERMISSION
+        val smsFilter = IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                smsRetrieverReceiver,
+                smsFilter,
+                SmsRetriever.SEND_PERMISSION,
+                null,
+                RECEIVER_EXPORTED
+            )
         } else {
-            registerReceiver(smsRetrieverReceiver, android.content.IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION))
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(
+                smsRetrieverReceiver,
+                smsFilter,
+                SmsRetriever.SEND_PERMISSION,
+                null
+            )
         }
 
         initUI()
 
-        // Кнопка стандартного логина
         btnGetCode.setOnClickListener {
             val rawNumber = etPhoneNumber.text.toString()
             if (rawNumber.length != 9) {
@@ -189,7 +190,6 @@ class MainActivity : BaseActivity() {
             requestSms(fullPhoneNumber)
         }
 
-        // Кнопка привязки номера (после Google)
         btnLinkPhone.setOnClickListener {
             val rawNumber = etLinkPhoneNumber.text.toString()
             if (rawNumber.length != 9) {
@@ -214,7 +214,6 @@ class MainActivity : BaseActivity() {
             if (System.currentTimeMillis() - lastGoogleClickTime < 1500) return@setOnClickListener
             lastGoogleClickTime = System.currentTimeMillis()
 
-            // Сбрасываем старую зависшую сессию перед открытием окна
             googleSignInClient.signOut().addOnCompleteListener {
                 val signInIntent = googleSignInClient.signInIntent
                 googleSignInLauncher.launch(signInIntent)
@@ -226,39 +225,46 @@ class MainActivity : BaseActivity() {
         setupOtpInputs()
     }
 
+    private fun saveLoginSessionData(body: LoginResponseDto) {
+        sessionManager.saveAuthToken(body.token)
+        sessionManager.saveUserId(body.userId)
+        if (!body.refreshToken.isNullOrEmpty()) {
+            sessionManager.saveRefreshToken(body.refreshToken)
+        }
+        if (!body.cardMask.isNullOrEmpty()) {
+            sessionManager.saveCardMask(body.cardMask)
+        }
+        if (!body.phoneNumber.isNullOrBlank()) {
+            sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
+        }
+    }
+
     private fun verifyGoogleToken(idToken: String) {
         setLoading(true)
         val request = GoogleAuthRequestDto(idToken, marketingSource)
 
         ApiClient.instance.loginWithGoogle(request).enqueue(object : Callback<LoginResponseDto> {
             override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
+                if (isFinishing || isDestroyed) return
                 setLoading(false)
                 if (response.isSuccessful) {
                     val body = response.body()
                     val token = body?.token
                     val phone = body?.phoneNumber
 
-                    if (token != null) {
-                        sessionManager.saveUserId(body.userId)
+                    if (body != null && token != null) {
+                        saveLoginSessionData(body)
 
-                        // 📊 ТРЕКИНГ: Фиксируем регистрацию нового пользователя через Google
                         if (body.isNewUser) {
-                            com.taxiapp.client.analytics.AnalyticsManager.trackUserRegistered(
+                            AnalyticsManager.trackUserRegistered(
                                 userId = body.userId,
                                 source = sessionManager.getUtmSource() ?: marketingSource ?: "google_auth"
                             )
                         }
 
-                        // Если помечен как новый ИЛИ в ответе пустой номер — только привязка телефона
                         if (body.isNewUser || phone.isNullOrBlank()) {
-                            sessionManager.saveAuthToken(token)
                             showLinkPhoneScreen()
                         } else {
-                            sessionManager.saveAuthToken(token)
-                            if (body.refreshToken != null) {
-                                sessionManager.saveRefreshToken(body.refreshToken)
-                            }
-                            sessionManager.saveUserInfo(body.fullName, phone)
                             updateFcmTokenOnServer()
                             checkWhereToGo(false)
                         }
@@ -269,7 +275,9 @@ class MainActivity : BaseActivity() {
                     showToast("Помилка авторизації Google на сервері")
                 }
             }
+
             override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
+                if (isFinishing || isDestroyed) return
                 setLoading(false)
                 showToast("Помилка мережі: ${t.message}")
             }
@@ -281,19 +289,14 @@ class MainActivity : BaseActivity() {
         val request = SmsVerifyDto(phoneNumber = phone, code = code, acquisitionSource = marketingSource)
 
         if (isLinkingPhoneState) {
-            // Вызов очищен от ручной передачи токена, Interceptor подхватит его сам
             ApiClient.instance.linkPhone(request).enqueue(object : Callback<LoginResponseDto> {
                 override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
+                    if (isFinishing || isDestroyed) return
                     setLoading(false)
                     if (response.isSuccessful) {
                         val body = response.body()
                         if (body != null) {
-                            sessionManager.saveAuthToken(body.token)
-                            sessionManager.saveUserId(body.userId)
-                            if (body.refreshToken != null) {
-                                sessionManager.saveRefreshToken(body.refreshToken)
-                            }
-                            sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
+                            saveLoginSessionData(body)
                             resendTimer?.cancel()
                             updateFcmTokenOnServer()
                             goToHomeActivity()
@@ -302,7 +305,9 @@ class MainActivity : BaseActivity() {
                         handleSmsError(response.code())
                     }
                 }
+
                 override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
+                    if (isFinishing || isDestroyed) return
                     setLoading(false)
                     showToast("Помилка мережі: ${t.message}")
                 }
@@ -310,16 +315,18 @@ class MainActivity : BaseActivity() {
         } else {
             ApiClient.instance.verifySmsCode(request).enqueue(object : Callback<LoginResponseDto> {
                 override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
+                    if (isFinishing || isDestroyed) return
                     setLoading(false)
                     if (response.isSuccessful) {
                         val body = response.body()
                         if (body != null) {
-                            sessionManager.saveAuthToken(body.token)
-                            sessionManager.saveUserId(body.userId)
-                            if (body.refreshToken != null) {
-                                sessionManager.saveRefreshToken(body.refreshToken)
+                            saveLoginSessionData(body)
+                            if (body.isNewUser) {
+                                AnalyticsManager.trackUserRegistered(
+                                    userId = body.userId,
+                                    source = sessionManager.getUtmSource() ?: marketingSource ?: "sms_auth"
+                                )
                             }
-                            sessionManager.saveUserInfo(body.fullName, body.phoneNumber)
                             resendTimer?.cancel()
                             updateFcmTokenOnServer()
                             checkWhereToGo(body.isNewUser)
@@ -328,7 +335,9 @@ class MainActivity : BaseActivity() {
                         handleSmsError(response.code())
                     }
                 }
+
                 override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
+                    if (isFinishing || isDestroyed) return
                     setLoading(false)
                     showToast("Помилка мережі: ${t.message}")
                 }
@@ -379,21 +388,18 @@ class MainActivity : BaseActivity() {
         ivToastIcon = findViewById(R.id.iv_toast_icon)
         setupPhoneAutoformat(etPhoneNumber)
         setupPhoneAutoformat(etLinkPhoneNumber)
-        // Внутри метода initUI()
-        tvPrivacyDisclaimer = findViewById(R.id.tv_privacy_disclaimer)
 
-// Делаем ссылки в HTML кликабельными
-        tvPrivacyDisclaimer.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        tvPrivacyDisclaimer = findViewById(R.id.tv_privacy_disclaimer)
+        tvPrivacyDisclaimer.movementMethod = LinkMovementMethod.getInstance()
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         resendTimer?.cancel()
+        toastHandler.removeCallbacks(hideToastRunnable)
         try {
             unregisterReceiver(smsRetrieverReceiver)
-        } catch (e: Exception) {
-            // Игнорируем, если не был зарегистрирован
-        }
+        } catch (_: Exception) {}
+        super.onDestroy()
     }
 
     private fun startResendTimer() {
@@ -401,12 +407,12 @@ class MainActivity : BaseActivity() {
         tvResendCode.isClickable = false
         tvResendCode.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
 
-        // Изменено на 60000 мс (60 секунд)
         resendTimer = object : CountDownTimer(60000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 val seconds = millisUntilFinished / 1000
                 tvResendCode.text = "Відправити повторно через $seconds"
             }
+
             override fun onFinish() {
                 tvResendCode.text = "Відправити повторно"
                 tvResendCode.isClickable = true
@@ -446,6 +452,7 @@ class MainActivity : BaseActivity() {
         val request = SmsRequestDto(phoneNumber = phone)
         ApiClient.instance.requestSmsCode(request).enqueue(object : Callback<MessageResponse> {
             override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
+                if (isFinishing || isDestroyed) return
                 setLoading(false)
                 if (response.isSuccessful) {
                     showSmsScreen(phone)
@@ -457,21 +464,24 @@ class MainActivity : BaseActivity() {
                     else showToast("Помилка: ${response.message()}")
                 }
             }
+
             override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
+                if (isFinishing || isDestroyed) return
                 setLoading(false)
                 showToast("Помилка мережі: ${t.message}")
             }
         })
     }
-    // Приемник автоматических СМС от SMS Retriever API (0 кликов)
-    private val smsRetrieverReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+
+    private val smsRetrieverReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
             if (SmsRetriever.SMS_RETRIEVED_ACTION == intent?.action) {
                 val extras = intent.extras
+                @Suppress("DEPRECATION")
                 val status = extras?.get(SmsRetriever.EXTRA_STATUS) as? Status
                 when (status?.statusCode) {
                     CommonStatusCodes.SUCCESS -> {
-                        val message = extras.get(SmsRetriever.EXTRA_SMS_MESSAGE) as? String
+                        val message = extras.getString(SmsRetriever.EXTRA_SMS_MESSAGE)
                         if (!message.isNullOrEmpty()) {
                             parseAndSubmitSmsCode(message)
                         }
@@ -500,7 +510,6 @@ class MainActivity : BaseActivity() {
     }
 
     private fun parseAndSubmitSmsCode(message: String) {
-        // Достаем ровно 6 цифр подряд из СМС
         val regex = Regex("\\b\\d{6}\\b")
         val matchResult = regex.find(message)
         val code = matchResult?.value
@@ -511,13 +520,13 @@ class MainActivity : BaseActivity() {
                     otpEdits[index].setText(char.toString())
                 }
             }
-            showToast("Код автоподставлен!")
-            // Мгновенная отправка на сервер без участия пользователя
+            showToast("Код автопідставлено!")
             verifySms(fullPhoneNumber, code)
         }
     }
+
     private fun updateFcmTokenOnServer() {
-        val token = sessionManager.fetchAuthToken() ?: return
+        sessionManager.fetchAuthToken() ?: return
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) return@addOnCompleteListener
             val fcmToken = task.result
@@ -617,7 +626,11 @@ class MainActivity : BaseActivity() {
     }
 
     private fun showToast(msg: String) {
-        val isError = msg.contains("Помилка", true) || msg.contains("Error", true) || msg.contains("заборонено") || msg.contains("Невірний") || msg.contains("зайнятий")
+        val isError = msg.contains("Помилка", true) ||
+                msg.contains("Error", true) ||
+                msg.contains("заборонено") ||
+                msg.contains("Невірний") ||
+                msg.contains("зайнятий")
         showTopMessage(msg, isError)
     }
 }

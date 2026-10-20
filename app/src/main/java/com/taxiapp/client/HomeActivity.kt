@@ -91,6 +91,10 @@ import com.taxiapp.client.network.MessageResponse
 import com.taxiapp.client.network.RateDriverRequest
 import com.taxiapp.client.network.WebSocketManager
 import com.taxiapp.client.network.dto.*
+import com.taxiapp.client.controllers.MarkerAnimationController
+import com.taxiapp.client.controllers.OrderRatingController
+import com.taxiapp.client.controllers.OrderTimersController
+import com.taxiapp.client.controllers.SearchRadarController
 import com.taxiapp.client.ui.TariffAdapter
 import com.taxiapp.client.ui.TariffItem
 import com.taxiapp.client.utils.*
@@ -113,7 +117,7 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     private val viewModel: HomeViewModel by viewModels()
 
     // Остальные переменные UI и карты
-    private var currentTariffPrice: Double = 0.0 
+    private var currentTariffPrice: Double = 0.0
     private lateinit var tvPrice: TextView
 
     // Эти переменные теперь обновляются из ViewModel
@@ -130,7 +134,7 @@ class HomeActivity : BaseActivity() , OnMapReadyCallback {
     private var isChoosingDestination = false
 
     // Хранилище для данных интента, чтобы вернуться в Picker без потери текста в полях
-private var lastAddressPickerIntentData: Intent? = null
+    private var lastAddressPickerIntentData: Intent? = null
 
     private val animHandler = Handler(Looper.getMainLooper())
     // statusHandler удален, так как поллинг теперь в ViewModel
@@ -157,12 +161,12 @@ private var lastAddressPickerIntentData: Intent? = null
 
     private var originMarker: Marker? = null
     private var destinationMarker: Marker? = null
-    
+
     private val currentWaypoints = mutableListOf<Pair<LatLng, String>>()
 
 
 
-// --- Змінні для розгортання деталей замовлення ---
+    // --- Змінні для розгортання деталей замовлення ---
     private lateinit var handleTouchZone: FrameLayout
     private lateinit var layoutExpandableDetails: LinearLayout
     private var isOrderDetailsExpanded = false
@@ -174,12 +178,12 @@ private var lastAddressPickerIntentData: Intent? = null
     private lateinit var ivMenuIcon: ImageView
 
     private lateinit var profileUserName: TextView
-    private lateinit var profileBtnDetails: LinearLayout 
+    private lateinit var profileBtnDetails: LinearLayout
     private lateinit var profileCityText: TextView
-    private lateinit var profileBtnCity: LinearLayout 
+    private lateinit var profileBtnCity: LinearLayout
 
     private lateinit var tvPaymentMethodText: TextView
-    
+
     private lateinit var themeSwitchContainer: ConstraintLayout
     private lateinit var themeSwitchThumb: View
     private lateinit var ivThemeSun: ImageView
@@ -190,8 +194,8 @@ private var lastAddressPickerIntentData: Intent? = null
     private var lastKnownDriverLatLng: com.google.android.gms.maps.model.LatLng? = null
     private var lastKnownDriverBearing: Float = 0f
     // --------------------------------------------------------------
-    
-    
+
+
     private lateinit var btnOpenPromo: CardView
     private lateinit var centerPin: ImageView
     private lateinit var pinShadow: ImageView
@@ -201,20 +205,21 @@ private var lastAddressPickerIntentData: Intent? = null
 
     private lateinit var btnDriverHealthAlert: View
 
-    // --- ПЕРЕМЕННЫЕ ДЛЯ АНИМАЦИИ РАДАРА (ПОИСК ЗАКАЗА) ---
-    private var radarOverlay: com.google.android.gms.maps.model.GroundOverlay? = null
-    private var radarAnimator: android.animation.ValueAnimator? = null
-    private var isRadarAnimationRunning = false
+    // --- МОДУЛЬНЫЕ КОНТРОЛЛЕРЫ (ЭТАП 4) ---
+    private val searchRadarController = SearchRadarController()
+    private val markerAnimationController = MarkerAnimationController()
+    private lateinit var orderTimersController: OrderTimersController
+    private var subscribedChatOrderId: String? = null
     private lateinit var btnRecenter: CardView
     private lateinit var btnRecenterRoute: CardView
 
     // --- НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ РЕЖИМА ВЫБОРА НА КАРТЕ ---
-private var isMapPickingMode = false
-private var mapPickerIsOrigin = true // true - если выбираем точку А, false - если Б
-private lateinit var layoutMapPickerPanel: View
-private lateinit var btnBackMapPicker: View
-private lateinit var tvMapPickerAddress: TextView
-private lateinit var btnConfirmMapPicker: Button
+    private var isMapPickingMode = false
+    private var mapPickerIsOrigin = true // true - если выбираем точку А, false - если Б
+    private lateinit var layoutMapPickerPanel: View
+    private lateinit var btnBackMapPicker: View
+    private lateinit var tvMapPickerAddress: TextView
+    private lateinit var btnConfirmMapPicker: Button
 
     private lateinit var containerOrigin: LinearLayout
     private lateinit var tvOrigin: TextView
@@ -230,7 +235,7 @@ private lateinit var btnConfirmMapPicker: Button
     private val nearbyDriverMarkers = mutableMapOf<Long, Marker>()
 
     private lateinit var tvOverlayDestDetails: TextView
-    
+
     private lateinit var ivMarkerOrigin: ImageView
     private lateinit var ivMarkerDest: ImageView
 
@@ -272,17 +277,17 @@ private lateinit var btnConfirmMapPicker: Button
     private lateinit var statusProgressBar: ProgressBar
     private lateinit var btnCancelOrder: Button
 
-    private var orderComment: String = "" 
+    private var orderComment: String = ""
     private lateinit var btnOpenComment: View
     private lateinit var ivCommentIcon: ImageView
 
-    private var currentPaymentMethod: String = "CASH" 
+    private var currentPaymentMethod: String = "CASH"
     private lateinit var ivPaymentIcon: ImageView
-    
+
     private lateinit var layoutDriverDetails: LinearLayout
     private lateinit var tvCarPlateLarge: TextView
     private var mapPickerTarget = "target_origin"
-private var mapPickerWaypointIndex = -1
+    private var mapPickerWaypointIndex = -1
 
     private lateinit var btnChatDriver: ImageButton
     private lateinit var tvChatBadge: TextView
@@ -315,16 +320,16 @@ private var mapPickerWaypointIndex = -1
     private lateinit var mapLoadingCurtain: ImageView
     private lateinit var contentBottomSheet: View
 
-    
-    private var currentActiveLanguage: String = ""       
-    
+
+    private var currentActiveLanguage: String = ""
+
     private var loadedSectors: List<SectorDto> = emptyList()
     private var isRatingDialogVisible = false
 
     private lateinit var layoutPaymentCompleted: LinearLayout
     private lateinit var tvFinalPaymentPrice: TextView
     private lateinit var btnUnderstandPayment: Button
-    
+
     private var originPlace: Place? = null
     private var destinationPlace: Place? = null
     private var currentCity: CityData? = null
@@ -338,7 +343,7 @@ private var mapPickerWaypointIndex = -1
     private lateinit var layoutDriverFoundState: View
     private lateinit var btnCancelRideDriver: Button
 
-private lateinit var tvSearchTariffSubtitle: TextView
+    private lateinit var tvSearchTariffSubtitle: TextView
     private lateinit var tvSearchOrderPrice: TextView
     private var ratingDialogInstance: Dialog? = null
     private lateinit var animatedBorderHeader: com.taxiapp.client.ui.AnimatedBorderView
@@ -352,14 +357,14 @@ private lateinit var tvSearchTariffSubtitle: TextView
     private lateinit var tvHeaderEtaTime: TextView
     private lateinit var tvDriverRatingVal: TextView
 
-private var maxDetailsHeight = 0
+    private var maxDetailsHeight = 0
 
-private lateinit var cardWaitingTimer: View
-private lateinit var tvNewWaitingTimer: TextView
+    private lateinit var cardWaitingTimer: View
+    private lateinit var tvNewWaitingTimer: TextView
 
-private lateinit var buttonsShimmer: ShimmerFrameLayout
+    private lateinit var buttonsShimmer: ShimmerFrameLayout
 
-    private lateinit var btnSchedule: ImageButton 
+    private lateinit var btnSchedule: ImageButton
     private var scheduledDate: Calendar? = null
 
     private var isRouteMode = false
@@ -391,7 +396,7 @@ private lateinit var buttonsShimmer: ShimmerFrameLayout
     private val userDetailsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             profileUserName.text = sessionManager.getUserName()
-            setupProfileLogic() 
+            setupProfileLogic()
         }
     }
 
@@ -404,111 +409,111 @@ private lateinit var buttonsShimmer: ShimmerFrameLayout
     }
 
     private val addressPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-    if (result.resultCode == RESULT_OK && result.data != null) {
-        val data = result.data!!
-        val action = data.getStringExtra(AddressPickerActivity.RESULT_ACTION)
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            val data = result.data!!
+            val action = data.getStringExtra(AddressPickerActivity.RESULT_ACTION)
 
-        if (action == "place") {
-            // --- Стандартний вибір адреси зі списку ---
-            val name = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
-            val lat = data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0)
-            val lng = data.getDoubleExtra(AddressPickerActivity.RESULT_LNG, 0.0)
-            val place = Place.builder().setName(name).setLatLng(LatLng(lat, lng)).build()
+            if (action == "place") {
+                // --- Стандартний вибір адреси зі списку ---
+                val name = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
+                val lat = data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0)
+                val lng = data.getDoubleExtra(AddressPickerActivity.RESULT_LNG, 0.0)
+                val place = Place.builder().setName(name).setLatLng(LatLng(lat, lng)).build()
 
-            if (data.hasExtra(AddressPickerActivity.RESULT_ORIGIN_LAT)) {
-                val originName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
-                val originLat = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0)
-                val originLng = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0)
-                originPlace = Place.builder().setName(originName).setLatLng(LatLng(originLat, originLng)).build()
-                tvOrigin.text = AddressUtils.formatAddress(originName ?: "")
-            }
+                if (data.hasExtra(AddressPickerActivity.RESULT_ORIGIN_LAT)) {
+                    val originName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
+                    val originLat = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0)
+                    val originLng = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0)
+                    originPlace = Place.builder().setName(originName).setLatLng(LatLng(originLat, originLng)).build()
+                    tvOrigin.text = AddressUtils.formatAddress(originName ?: "")
+                }
 
-            val wLats = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
-            val wLngs = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS)
-            val wNames = data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES)
+                val wLats = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
+                val wLngs = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS)
+                val wNames = data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES)
 
-            currentWaypoints.clear()
-            if (wLats != null && wLngs != null) {
-                for (i in wLats.indices) {
-                    if (wLats[i] != 0.0 && wLngs[i] != 0.0) {
-                        val wpName = if (wNames != null && i < wNames.size) wNames[i] else "Зупинка"
-                        currentWaypoints.add(Pair(LatLng(wLats[i], wLngs[i]), wpName))
+                currentWaypoints.clear()
+                if (wLats != null && wLngs != null) {
+                    for (i in wLats.indices) {
+                        if (wLats[i] != 0.0 && wLngs[i] != 0.0) {
+                            val wpName = if (wNames != null && i < wNames.size) wNames[i] else "Зупинка"
+                            currentWaypoints.add(Pair(LatLng(wLats[i], wLngs[i]), wpName))
+                        }
                     }
                 }
+                handleAddressSelection(place, name)
             }
-            handleAddressSelection(place, name)
-        }
-        else if (action == "map_click") {
-            lastAddressPickerIntentData = data
-            mapPickerTarget = data.getStringExtra(AddressPickerActivity.RESULT_TARGET_TYPE) ?: AddressPickerActivity.TARGET_ORIGIN
-            mapPickerWaypointIndex = data.getIntExtra(AddressPickerActivity.RESULT_WAYPOINT_INDEX, -1)
+            else if (action == "map_click") {
+                lastAddressPickerIntentData = data
+                mapPickerTarget = data.getStringExtra(AddressPickerActivity.RESULT_TARGET_TYPE) ?: AddressPickerActivity.TARGET_ORIGIN
+                mapPickerWaypointIndex = data.getIntExtra(AddressPickerActivity.RESULT_WAYPOINT_INDEX, -1)
 
-            // ФИКС: Сохраняем Точку А сразу, если юзер её изменил в пикере
-            if (data.hasExtra(AddressPickerActivity.RESULT_ORIGIN_LAT)) {
-                val oName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
-                val oLat = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0)
-                val oLng = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0)
-                if (oLat != 0.0 && oLng != 0.0) {
-                    originPlace = Place.builder().setName(oName).setLatLng(LatLng(oLat, oLng)).build()
-                    tvOrigin.text = AddressUtils.formatAddress(oName ?: "")
-                }
-            }
-
-            // Відновлюємо проміжний стан для карти
-            val destName = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
-
-            val wLats = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
-            val wLngs = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS)
-            val wNames = data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES)
-
-            currentWaypoints.clear()
-            if (wLats != null && wLngs != null) {
-                for (i in wLats.indices) {
-                    if (wLats[i] != 0.0 && wLngs[i] != 0.0) {
-                        val wpName = if (wNames != null && i < wNames.size && wNames[i].isNotEmpty()) wNames[i] else "Зупинка"
-                        currentWaypoints.add(Pair(LatLng(wLats[i], wLngs[i]), wpName))
+                // ФИКС: Сохраняем Точку А сразу, если юзер её изменил в пикере
+                if (data.hasExtra(AddressPickerActivity.RESULT_ORIGIN_LAT)) {
+                    val oName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
+                    val oLat = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0)
+                    val oLng = data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0)
+                    if (oLat != 0.0 && oLng != 0.0) {
+                        originPlace = Place.builder().setName(oName).setLatLng(LatLng(oLat, oLng)).build()
+                        tvOrigin.text = AddressUtils.formatAddress(oName ?: "")
                     }
                 }
-            }
 
-            // 3. Вмикаємо UI карти
-            val isOriginSelection = (mapPickerTarget == AddressPickerActivity.TARGET_ORIGIN)
-            showMapPickerMode(isOriginSelection)
+                // Відновлюємо проміжний стан для карти
+                val destName = data.getStringExtra(AddressPickerActivity.RESULT_NAME)
 
-            // 4. Центруємо камеру на потрібній точці
-            val startLatLng = when (mapPickerTarget) {
-                AddressPickerActivity.TARGET_ORIGIN -> originPlace?.latLng
-                AddressPickerActivity.TARGET_DESTINATION -> destinationPlace?.latLng
-                AddressPickerActivity.TARGET_WAYPOINT -> {
-                    if (mapPickerWaypointIndex in currentWaypoints.indices) currentWaypoints[mapPickerWaypointIndex].first else null
+                val wLats = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
+                val wLngs = data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS)
+                val wNames = data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES)
+
+                currentWaypoints.clear()
+                if (wLats != null && wLngs != null) {
+                    for (i in wLats.indices) {
+                        if (wLats[i] != 0.0 && wLngs[i] != 0.0) {
+                            val wpName = if (wNames != null && i < wNames.size && wNames[i].isNotEmpty()) wNames[i] else "Зупинка"
+                            currentWaypoints.add(Pair(LatLng(wLats[i], wLngs[i]), wpName))
+                        }
+                    }
                 }
-                else -> null
-            } ?: mMap?.cameraPosition?.target
-            
-            if (startLatLng != null) {
-                // Використовуємо moveCamera замість animateCamera для миттєвого переходу
-                mMap?.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(startLatLng, 17f))
-                
-                // 5. ФІКС ЗАВИСАННЯ: Примусово запускаємо геокодинг
-                tvMapPickerAddress.text = "Шукаємо адресу..."
-                getAddressFromLocation(startLatLng) { address ->
-                    tvMapPickerAddress.text = address ?: "Невідома адреса"
+
+                // 3. Вмикаємо UI карти
+                val isOriginSelection = (mapPickerTarget == AddressPickerActivity.TARGET_ORIGIN)
+                showMapPickerMode(isOriginSelection)
+
+                // 4. Центруємо камеру на потрібній точці
+                val startLatLng = when (mapPickerTarget) {
+                    AddressPickerActivity.TARGET_ORIGIN -> originPlace?.latLng
+                    AddressPickerActivity.TARGET_DESTINATION -> destinationPlace?.latLng
+                    AddressPickerActivity.TARGET_WAYPOINT -> {
+                        if (mapPickerWaypointIndex in currentWaypoints.indices) currentWaypoints[mapPickerWaypointIndex].first else null
+                    }
+                    else -> null
+                } ?: mMap?.cameraPosition?.target
+
+                if (startLatLng != null) {
+                    // Використовуємо moveCamera замість animateCamera для миттєвого переходу
+                    mMap?.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(startLatLng, 17f))
+
+                    // 5. ФІКС ЗАВИСАННЯ: Примусово запускаємо геокодинг
+                    tvMapPickerAddress.text = "Шукаємо адресу..."
+                    getAddressFromLocation(startLatLng) { address ->
+                        tvMapPickerAddress.text = address ?: "Невідома адреса"
+                    }
                 }
             }
         }
     }
-}
 
-private fun fetchAddressAtCurrentLocation() {
-    val target = mMap?.cameraPosition?.target ?: return
-    
-    // Просто меняем текст, кнопку визуально не трогаем
-    tvMapPickerAddress.text = "Шукаємо адресу..."
+    private fun fetchAddressAtCurrentLocation() {
+        val target = mMap?.cameraPosition?.target ?: return
 
-    getAddressFromLocation(target) { address ->
-        tvMapPickerAddress.text = address ?: "Невідома адреса"
+        // Просто меняем текст, кнопку визуально не трогаем
+        tvMapPickerAddress.text = "Шукаємо адресу..."
+
+        getAddressFromLocation(target) { address ->
+            tvMapPickerAddress.text = address ?: "Невідома адреса"
+        }
     }
-}
 
     private val paymentLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -557,7 +562,7 @@ private fun fetchAddressAtCurrentLocation() {
         if (result.resultCode == RESULT_OK && result.data != null) {
             val data = result.data!!
             servicesExtraCost = data.getDoubleExtra("EXTRA_COST", 0.0)
-            
+
             // --- ЗАЩИТА: Безопасное чтение Serializable с учетом требований Android 13+ (API 33+) ---
             selectedServiceIds = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 data.getSerializableExtra("SELECTED_IDS", ArrayList::class.java) as? ArrayList<Long>
@@ -571,7 +576,7 @@ private fun fetchAddressAtCurrentLocation() {
             btnOrderTaxi.isEnabled = false
             btnOrderTaxi.text = "Оберіть тариф"
             selectedTariffItem = null
-            
+
             // Новая логика уведомлений (без цены)
             if (selectedServiceIds.isNotEmpty()) {
                 showToast("Послугу додано")
@@ -599,7 +604,7 @@ private fun fetchAddressAtCurrentLocation() {
                     showToast("Увімкніть геолокацію в налаштуваннях")
                 }
             }
-            checkAndShowNotificationDialogWithDelay() 
+            checkAndShowNotificationDialogWithDelay()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -652,13 +657,13 @@ private fun fetchAddressAtCurrentLocation() {
 
         currentCity = sessionManager.fetchUserCity()
 
+        orderTimersController = OrderTimersController(this)
+
         initUI()
         setupProfileLogic()
         setupTariffAdapter()
         updateFavoriteButtonsUI()
         updateThemeLabel()
-
-        loadSectors()
         // loadTariffs() - теперь вызывается через ViewModel или по требованию
 
         val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
@@ -695,51 +700,49 @@ private fun fetchAddressAtCurrentLocation() {
         viewModel.startListeningNearbyDrivers(webSocketManager)
 
         viewModel.nearbyDrivers.observe(this) { drivers ->
-        updateNearbyDriversOnMap(drivers)
-    }
+            updateNearbyDriversOnMap(drivers)
+        }
 
         // ДОБАВЛЕНО: Обработка системной кнопки/жеста "Назад"
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-    override fun handleOnBackPressed() {
-        // 1. Найвищий пріоритет: якщо відкрито бокове меню - просто закриваємо його
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START)
-        } 
-        // 2. Якщо ми обираємо точку на карті
-        else if (isMapPickingMode) {
-            // Повертаємося до AddressPicker зі збереженням введених даних
-            returnToAddressPicker()
-        } 
-        // 3. Якщо показана картка активного замовлення (ТУТ НАШЕ ОНОВЛЕННЯ)
-        else if (activeOrderCard.visibility == View.VISIBLE) {
-            val currentOrder = viewModel.activeOrder.value
-            val targetOrderId = currentOrder?.id ?: activeOrderId
+            override fun handleOnBackPressed() {
+                // 1. Найвищий пріоритет: якщо відкрито бокове меню - просто закриваємо його
+                if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    drawerLayout.closeDrawer(GravityCompat.START)
+                }
+                // 2. Якщо ми обираємо точку на карті
+                else if (isMapPickingMode) {
+                    // Повертаємося до AddressPicker зі збереженням введених даних
+                    returnToAddressPicker()
+                }
+                // 3. Якщо показана картка активного замовлення (ТУТ НАШЕ ОНОВЛЕННЯ)
+                else if (activeOrderCard.visibility == View.VISIBLE) {
+                    val currentOrder = viewModel.activeOrder.value
+                    val targetOrderId = currentOrder?.id ?: activeOrderId
 
-            if (isOrderDetailsExpanded) {
-                animateOrderDetailsToState(false)
-            } else if (currentOrder?.status == "COMPLETED" && targetOrderId != null) {
-                // 🛡️ Якщо клієнт натиснув "Назад" на екрані завершення — зараховуємо 5 зірок та скидаємо
-                autoRateAndDismissCompletedOrder(targetOrderId)
-            } else {
-                sessionManager.clearActiveOrderId()
-                viewModel.clearOrderState()
-                
-                this@HomeActivity.activeOrderId = null 
-                showAddressPanel()
+                    if (isOrderDetailsExpanded) {
+                        animateOrderDetailsToState(false)
+                    } else if (currentOrder?.status == "COMPLETED" && targetOrderId != null) {
+                        // 🛡️ Якщо клієнт натиснув "Назад" на екрані завершення — зараховуємо 5 зірок та скидаємо
+                        autoRateAndDismissCompletedOrder(targetOrderId)
+                    } else {
+                        viewModel.hideOrderFromMainScreen()
+                        this@HomeActivity.activeOrderId = null
+                        showAddressPanel()
+                    }
+                }
+                // 4. Якщо ми на екрані вибору тарифів
+                else if (tariffsPanel.visibility == View.VISIBLE) {
+                    // Повертаємося до повноекранної карти з адресами
+                    showAddressPanel()
+                }
+                // 5. Стандартна поведінка - вихід з екрану
+                else {
+                    finish()
+                }
             }
-        }
-        // 4. Якщо ми на екрані вибору тарифів
-        else if (tariffsPanel.visibility == View.VISIBLE) {
-            // Повертаємося до повноекранної карти з адресами
-            showAddressPanel()
-        } 
-        // 5. Стандартна поведінка - вихід з екрану
-        else {
-            finish()
-        }
-    }
-})
-        
+        })
+
         // Первичная загрузка тарифов (базовая)
         viewModel.loadTariffsAndCalculatePrice(null, 0)
     }
@@ -841,19 +844,19 @@ private fun fetchAddressAtCurrentLocation() {
                 drawStylishRoute(points, currentStatus)
             }
         }
-        
+
         viewModel.routeInfo.observe(this) { (dist, dur) ->
             routeDistanceMeters = dist
             routeDurationSeconds = dur
         }
-        
-       
-        
+
+
+
         // 2. Тарифы
         viewModel.availableTariffs.observe(this) { tariffs ->
             availableTariffs = tariffs
-            displayTariffs() 
-            
+            displayTariffs()
+
             // Если на экране уже висит активное замовлення, принудительно обновляем его иконку тарифа
             viewModel.activeOrder.value?.let { order ->
                 updateActiveOrderTariffIcon(order)
@@ -864,16 +867,24 @@ private fun fetchAddressAtCurrentLocation() {
             if (isBound) {
                 // 1. Закрываем браузер!
                 webViewDialog?.dismiss()
-                
+
                 // 2. Автоматически переключаем метод оплаты текущего заказа на КАРТУ
                 viewModel.updateActiveOrderPaymentMethod("CARD")
                 currentPaymentMethod = "CARD"
                 updatePaymentIcon()
-                
+
                 showToast("Картку успішно прив'язано!")
-                
+
                 // Сбрасываем ивент, чтобы он не сработал при перевороте экрана
                 viewModel.resetCardBoundEvent()
+            }
+        }
+
+        // Реактивная подписка на счетчик непрочитанных сообщений чата (Пуш + Сокеты)
+        lifecycleScope.launch {
+            ChatEventBus.unreadCount.collect { count ->
+                unreadChatMessages = count
+                updateChatBadgeUI()
             }
         }
 
@@ -883,13 +894,23 @@ private fun fetchAddressAtCurrentLocation() {
                 activeOrderId = order.id
                 if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                     unreadChatMessages = 0
+                    ChatEventBus.clearUnreadCount()
                     updateChatBadgeUI()
+                    subscribedChatOrderId = null
                     if (order.status == "COMPLETED") {
                         showActiveOrderPanel(order)
                     } else {
                         updateStatusUI(order)
                     }
                 } else {
+                    if (order.driver != null && order.driver.id != -1L && subscribedChatOrderId != order.id) {
+                        subscribedChatOrderId = order.id
+                        webSocketManager?.subscribeToChat(order.id) { msg ->
+                            if (msg.senderRole != "CLIENT" && !ChatEventBus.isChatScreenOpen) {
+                                runOnUiThread { incrementUnreadMessages() }
+                            }
+                        }
+                    }
                     restoreOrderOnMap(order)
                     showActiveOrderPanel(order)
 
@@ -960,50 +981,50 @@ private fun fetchAddressAtCurrentLocation() {
     private fun shouldShowNotificationDialog(): Boolean {
         if (Build.VERSION.SDK_INT >= 33) {
             val isGranted = ContextCompat.checkSelfPermission(
-                this, 
+                this,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-            
+
             val alreadyAsked = sessionManager.isNotificationAsked()
-            
+
             return !isGranted && !alreadyAsked
         }
         return false
     }
 
     private fun showNotificationPermissionDialog() {
-    val dialog = Dialog(this)
-    
-    // 1. Обязательно отключаем дефолтный системный заголовок перед setContentView
-    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE) 
-    
-    dialog.setContentView(R.layout.dialog_notification_permission)
-    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-    
-    // При MATCH_PARENT убедись, что в самом XML (в корневой CardView) 
-    // стоят android:layout_marginHorizontal="16dp", иначе диалог прилипнет к краям экрана!
-    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    dialog.setCancelable(false)
+        val dialog = Dialog(this)
 
-    val btnAllow = dialog.findViewById<Button>(R.id.btn_allow)
-    val btnDeny = dialog.findViewById<Button>(R.id.btn_deny)
+        // 1. Обязательно отключаем дефолтный системный заголовок перед setContentView
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
 
-    btnAllow.setOnClickListener {
-        dialog.dismiss()
-        sessionManager.setNotificationAsked(true)
-        // Логика для Android 13 (Tiramisu) и выше
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // 33
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        dialog.setContentView(R.layout.dialog_notification_permission)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        // При MATCH_PARENT убедись, что в самом XML (в корневой CardView)
+        // стоят android:layout_marginHorizontal="16dp", иначе диалог прилипнет к краям экрана!
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.setCancelable(false)
+
+        val btnAllow = dialog.findViewById<Button>(R.id.btn_allow)
+        val btnDeny = dialog.findViewById<Button>(R.id.btn_deny)
+
+        btnAllow.setOnClickListener {
+            dialog.dismiss()
+            sessionManager.setNotificationAsked(true)
+            // Логика для Android 13 (Tiramisu) и выше
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // 33
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
-    }
 
-    btnDeny.setOnClickListener {
-        dialog.dismiss()
-        sessionManager.setNotificationAsked(true)
+        btnDeny.setOnClickListener {
+            dialog.dismiss()
+            sessionManager.setNotificationAsked(true)
+        }
+
+        dialog.show()
     }
-    
-    dialog.show()
-}
 
     private fun setupSystemBars(isDark: Boolean) {
         val window = window
@@ -1018,17 +1039,17 @@ private fun fetchAddressAtCurrentLocation() {
         }
 
         if (isDark) {
-            val solidBlack = Color.BLACK 
+            val solidBlack = Color.BLACK
             window.statusBarColor = solidBlack
             window.navigationBarColor = solidBlack
-            
+
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
         } else {
             val solidWhite = Color.WHITE
             window.statusBarColor = solidWhite
             window.navigationBarColor = solidWhite
-            
+
             controller.isAppearanceLightStatusBars = true
             controller.isAppearanceLightNavigationBars = true
         }
@@ -1040,13 +1061,13 @@ private fun fetchAddressAtCurrentLocation() {
             lastScreenshot?.let {
                 if (!it.isRecycled) it.recycle()
             }
-            
+
             val rootView = window.decorView.rootView
             if (rootView.width > 0 && rootView.height > 0) {
                 // Использование Config.RGB_565 экономит в 2 РАЗА больше оперативной памяти смартфона
                 val bitmap = android.graphics.Bitmap.createBitmap(
-                    rootView.width, 
-                    rootView.height, 
+                    rootView.width,
+                    rootView.height,
                     android.graphics.Bitmap.Config.RGB_565
                 )
                 val canvas = android.graphics.Canvas(bitmap)
@@ -1067,7 +1088,7 @@ private fun fetchAddressAtCurrentLocation() {
 
     override fun onResume() {
         super.onResume()
-        
+
         // Переподключение сокета (Используем наш глобальный sessionManager без создания дубликатов в памяти)
         if (webSocketManager?.isConnected() != true) {
             val token = sessionManager.fetchAuthToken()
@@ -1085,10 +1106,10 @@ private fun fetchAddressAtCurrentLocation() {
         val savedLanguage = sessionManager.getLanguage()
         if (currentActiveLanguage != savedLanguage) {
             currentActiveLanguage = savedLanguage
-            recreate() 
-            return 
+            recreate()
+            return
         }
-        
+
         updateFavoriteButtonsUI()
         updateDrawerHeader()
         updatePaymentMethodFromSession()
@@ -1097,7 +1118,7 @@ private fun fetchAddressAtCurrentLocation() {
         if (tariffsPanel.visibility == View.VISIBLE) {
             fetchTariffsAndShowPanel()
         }
-        
+
         // --- ЗАЩИТА ОТ УТЕЧКИ ПАМЯТИ: Привязываем Handler к жизненному циклу через проверку состояний ---
         Handler(Looper.getMainLooper()).postDelayed({
             if (!isDestroyed && !isFinishing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
@@ -1106,97 +1127,27 @@ private fun fetchAddressAtCurrentLocation() {
         }, 2000)
     }
     private fun startRadarAnimation(centerLatLng: LatLng) {
-    if (mMap == null || isRadarAnimationRunning) return
-    isRadarAnimationRunning = true
-
-    radarOverlay?.remove()
-
-    val sizePx = 256 
-    val bitmap = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-
-    // 🔥 АДАПТИВНЫЙ ПОДБОР ЦВЕТОВ НА ОСНОВЕ ТЕМЫ
-    val isDarkTheme = sessionManager.isDarkMode()
-    
-    // Для темной темы — белая дымка, для светлой — аккуратная темная полупрозрачная тень
-    val fillColor = if (isDarkTheme) "#15FFFFFF" else "#12000000"
-    // Для темной темы — яркое белое кольцо, для светлой — четкий графитовый контур
-    val strokeColor = if (isDarkTheme) "#FFFFFFFF" else "#FF2C2D2F"
-
-    // 1. Рисуем внутреннюю плоскую заливку круга (импульс волны)
-    paint.style = android.graphics.Paint.Style.FILL
-    paint.color = android.graphics.Color.parseColor(fillColor)
-    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
-
-    // 2. Поверх рисуем четкий векторный контур кольца радара
-    paint.style = android.graphics.Paint.Style.STROKE
-    paint.strokeWidth = 5f // Толщина волны
-    paint.color = android.graphics.Color.parseColor(strokeColor)
-    
-    val strokeRadius = (sizePx / 2f) - 2.5f
-    canvas.drawCircle(sizePx / 2f, sizePx / 2f, strokeRadius, paint)
-
-    val descriptor = com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
-
-    val overlayOptions = com.google.android.gms.maps.model.GroundOverlayOptions()
-        .image(descriptor)
-        .position(centerLatLng, 0f)
-        .transparency(0f)
-        .zIndex(0f) 
-
-    radarOverlay = mMap?.addGroundOverlay(overlayOptions)
-
-    radarAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
-        duration = 2400 // Комфортная скорость импульса
-        repeatCount = android.animation.ValueAnimator.INFINITE
-        repeatMode = android.animation.ValueAnimator.RESTART
-        interpolator = android.view.animation.DecelerateInterpolator()
-
-        addUpdateListener { animator ->
-            val fraction = animator.animatedValue as Float
-            try {
-                val currentSize = fraction * 450f
-                radarOverlay?.setDimensions(currentSize)
-
-                // Элегантное растворение круга на финише (после 75% радиуса)
-                val currentTransparency = if (fraction > 0.75f) {
-                    ((fraction - 0.75f) / 0.25f)
-                } else {
-                    0f
-                }
-                radarOverlay?.transparency = currentTransparency
-            } catch (e: Exception) {}
-        }
+        if (mMap == null || searchRadarController.isRunning) return
+        searchRadarController.start(mMap, centerLatLng, sessionManager.isDarkMode())
     }
-    
-    runOnUiThread {
-        radarAnimator?.start()
-    }
-}
 
-private fun stopRadarAnimation() {
-    isRadarAnimationRunning = false
-    
-    radarAnimator?.cancel()
-    radarAnimator = null
-    radarOverlay?.remove()
-    radarOverlay = null
-}
+    private fun stopRadarAnimation() {
+        searchRadarController.stop()
+    }
 
 
 
     private fun initUI() {
         drawerLayout = findViewById(R.id.drawer_layout)
-        
+
         ViewCompat.setOnApplyWindowInsetsListener(drawerLayout) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val params = view.layoutParams as ViewGroup.MarginLayoutParams
-            
+
             params.topMargin = insets.top
             params.bottomMargin = insets.bottom
             view.layoutParams = params
-            
+
             WindowInsetsCompat.CONSUMED
         }
 
@@ -1212,7 +1163,7 @@ private fun stopRadarAnimation() {
 
         centerPin = findViewById(R.id.center_pin)
         val shadowView = findViewById<ImageView>(R.id.pin_shadow)
-        pinShadow = shadowView ?: centerPin 
+        pinShadow = shadowView ?: centerPin
         centerPin.alpha = 0f
         try { pinShadow.alpha = 0f } catch (e: Exception) {}
         pinContainer = findViewById(R.id.pin_container)
@@ -1231,7 +1182,7 @@ private fun stopRadarAnimation() {
 
         mapLoadingCurtain = findViewById(R.id.map_loading_curtain)
         contentBottomSheet = findViewById(R.id.content_bottom_sheet)
-        
+
 
         tariffsShimmer = findViewById(R.id.tariffs_shimmer_container)
 
@@ -1249,36 +1200,36 @@ private fun stopRadarAnimation() {
         profileBtnDetails = findViewById(R.id.btn_open_profile_details)
 
         cardWaitingTimer = findViewById(R.id.card_waiting_timer)
-tvNewWaitingTimer = findViewById(R.id.tv_new_waiting_timer)
+        tvNewWaitingTimer = findViewById(R.id.tv_new_waiting_timer)
 
 
 // Инициализация UI для карты
-layoutMapPickerPanel = findViewById(R.id.layout_map_picker_panel)
-btnBackMapPicker = findViewById(R.id.btn_back_map_picker)
-tvMapPickerAddress = findViewById(R.id.tv_map_picker_address)
-btnConfirmMapPicker = findViewById(R.id.btn_confirm_map_picker)
+        layoutMapPickerPanel = findViewById(R.id.layout_map_picker_panel)
+        btnBackMapPicker = findViewById(R.id.btn_back_map_picker)
+        tvMapPickerAddress = findViewById(R.id.tv_map_picker_address)
+        btnConfirmMapPicker = findViewById(R.id.btn_confirm_map_picker)
 
 // Слушатели для новых кнопок
-btnBackMapPicker.setOnClickListener {
-    returnToAddressPicker() // Повертаємося до списку зі збереженням адрес
-}
+        btnBackMapPicker.setOnClickListener {
+            returnToAddressPicker() // Повертаємося до списку зі збереженням адрес
+        }
 
-if (isMapPickingMode) {
-    returnToAddressPicker()
-}
+        if (isMapPickingMode) {
+            returnToAddressPicker()
+        }
 
-btnConfirmMapPicker.setOnClickListener {
-    confirmMapSelection()
-}
+        btnConfirmMapPicker.setOnClickListener {
+            confirmMapSelection()
+        }
 
 
         profileCityText = findViewById(R.id.profile_current_city)
         profileBtnCity = findViewById(R.id.profile_btn_change_city)
 
-        
+
 
         tvOverlayDestDetails = findViewById(R.id.tv_overlay_dest_details)
-        
+
         themeSwitchContainer = findViewById(R.id.theme_switch_container)
         themeSwitchThumb = findViewById(R.id.theme_switch_thumb)
         ivThemeSun = findViewById(R.id.iv_theme_sun)
@@ -1289,9 +1240,9 @@ btnConfirmMapPicker.setOnClickListener {
 
         btnChangePrice = findViewById(R.id.btn_change_price)
         btnChangePrice.setOnClickListener {
-            showChangePriceDialog() 
+            showChangePriceDialog()
         }
-        
+
         try {
             btnOpenPromo = findViewById(R.id.btn_open_promo)
             btnOpenPromo.setOnClickListener { startActivity(Intent(this, PromoActivity::class.java)) }
@@ -1312,8 +1263,8 @@ btnConfirmMapPicker.setOnClickListener {
                     params.height = maxTariffHeight
                     tariffsPanel.layoutParams = params
                     tariffsPanel.requestLayout()
-                    
-                    // ВАЖНО: Возвращаем false! Это отменяет отрисовку "высокого" кадра 
+
+                    // ВАЖНО: Возвращаем false! Это отменяет отрисовку "высокого" кадра
                     // и полностью убирает мелькание на экране.
                     return false
                 }
@@ -1327,14 +1278,16 @@ btnConfirmMapPicker.setOnClickListener {
                 // 👉 ДОДАЄМО ТРЕКІНГ ТУТ: фіксуємо, який саме тариф відправлено в замовлення
                 com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("click_order", selectedTariffItem!!.tariff.name)
 
-                // Если есть custom price (из ползунка), берем его, иначе из тарифа
-                val finalPrice = selectedTariffItem!!.priceValue + selectedTariffItem!!.addedValue
-                createOrder(selectedTariffItem!!.tariff, finalPrice)
+                // ИСПРАВЛЕНО: priceValue из TariffAdapter уже включает базовый тариф, доп. услуги и addedValue (чаевые)
+                val currentItem = tariffAdapter.getSelectedTariff() ?: selectedTariffItem!!
+                selectedTariffItem = currentItem
+                val finalPrice = currentItem.priceValue
+                createOrder(currentItem.tariff, finalPrice)
             } else {
                 showToast("Оберіть тариф")
             }
         }
-        
+
 
 
         btnAddNewOrder = findViewById(R.id.btn_add_new_order)
@@ -1344,10 +1297,9 @@ btnConfirmMapPicker.setOnClickListener {
                 .setMessage("Бажаєте створити ще одне замовлення?")
                 .setPositiveButton("Так") { dialog, _ ->
                     dialog.dismiss()
-                    // Очищаємо локальний стан, щоб сховати поточне замовлення
-                    sessionManager.clearActiveOrderId()
-                    viewModel.clearOrderState()
-                    // Повертаємо інтерфейс до початкового стану (вибір адреси)
+                    // Скрываем текущий заказ с главного экрана (он остается в "Мої поїздки")
+                    viewModel.hideOrderFromMainScreen()
+                    this@HomeActivity.activeOrderId = null
                     showAddressPanel()
                 }
                 .setNegativeButton("Ні") { dialog, _ ->
@@ -1398,7 +1350,7 @@ btnConfirmMapPicker.setOnClickListener {
             // --------------------------------
 
             when (event.action) {
-               MotionEvent.ACTION_DOWN -> {
+                MotionEvent.ACTION_DOWN -> {
                     startY = event.rawY
                     v.parent.requestDisallowInterceptTouchEvent(true)
 
@@ -1442,14 +1394,14 @@ btnConfirmMapPicker.setOnClickListener {
                         val progress = newHeight.toFloat() / maxDetailsHeight.toFloat()
                         findViewById<View>(R.id.map_solid_overlay)?.alpha = progress
                     }
-                    
+
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     v.parent.requestDisallowInterceptTouchEvent(false)
-                    
+
                     val currentHeight = layoutExpandableDetails.height
-                    
+
                     // Если это просто тап (клик)
                     if (Math.abs(startY - event.rawY) < 20) {
                         v.performClick()
@@ -1459,9 +1411,9 @@ btnConfirmMapPicker.setOnClickListener {
 
                     // Логика доводки:
                     val movedDistance = currentHeight.toFloat() / maxDetailsHeight.toFloat()
-                    
+
                     if (isOrderDetailsExpanded) {
-                        animateOrderDetailsToState(movedDistance > 0.8f) 
+                        animateOrderDetailsToState(movedDistance > 0.8f)
                     } else {
                         animateOrderDetailsToState(movedDistance > 0.2f)
                     }
@@ -1490,12 +1442,12 @@ btnConfirmMapPicker.setOnClickListener {
         ivIconWork = findViewById(R.id.iv_icon_work)
         indicatorAddHome = findViewById(R.id.indicator_add_home)
         indicatorAddWork = findViewById(R.id.indicator_add_work)
-        
+
         btnFavWork = findViewById(R.id.btn_fav_work)
         ivIconWork = findViewById(R.id.iv_icon_work)
         indicatorAddWork = findViewById(R.id.indicator_add_work)
         ivPaymentIcon = findViewById(R.id.iv_payment_icon)
-        
+
 
         activeOrderCard = findViewById(R.id.active_order_card)
         activeOrderCard.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, oldTop, oldBottom ->
@@ -1509,7 +1461,7 @@ btnConfirmMapPicker.setOnClickListener {
         }
         layoutActiveOrderPrice = findViewById(R.id.layout_active_order_price)
         orderStatusText = findViewById(R.id.order_status_text)
-        
+
         btnCancelOrder = findViewById(R.id.btn_cancel_order)
 
         layoutActiveOrderPrice = findViewById(R.id.layout_active_order_price)
@@ -1521,9 +1473,9 @@ btnConfirmMapPicker.setOnClickListener {
 
 
         layoutSearchControls = findViewById(R.id.layout_search_controls)
-layoutDriverFoundState = findViewById(R.id.layout_driver_found_state)
-btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
-        
+        layoutDriverFoundState = findViewById(R.id.layout_driver_found_state)
+        btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
+
         layoutDriverDetails = findViewById(R.id.layout_driver_assigned_details)
         tvCarPlateLarge = findViewById(R.id.tv_car_plate_large)
         ivAssignedCar3d = findViewById(R.id.iv_assigned_car_3d)
@@ -1547,8 +1499,8 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
                     // 🛡️ Автоматично зараховуємо 5 зірок та очищаємо стан
                     autoRateAndDismissCompletedOrder(targetOrderId)
                 } else {
-                    sessionManager.clearActiveOrderId()
-                    viewModel.clearOrderState()
+                    viewModel.hideOrderFromMainScreen()
+                    this@HomeActivity.activeOrderId = null
                     showAddressPanel()
                 }
             } else if (tariffsPanel.visibility == View.VISIBLE) {
@@ -1570,21 +1522,21 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         btnRecenterRoute.setOnClickListener {
             // Перевіряємо, чи є маршрут і точки
             if (viewModel.currentRoutePolyline != null && originPlace != null && destinationPlace != null) {
-                 try {
-                     val boundsBuilder = LatLngBounds.Builder()
-                     boundsBuilder.include(originPlace!!.latLng!!)
-                     boundsBuilder.include(destinationPlace!!.latLng!!)
-                     
-                     currentWaypoints.forEach { boundsBuilder.include(it.first) }
-                     decodedRoutePoints?.forEach { boundsBuilder.include(it) }
+                try {
+                    val boundsBuilder = LatLngBounds.Builder()
+                    boundsBuilder.include(originPlace!!.latLng!!)
+                    boundsBuilder.include(destinationPlace!!.latLng!!)
 
-                     // Використовуємо універсальний відступ 80dp для боків, як при першому малюванні
-                     val paddingSide = convertDpToPixel(80f).toInt()
+                    currentWaypoints.forEach { boundsBuilder.include(it.first) }
+                    decodedRoutePoints?.forEach { boundsBuilder.include(it) }
 
-                     mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide))
-                     
-                     btnRecenterRoute.visibility = View.GONE
-                 } catch (e: Exception) {}
+                    // Використовуємо універсальний відступ 80dp для боків, як при першому малюванні
+                    val paddingSide = convertDpToPixel(80f).toInt()
+
+                    mMap?.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide))
+
+                    btnRecenterRoute.visibility = View.GONE
+                } catch (e: Exception) {}
             }
         }
 
@@ -1650,10 +1602,10 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
                 animateOrderDetailsToState(false)
             }
         }
-        
+
         setupMenuLogic()
     }
-    
+
     private fun setupMenuLogic() {
         findViewById<View>(R.id.btn_open_profile_details).setOnClickListener {
             startActivity(Intent(this, UserDetailsActivity::class.java))
@@ -1672,8 +1624,8 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
             drawerLayout.closeDrawer(GravityCompat.START)
         }
         findViewById<View>(R.id.btn_open_favorites).setOnClickListener {
-             startActivity(Intent(this, FavoriteAddressesActivity::class.java))
-             drawerLayout.closeDrawer(GravityCompat.START)
+            startActivity(Intent(this, FavoriteAddressesActivity::class.java))
+            drawerLayout.closeDrawer(GravityCompat.START)
         }
         findViewById<View>(R.id.btn_menu_payment).setOnClickListener {
             drawerLayout.closeDrawer(GravityCompat.START)
@@ -1687,7 +1639,7 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
             startActivity(intent)
         }
         findViewById<View>(R.id.btn_menu_news).setOnClickListener {
-        startActivity(Intent(this, NewsActivity::class.java))
+            startActivity(Intent(this, NewsActivity::class.java))
         }
         findViewById<View>(R.id.btn_menu_help).setOnClickListener {
             val intent = Intent(this, HelpActivity::class.java)
@@ -1696,10 +1648,10 @@ btnCancelRideDriver = findViewById(R.id.btn_cancel_ride_driver)
         }
 
         val btnChangePayment = activeOrderCard.findViewById<View>(R.id.btn_search_change_payment)
-val btnChangePrice = activeOrderCard.findViewById<View>(R.id.btn_search_change_price)
+        val btnChangePrice = activeOrderCard.findViewById<View>(R.id.btn_search_change_price)
 
 // Привязываем логику
-btnChangePayment.setOnClickListener {
+        btnChangePayment.setOnClickListener {
             animateOrderDetailsToState(false) // ДОДАНО: Згортаємо деталі перед відкриттям діалогу
             showChangePaymentDialog()
         }
@@ -1708,11 +1660,11 @@ btnChangePayment.setOnClickListener {
             animateOrderDetailsToState(false) // ДОДАНО: Згортаємо деталі перед відкриттям діалогу
             val order = viewModel.activeOrder.value
             if (order != null) {
-                val currentPrice = order.price
+                val currentPrice = order.effectiveClientPrice
                 val addedValue = order.addedValue
-                // Вычисляем чистую базовую цену (без надбавок ползунка)
-                val basePrice = currentPrice - addedValue 
-                        
+                // Вычисляем чистую базовую цену для клиента (с учетом скидки, но без надбавки ползунка)
+                val basePrice = (currentPrice - addedValue).coerceAtLeast(1.0)
+
                 showChangePriceDialogForActiveOrder(basePrice, addedValue)
             }
         }
@@ -1744,6 +1696,7 @@ btnChangePayment.setOnClickListener {
 
             activeOrderId?.let { orderId ->
                 unreadChatMessages = 0
+                ChatEventBus.clearUnreadCount()
                 updateChatBadgeUI()
 
                 // Открываем экран чата только для наших системных водителей
@@ -1754,9 +1707,9 @@ btnChangePayment.setOnClickListener {
         }
 
 
-        
 
-    
+
+
     }
 
     private fun getAddressForOrigin(latLng: LatLng, debounceMs: Long = 400L) {
@@ -1825,10 +1778,10 @@ btnChangePayment.setOnClickListener {
             }
         }
     }
-    
+
     private fun updateThemeSwitchUI(
-        isDarkMode: Boolean, 
-        animate: Boolean = true, 
+        isDarkMode: Boolean,
+        animate: Boolean = true,
         updateColors: Boolean = true,
         onAnimationEnd: (() -> Unit)? = null
     ) {
@@ -1837,13 +1790,13 @@ btnChangePayment.setOnClickListener {
         themeSwitchContainer.post {
             val containerWidth = themeSwitchContainer.width - themeSwitchContainer.paddingStart - themeSwitchContainer.paddingEnd
             val translationX = if (isDarkMode) (containerWidth / 2f) else 0f
-            
+
             themeSwitchThumb.animate()
                 .translationX(translationX)
                 .setDuration(duration)
                 .setInterpolator(DecelerateInterpolator())
-                .withEndAction { 
-                    onAnimationEnd?.invoke() 
+                .withEndAction {
+                    onAnimationEnd?.invoke()
                 }
                 .start()
         }
@@ -1858,7 +1811,7 @@ btnChangePayment.setOnClickListener {
 
             val trackColor = ContextCompat.getColor(this, if (isDarkMode) R.color.switch_track_dark else R.color.switch_track_light)
             val thumbColor = ContextCompat.getColor(this, if (isDarkMode) R.color.switch_thumb_dark else R.color.switch_thumb_light)
-            
+
             themeSwitchContainer.background.setTint(trackColor)
             themeSwitchThumb.background.setTint(thumbColor)
         }
@@ -1866,7 +1819,7 @@ btnChangePayment.setOnClickListener {
 
     private fun showTopMessage(message: String, isError: Boolean = false) {
         if (!::customToastContainer.isInitialized) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show(); return }
-        
+
         toastHandler.removeCallbacks(hideToastRunnable)
         tvToastMessage.text = message
         if (isError) {
@@ -1894,33 +1847,33 @@ btnChangePayment.setOnClickListener {
     }
 
     private fun showToast(msg: String) {
-        val isError = msg.contains("Помилка", true) || 
-                      msg.contains("Error", true) || 
-                      msg.contains("недоступний") || 
-                      msg.contains("геолокацію")
-                      
+        val isError = msg.contains("Помилка", true) ||
+                msg.contains("Error", true) ||
+                msg.contains("недоступний") ||
+                msg.contains("геолокацію")
+
         showTopMessage(msg, isError)
     }
 
     private fun updateCommentIconState() {
-    // ВАЖНО: Мы убрали условие if (orderComment.isNotEmpty()), 
-    // чтобы иконка больше НИКОГДА не красилась в желтый цвет.
+        // ВАЖНО: Мы убрали условие if (orderComment.isNotEmpty()),
+        // чтобы иконка больше НИКОГДА не красилась в желтый цвет.
 
-    // Получаем текущую тему устройства (светлая/темная)
-    val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-    val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        // Получаем текущую тему устройства (светлая/темная)
+        val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
 
-    // Всегда применяем стандартный цвет (белый для темной темы, черный для светлой)
-    if (isDarkMode) {
-        ivCommentIcon.setColorFilter(android.graphics.Color.WHITE)
-        findViewById<ImageView>(R.id.iv_services_icon)?.setColorFilter(android.graphics.Color.WHITE)
-        findViewById<ImageView>(R.id.iv_price_icon)?.setColorFilter(android.graphics.Color.WHITE)
-    } else {
-        ivCommentIcon.setColorFilter(android.graphics.Color.BLACK)
-        findViewById<ImageView>(R.id.iv_services_icon)?.setColorFilter(android.graphics.Color.BLACK)
-        findViewById<ImageView>(R.id.iv_price_icon)?.setColorFilter(android.graphics.Color.BLACK)
+        // Всегда применяем стандартный цвет (белый для темной темы, черный для светлой)
+        if (isDarkMode) {
+            ivCommentIcon.setColorFilter(android.graphics.Color.WHITE)
+            findViewById<ImageView>(R.id.iv_services_icon)?.setColorFilter(android.graphics.Color.WHITE)
+            findViewById<ImageView>(R.id.iv_price_icon)?.setColorFilter(android.graphics.Color.WHITE)
+        } else {
+            ivCommentIcon.setColorFilter(android.graphics.Color.BLACK)
+            findViewById<ImageView>(R.id.iv_services_icon)?.setColorFilter(android.graphics.Color.BLACK)
+            findViewById<ImageView>(R.id.iv_price_icon)?.setColorFilter(android.graphics.Color.BLACK)
+        }
     }
-}
 
     private fun onFavoriteAddressClick(isHome: Boolean) {
         currentWaypoints.clear()
@@ -1944,14 +1897,14 @@ btnChangePayment.setOnClickListener {
 
         // 1. Анімація самої картки (остается плавной через TransitionManager)
         val autoTransition = AutoTransition()
-        autoTransition.duration = 250 
+        autoTransition.duration = 250
         TransitionManager.beginDelayedTransition(activeOrderCard as ViewGroup, autoTransition)
 
         // 2. Зміна видимості деталей
         layoutExpandableDetails.visibility = if (isOrderDetailsExpanded) View.VISIBLE else View.GONE
 
-        // 🔥 КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ: Полностью удален покадровый ValueAnimator, 
-        // который вызывал updateMapPadding на каждом микро-кадре. 
+        // 🔥 КРИТИЧЕСКАЯ ОПТИМИЗАЦИЯ: Полностью удален покадровый ValueAnimator,
+        // который вызывал updateMapPadding на каждом микро-кадре.
         // Вместо этого один раз статично обновляем паддинг для новой высоты.
         if (!isDestroyed && !isFinishing) {
             updateMapPadding(activeOrderCard, 0f, 20f, recenterMap = false)
@@ -2033,8 +1986,8 @@ btnChangePayment.setOnClickListener {
         } else {
             mMap?.isMyLocationEnabled = true
             detectCityAndMove()
-            
-            checkAndShowNotificationDialogWithDelay() 
+
+            checkAndShowNotificationDialogWithDelay()
         }
     }
 
@@ -2147,18 +2100,22 @@ btnChangePayment.setOnClickListener {
         super.onDestroy()
         geocodeJob?.cancel()
         mapPickerGeocodeJob?.cancel()
-        // 🔥 УМНАЯ ОЧИСТКА ПАМЯТИ: Тормозим таймер ожидания, убирая Runnable из очереди Handler
+        // Очистка всех контроллеров и аниматоров для предотвращения утечек памяти
         stopWaitingTimer()
-        
         stopDriverTracking()
         stopBoostTimer()
+        stopRadarAnimation()
+        markerAnimationController.cancelAll()
         stopPeriodicNearbyDriversRefresh()
         viewModel.stopOrderSocketListening()
+        lastScreenshot?.let { if (!it.isRecycled) it.recycle() }
+        lastScreenshot = null
     }
 
     override fun onStop() {
         super.onStop()
-        // 🛡️ Якщо клієнт згорнув або закрив додаток під час екрану завершення — авто-оцінка 5 зірок та очищення
+        // Если клиент увидел экран завершения поездки и свернул/закрыл приложение —
+        // автоматически ставим 5 звезд и очищаем заказ из Redis, чтобы при следующем входе не висело старое окно
         val currentOrder = viewModel.activeOrder.value
         if (currentOrder?.status == "COMPLETED") {
             val targetOrderId = currentOrder.id ?: activeOrderId
@@ -2194,17 +2151,17 @@ btnChangePayment.setOnClickListener {
 
     private fun recalculateTotalPrice() {
         val finalPrice = currentTariffPrice + servicesExtraCost
-        tvPrice.text = "${finalPrice.toInt()} ₴" 
+        tvPrice.text = "${finalPrice.toInt()} ₴"
     }
 
     private fun openAddressPicker(isOrigin: Boolean, hideMyLocation: Boolean = false) {
         val intent = Intent(this, AddressPickerActivity::class.java)
         intent.putExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, isOrigin)
         intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_ADDRESS, tvOrigin.text.toString())
-        
+
         var latToSend = 0.0
         var lngToSend = 0.0
-        
+
         if (isOrigin) {
             try {
                 val myLoc = mMap?.myLocation
@@ -2213,7 +2170,7 @@ btnChangePayment.setOnClickListener {
                     lngToSend = myLoc.longitude
                 }
             } catch (e: SecurityException) { }
-            
+
             if (latToSend == 0.0 && originPlace?.latLng != null) {
                 latToSend = originPlace!!.latLng!!.latitude
                 lngToSend = originPlace!!.latLng!!.longitude
@@ -2237,9 +2194,9 @@ btnChangePayment.setOnClickListener {
             intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LAT, latToSend)
             intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LNG, lngToSend)
         }
-        
+
         if (hideMyLocation) intent.putExtra(AddressPickerActivity.EXTRA_HIDE_MY_LOCATION, true)
-        
+
         val mapTarget = mMap?.cameraPosition?.target
         if (mapTarget != null) {
             intent.putExtra("city_lat", mapTarget.latitude)
@@ -2248,7 +2205,7 @@ btnChangePayment.setOnClickListener {
             intent.putExtra("city_lat", currentCity!!.lat)
             intent.putExtra("city_lng", currentCity!!.lng)
         }
-        
+
         addressPickerLauncher.launch(intent)
     }
 
@@ -2271,10 +2228,10 @@ btnChangePayment.setOnClickListener {
             }
         )
         tariffsRecyclerView.adapter = tariffAdapter
-        
+
         // 👈 ДОБАВИТЬ СЮДА: Отключаем аниматор изменений, чтобы он не сбрасывал альфу слоев
-        tariffsRecyclerView.itemAnimator = null 
-        
+        tariffsRecyclerView.itemAnimator = null
+
         tariffsRecyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.VERTICAL, false)
 
         while (tariffsRecyclerView.itemDecorationCount > 0) {
@@ -2297,17 +2254,17 @@ btnChangePayment.setOnClickListener {
                 divider?.let {
                     val left = parent.paddingLeft
                     val right = parent.width - parent.paddingRight
-                    
+
                     val childCount = parent.childCount
                     for (i in 0 until childCount) {
                         val child = parent.getChildAt(i)
                         val position = parent.getChildAdapterPosition(child)
-                        
+
                         if (position != androidx.recyclerview.widget.RecyclerView.NO_POSITION && position < state.itemCount - 1) {
                             val params = child.layoutParams as androidx.recyclerview.widget.RecyclerView.LayoutParams
                             val top = child.bottom + params.bottomMargin
                             val bottom = top + it.intrinsicHeight
-                            
+
                             it.setBounds(left, top, right, bottom)
                             it.draw(c)
                         }
@@ -2372,7 +2329,7 @@ btnChangePayment.setOnClickListener {
             restoreOrderOnMap(activeOrder)
             showActiveOrderPanel(activeOrder)
             updateStatusUI(activeOrder)
-            
+
             // 🔥 ФИКС ХОЛОДНОГО СТАРТА: Корректно передаем activeOrderCard вместо creationPanelCard
             activeOrderCard.post {
                 if (!isDestroyed && !isFinishing) {
@@ -2527,7 +2484,7 @@ btnChangePayment.setOnClickListener {
         if (::mapLoadingCurtain.isInitialized) {
             mapLoadingCurtain.animate()
                 .alpha(0f)
-                .setDuration(800) 
+                .setDuration(800)
                 .setInterpolator(AccelerateDecelerateInterpolator())
                 .withEndAction {
                     mapLoadingCurtain.visibility = View.GONE
@@ -2536,10 +2493,10 @@ btnChangePayment.setOnClickListener {
         }
 
         val skeletonViews = listOf(
-            tvOrigin, tvDestination,            
-            ivMarkerOrigin, ivMarkerDest,       
-            ivIconHome, ivIconWork,             
-            indicatorAddHome, indicatorAddWork 
+            tvOrigin, tvDestination,
+            ivMarkerOrigin, ivMarkerDest,
+            ivIconHome, ivIconWork,
+            indicatorAddHome, indicatorAddWork
         )
 
         skeletonViews.forEach { view ->
@@ -2547,7 +2504,7 @@ btnChangePayment.setOnClickListener {
                 view.animate()
                     .alpha(1f)
                     .setDuration(500)
-                    .setStartDelay(200) 
+                    .setStartDelay(200)
                     .setInterpolator(DecelerateInterpolator())
                     .start()
             } catch (e: Exception) {}
@@ -2563,25 +2520,25 @@ btnChangePayment.setOnClickListener {
                 .setDuration(500)
                 .setStartDelay(200)
                 .setInterpolator(DecelerateInterpolator())
-                .withEndAction { centerPin.alpha = 1f } 
+                .withEndAction { centerPin.alpha = 1f }
                 .start()
 
             // Плавно проявляем тень пина
             try {
-                pinShadow.visibility = View.VISIBLE 
+                pinShadow.visibility = View.VISIBLE
                 pinShadow.animate()
-                    .alpha(0.5f) 
+                    .alpha(0.5f)
                     .setDuration(500)
                     .setStartDelay(200)
                     .setInterpolator(DecelerateInterpolator())
-                    .withEndAction { pinShadow.alpha = 0.5f } 
+                    .withEndAction { pinShadow.alpha = 0.5f }
                     .start()
             } catch (e: Exception) {}
         } else {
             // Якщо є маршрут (замовлення) - жорстко ховаємо пін ще до того, як він почне малюватись
             centerPin.visibility = View.GONE
             centerPin.alpha = 0f
-            try { 
+            try {
                 pinShadow.visibility = View.GONE
                 pinShadow.alpha = 0f
             } catch (e: Exception) {}
@@ -2616,211 +2573,209 @@ btnChangePayment.setOnClickListener {
         return AddressUtils.formatAddress(fullAddress)
     }
 
-    
+
 // --- НОВЫЕ ФУНКЦИИ ДЛЯ РЕЖИМА ВЫБОРА НА КАРТЕ ---
 
-private fun showMapPickerMode(isOrigin: Boolean) {
-    isMapPickingMode = true
-    mapPickerIsOrigin = isOrigin
-    
-    // МГНОВЕННЫЙ ФИКС: Принудительно стираем машинки с карты при переходе в выбор адреса
-    nearbyDriverMarkers.values.forEach { it.remove() }
-    nearbyDriverMarkers.clear()
-    
-    // Скрываем обычный интерфейс
-    findViewById<View>(R.id.bottom_sheet_card).visibility = View.GONE
-    findViewById<View>(R.id.btn_menu).visibility = View.GONE
-    findViewById<View>(R.id.btn_open_promo).visibility = View.GONE
-    findViewById<View>(R.id.btn_recenter_location).visibility = View.GONE
-    
-    // Показываем интерфейс выбора на карте
-    layoutMapPickerPanel.visibility = View.VISIBLE
-    btnBackMapPicker.visibility = View.VISIBLE
-    
-    tvMapPickerAddress.text = "Шукаємо адресу..."
+    private fun showMapPickerMode(isOrigin: Boolean) {
+        isMapPickingMode = true
+        mapPickerIsOrigin = isOrigin
 
-    // Принудительно приподнимаем логотип Google над панелью подтверждения адреса на карте
-    updateMapPadding(layoutMapPickerPanel, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
-}
+        // МГНОВЕННЫЙ ФИКС: Принудительно стираем машинки с карты при переходе в выбор адреса
+        nearbyDriverMarkers.values.forEach { it.remove() }
+        nearbyDriverMarkers.clear()
 
-private fun hideMapPickerMode() {
-    isMapPickingMode = false
-    
-    // Возвращаем обычный интерфейс
-    findViewById<View>(R.id.bottom_sheet_card).visibility = View.VISIBLE
-    findViewById<View>(R.id.btn_menu).visibility = View.VISIBLE
-    findViewById<View>(R.id.btn_open_promo).visibility = View.VISIBLE
-    findViewById<View>(R.id.btn_recenter_location).visibility = View.VISIBLE
-    
-    // Скрываем интерфейс выбора на карте
-    layoutMapPickerPanel.visibility = View.GONE
-    btnBackMapPicker.visibility = View.GONE
+        // Скрываем обычный интерфейс
+        findViewById<View>(R.id.bottom_sheet_card).visibility = View.GONE
+        findViewById<View>(R.id.btn_menu).visibility = View.GONE
+        findViewById<View>(R.id.btn_open_promo).visibility = View.GONE
+        findViewById<View>(R.id.btn_recenter_location).visibility = View.GONE
 
-    // Возвращаем аккуратный паддинг обратно на главную панель адресов
-    if (::creationPanelCard.isInitialized) {
-        updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
+        // Показываем интерфейс выбора на карте
+        layoutMapPickerPanel.visibility = View.VISIBLE
+        btnBackMapPicker.visibility = View.VISIBLE
+
+        tvMapPickerAddress.text = "Шукаємо адресу..."
+
+        // Принудительно приподнимаем логотип Google над панелью подтверждения адреса на карте
+        updateMapPadding(layoutMapPickerPanel, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
     }
-}
 
-private fun confirmMapSelection() {
-    val target = mMap?.cameraPosition?.target ?: return
-    val addressName = tvMapPickerAddress.text.toString()
+    private fun hideMapPickerMode() {
+        isMapPickingMode = false
 
-    // Экстренная защита: если каким-то чудом клик прошел по "Шукаємо адресу"
-    if (addressName == "Шукаємо адресу..." || addressName.isEmpty()) return
+        // Возвращаем обычный интерфейс
+        findViewById<View>(R.id.bottom_sheet_card).visibility = View.VISIBLE
+        findViewById<View>(R.id.btn_menu).visibility = View.VISIBLE
+        findViewById<View>(R.id.btn_open_promo).visibility = View.VISIBLE
+        findViewById<View>(R.id.btn_recenter_location).visibility = View.VISIBLE
 
-    val selectedPlace = com.google.android.libraries.places.api.model.Place.builder()
-        .setLatLng(target)
-        .setName(addressName)
-        .build()
+        // Скрываем интерфейс выбора на карте
+        layoutMapPickerPanel.visibility = View.GONE
+        btnBackMapPicker.visibility = View.GONE
 
-    val data = lastAddressPickerIntentData
-    val isOriginOnlyMode = data?.getBooleanExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, false) ?: false
+        // Возвращаем аккуратный паддинг обратно на главную панель адресов
+        if (::creationPanelCard.isInitialized) {
+            updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
+        }
+    }
 
-    when (mapPickerTarget) {
-        AddressPickerActivity.TARGET_ORIGIN -> {
-            if (isOriginOnlyMode) {
-                // Если мы зашли только изменить Точку А — сразу возвращаемся на главный экран
-                hideMapPickerMode()
-                pickerMode = MODE_ORIGIN
-                handleAddressSelection(selectedPlace, addressName)
-            } else {
-                // Если мы на экране Откуда-Куда, меняли Точку А — возвращаемся в список для ввода Точки Б
+    private fun confirmMapSelection() {
+        val target = mMap?.cameraPosition?.target ?: return
+        val addressName = tvMapPickerAddress.text.toString()
+
+        // Экстренная защита: если каким-то чудом клик прошел по "Шукаємо адресу"
+        if (addressName == "Шукаємо адресу..." || addressName.isEmpty()) return
+
+        val selectedPlace = com.google.android.libraries.places.api.model.Place.builder()
+            .setLatLng(target)
+            .setName(addressName)
+            .build()
+
+        val data = lastAddressPickerIntentData
+        val isOriginOnlyMode = data?.getBooleanExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, false) ?: false
+
+        when (mapPickerTarget) {
+            AddressPickerActivity.TARGET_ORIGIN -> {
+                if (isOriginOnlyMode) {
+                    // Если мы зашли только изменить Точку А — сразу возвращаемся на главный экран
+                    hideMapPickerMode()
+                    pickerMode = MODE_ORIGIN
+                    handleAddressSelection(selectedPlace, addressName)
+                } else {
+                    // Если мы на экране Откуда-Куда, меняли Точку А — возвращаемся в список для ввода Точки Б
+                    updateIntentDataForReturn(target, addressName)
+                    returnToAddressPicker()
+                }
+            }
+            AddressPickerActivity.TARGET_DESTINATION -> {
+                // 1. Проверяем, есть ли пустые зупинки в сохраненных данных от AddressPicker
+                val wLats = data?.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
+                var hasEmptyWaypoint = false
+
+                if (wLats != null) {
+                    for (lat in wLats) {
+                        if (lat == 0.0) { // Координата 0.0 означает, что поле пустое
+                            hasEmptyWaypoint = true
+                            break
+                        }
+                    }
+                }
+
+                if (hasEmptyWaypoint) {
+                    // 2. У нас есть пустое поле зупинки!
+                    // Обновляем сохраненный интент свежими координатами Точки Б, которую мы только что выбрали
+                    data?.putExtra(AddressPickerActivity.RESULT_NAME, addressName)
+                    data?.putExtra(AddressPickerActivity.RESULT_LAT, target.latitude)
+                    data?.putExtra(AddressPickerActivity.RESULT_LNG, target.longitude)
+
+                    // 3. Возвращаем пользователя обратно в экран выбора адресов (AddressPickerActivity)
+                    returnToAddressPicker()
+                } else {
+                    // 4. Пустих зупинок немає. Всі поля заповнені, сміливо будуємо маршрут!
+                    hideMapPickerMode()
+                    // 🔥 ФИКС: Сохраняем режим MODE_ADD_HOME или MODE_ADD_WORK, если пользователь добавляет Дом/Работу!
+                    if (pickerMode != MODE_ADD_HOME && pickerMode != MODE_ADD_WORK) {
+                        pickerMode = MODE_DESTINATION
+                    }
+                    handleAddressSelection(selectedPlace, addressName)
+                }
+            }
+            AddressPickerActivity.TARGET_WAYPOINT -> {
+                // Если выбрали зупинку — сохраняем её и возвращаем пользователя в список
                 updateIntentDataForReturn(target, addressName)
                 returnToAddressPicker()
             }
         }
-        AddressPickerActivity.TARGET_DESTINATION -> {
-    // 1. Проверяем, есть ли пустые зупинки в сохраненных данных от AddressPicker
-    val wLats = data?.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS)
-    var hasEmptyWaypoint = false
-    
-    if (wLats != null) {
-        for (lat in wLats) {
-            if (lat == 0.0) { // Координата 0.0 означает, что поле пустое
-                hasEmptyWaypoint = true
-                break
-            }
-        }
     }
 
-    if (hasEmptyWaypoint) {
-        // 2. У нас есть пустое поле зупинки!
-        // Обновляем сохраненный интент свежими координатами Точки Б, которую мы только что выбрали
-        data?.putExtra(AddressPickerActivity.RESULT_NAME, addressName)
-        data?.putExtra(AddressPickerActivity.RESULT_LAT, target.latitude)
-        data?.putExtra(AddressPickerActivity.RESULT_LNG, target.longitude)
-        
-        // 3. Возвращаем пользователя обратно в экран выбора адресов (AddressPickerActivity)
-        returnToAddressPicker()
-    } else {
-                // 4. Пустих зупинок немає. Всі поля заповнені, сміливо будуємо маршрут!
-                hideMapPickerMode()
-                // 🔥 ФИКС: Сохраняем режим MODE_ADD_HOME или MODE_ADD_WORK, если пользователь добавляет Дом/Работу!
-                if (pickerMode != MODE_ADD_HOME && pickerMode != MODE_ADD_WORK) {
-                    pickerMode = MODE_DESTINATION
+    // Вспомогательная функция для обновления данных перед возвратом в список
+    private fun updateIntentDataForReturn(target: LatLng, addressName: String) {
+        lastAddressPickerIntentData?.apply {
+            when (mapPickerTarget) {
+                AddressPickerActivity.TARGET_ORIGIN -> {
+                    putExtra(AddressPickerActivity.RESULT_ORIGIN_NAME, addressName)
+                    putExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, target.latitude)
+                    putExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, target.longitude)
                 }
-                handleAddressSelection(selectedPlace, addressName)
-            }
-}
-        AddressPickerActivity.TARGET_WAYPOINT -> {
-            // Если выбрали зупинку — сохраняем её и возвращаем пользователя в список
-            updateIntentDataForReturn(target, addressName)
-            returnToAddressPicker()
-        }
-    }
-}
+                AddressPickerActivity.TARGET_WAYPOINT -> {
+                    var wLats = getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS) ?: DoubleArray(0)
+                    var wLngs = getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS) ?: DoubleArray(0)
+                    val wNames = getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES) ?: ArrayList<String>()
 
-// Вспомогательная функция для обновления данных перед возвратом в список
-private fun updateIntentDataForReturn(target: LatLng, addressName: String) {
-    lastAddressPickerIntentData?.apply {
-        when (mapPickerTarget) {
-            AddressPickerActivity.TARGET_ORIGIN -> {
-                putExtra(AddressPickerActivity.RESULT_ORIGIN_NAME, addressName)
-                putExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, target.latitude)
-                putExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, target.longitude)
-            }
-            AddressPickerActivity.TARGET_WAYPOINT -> {
-                var wLats = getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS) ?: DoubleArray(0)
-                var wLngs = getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS) ?: DoubleArray(0)
-                val wNames = getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES) ?: ArrayList<String>()
-
-                if (mapPickerWaypointIndex != -1) {
-                    if (mapPickerWaypointIndex >= wLats.size) {
-                        val newSize = mapPickerWaypointIndex + 1
-                        wLats = DoubleArray(newSize) { if (it < wLats.size) wLats[it] else 0.0 }
-                        wLngs = DoubleArray(newSize) { if (it < wLngs.size) wLngs[it] else 0.0 }
-                        while (wNames.size < newSize) wNames.add("")
+                    if (mapPickerWaypointIndex != -1) {
+                        if (mapPickerWaypointIndex >= wLats.size) {
+                            val newSize = mapPickerWaypointIndex + 1
+                            wLats = DoubleArray(newSize) { if (it < wLats.size) wLats[it] else 0.0 }
+                            wLngs = DoubleArray(newSize) { if (it < wLngs.size) wLngs[it] else 0.0 }
+                            while (wNames.size < newSize) wNames.add("")
+                        }
+                        wLats[mapPickerWaypointIndex] = target.latitude
+                        wLngs[mapPickerWaypointIndex] = target.longitude
+                        wNames[mapPickerWaypointIndex] = addressName
                     }
-                    wLats[mapPickerWaypointIndex] = target.latitude
-                    wLngs[mapPickerWaypointIndex] = target.longitude
-                    wNames[mapPickerWaypointIndex] = addressName
+
+                    putExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS, wLats)
+                    putExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS, wLngs)
+                    putStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES, wNames)
                 }
-                
-                putExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS, wLats)
-                putExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS, wLngs)
-                putStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES, wNames)
             }
         }
     }
-}
 
-private fun returnToAddressPicker() {
-    val data = lastAddressPickerIntentData
-    
-    // ЗАХИСТ: Якщо даних чомусь немає, просто виходимо на головний екран
-    if (data == null) {
+    private fun returnToAddressPicker() {
+        val data = lastAddressPickerIntentData
+
+        // ЗАХИСТ: Якщо даних чомусь немає, просто виходимо на головний екран
+        if (data == null) {
+            hideMapPickerMode()
+            return
+        }
+
         hideMapPickerMode()
-        return
+
+        val intent = Intent(this, AddressPickerActivity::class.java)
+
+        // Передаем все накопленные данные обратно
+        intent.putExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, mapPickerTarget == AddressPickerActivity.TARGET_ORIGIN)
+
+        // Точка А
+        val oName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
+        intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_ADDRESS, oName)
+        intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LAT, data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0))
+        intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LNG, data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0))
+
+        // Точка Б (Prefill)
+        intent.putExtra("prefill_dest_name", data.getStringExtra(AddressPickerActivity.RESULT_NAME))
+        intent.putExtra("prefill_dest_lat", data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0))
+        intent.putExtra("prefill_dest_lng", data.getDoubleExtra(AddressPickerActivity.RESULT_LNG, 0.0))
+
+        // Зупинки (Prefill)
+        intent.putExtra("prefill_waypoints_lats", data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS))
+        intent.putExtra("prefill_waypoints_lngs", data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS))
+        intent.putStringArrayListExtra("prefill_waypoints_names", data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES))
+
+        addressPickerLauncher.launch(intent)
     }
-    
-    hideMapPickerMode()
 
-    val intent = Intent(this, AddressPickerActivity::class.java)
-    
-    // Передаем все накопленные данные обратно
-    intent.putExtra(AddressPickerActivity.EXTRA_IS_ORIGIN, mapPickerTarget == AddressPickerActivity.TARGET_ORIGIN)
-    
-    // Точка А
-    val oName = data.getStringExtra(AddressPickerActivity.RESULT_ORIGIN_NAME)
-    intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_ADDRESS, oName)
-    intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LAT, data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LAT, 0.0))
-    intent.putExtra(AddressPickerActivity.EXTRA_CURRENT_LNG, data.getDoubleExtra(AddressPickerActivity.RESULT_ORIGIN_LNG, 0.0))
-    
-    // Точка Б (Prefill)
-    intent.putExtra("prefill_dest_name", data.getStringExtra(AddressPickerActivity.RESULT_NAME))
-    intent.putExtra("prefill_dest_lat", data.getDoubleExtra(AddressPickerActivity.RESULT_LAT, 0.0))
-    intent.putExtra("prefill_dest_lng", data.getDoubleExtra(AddressPickerActivity.RESULT_LNG, 0.0))
-    
-    // Зупинки (Prefill)
-    intent.putExtra("prefill_waypoints_lats", data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LATS))
-    intent.putExtra("prefill_waypoints_lngs", data.getDoubleArrayExtra(AddressPickerActivity.RESULT_WAYPOINTS_LNGS))
-    intent.putStringArrayListExtra("prefill_waypoints_names", data.getStringArrayListExtra(AddressPickerActivity.RESULT_WAYPOINTS_NAMES))
-    
-    addressPickerLauncher.launch(intent)
-}
+    // Автоматическая оценка 5 звезд и закрытие завершенного заказа в Redis при выходе / нажатии "Назад"
+    private fun autoRateAndDismissCompletedOrder(orderId: String) {
+        try {
+            ratingDialogInstance?.dismiss()
+        } catch (e: Exception) {}
+        ratingDialogInstance = null
+        isRatingDialogVisible = false
 
-// 🚀 АВТОМАТИЧНА ОЦІНКА 5 ЗІРОК ТА ЗАКРИТТЯ ЗАВЕРШЕНОГО ЗАМОВЛЕННЯ ПРИ НАТИСКАННІ "НАЗАД"
-private fun autoRateAndDismissCompletedOrder(orderId: String) {
-    try {
-        ratingDialogInstance?.dismiss()
-    } catch (e: Exception) {}
-    ratingDialogInstance = null
-    isRatingDialogVisible = false
-
-    val token = sessionManager.fetchAuthToken()
-    if (token != null) {
-        val request = RateDriverRequest(orderId, 5, null)
-        ApiClient.instance.rateDriver(request).enqueue(object : Callback<MessageResponse> {
-            override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {}
-            override fun onFailure(call: Call<MessageResponse>, t: Throwable) {}
-        })
+        OrderRatingController.submitRatingAndDismiss(
+            orderId = orderId,
+            score = 5,
+            comment = null,
+            sessionManager = sessionManager,
+            viewModel = viewModel
+        ) {
+            activeOrderId = null
+            showAddressPanel()
+        }
     }
-    viewModel.dismissCompletedOrder(orderId)
-    viewModel.clearOrderState()
-    activeOrderId = null
-    showAddressPanel()
-}
 
     private fun getAddressFromLocation(latLng: LatLng, debounceMs: Long = 0L, callback: (String?) -> Unit) {
         mapPickerGeocodeJob?.cancel()
@@ -2853,99 +2808,99 @@ private fun autoRateAndDismissCompletedOrder(orderId: String) {
             callback(result)
         }
     }
-class RoundedBackgroundSpan(
-    private val backgroundColor: Int,
-    private val textColor: Int,
-    private val cornerRadius: Float,
-    private val horizontalPadding: Float,
-    private val verticalPadding: Float // Добавили отдельный параметр для вертикали
-) : ReplacementSpan() {
+    class RoundedBackgroundSpan(
+        private val backgroundColor: Int,
+        private val textColor: Int,
+        private val cornerRadius: Float,
+        private val horizontalPadding: Float,
+        private val verticalPadding: Float // Добавили отдельный параметр для вертикали
+    ) : ReplacementSpan() {
 
-    override fun getSize(
-        paint: Paint,
-        text: CharSequence?,
-        start: Int,
-        end: Int,
-        fm: Paint.FontMetricsInt?
-    ): Int {
-        // Ширина: текст + отступы слева и справа
-        return (paint.measureText(text, start, end) + 2 * horizontalPadding).roundToInt()
+        override fun getSize(
+            paint: Paint,
+            text: CharSequence?,
+            start: Int,
+            end: Int,
+            fm: Paint.FontMetricsInt?
+        ): Int {
+            // Ширина: текст + отступы слева и справа
+            return (paint.measureText(text, start, end) + 2 * horizontalPadding).roundToInt()
+        }
+
+        override fun draw(
+            canvas: Canvas,
+            text: CharSequence?,
+            start: Int,
+            end: Int,
+            x: Float,
+            top: Int,
+            y: Int,
+            bottom: Int,
+            paint: Paint
+        ) {
+            val textWidth = paint.measureText(text, start, end)
+
+            // Получаем точные метрики шрифта, чтобы центрировать фон по буквам, а не по строке
+            val metrics = paint.fontMetrics
+
+            // Рассчитываем верх и низ прямоугольника относительно базовой линии (y)
+            // ascent — это расстояние от базовой линии до верха букв (отрицательное число)
+            // descent — до низа букв (положительное число)
+            val rectTop = y + metrics.ascent - verticalPadding
+            val rectBottom = y + metrics.descent + verticalPadding
+
+            val rect = RectF(x, rectTop, x + textWidth + 2 * horizontalPadding, rectBottom)
+
+            // Рисуем фон
+            paint.color = backgroundColor
+            paint.style = Paint.Style.FILL
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            // Рисуем текст
+            paint.color = textColor
+            // Центрируем текст: x + отступ, y остается базовой линией
+            canvas.drawText(text!!, start, end, x + horizontalPadding, y.toFloat(), paint)
+        }
     }
-
-    override fun draw(
-        canvas: Canvas,
-        text: CharSequence?,
-        start: Int,
-        end: Int,
-        x: Float,
-        top: Int,
-        y: Int,
-        bottom: Int,
-        paint: Paint
-    ) {
-        val textWidth = paint.measureText(text, start, end)
-        
-        // Получаем точные метрики шрифта, чтобы центрировать фон по буквам, а не по строке
-        val metrics = paint.fontMetrics
-        
-        // Рассчитываем верх и низ прямоугольника относительно базовой линии (y)
-        // ascent — это расстояние от базовой линии до верха букв (отрицательное число)
-        // descent — до низа букв (положительное число)
-        val rectTop = y + metrics.ascent - verticalPadding
-        val rectBottom = y + metrics.descent + verticalPadding
-        
-        val rect = RectF(x, rectTop, x + textWidth + 2 * horizontalPadding, rectBottom)
-        
-        // Рисуем фон
-        paint.color = backgroundColor
-        paint.style = Paint.Style.FILL
-        canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
-
-        // Рисуем текст
-        paint.color = textColor
-        // Центрируем текст: x + отступ, y остается базовой линией
-        canvas.drawText(text!!, start, end, x + horizontalPadding, y.toFloat(), paint)
-    }
-}
 
     private fun tryDrawRoute() {
-    if (originPlace == null || destinationPlace == null) return
+        if (originPlace == null || destinationPlace == null) return
 
-    isRouteMode = true 
-    centerPin.visibility = View.GONE
-    centerPin.animate().cancel() 
-    try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
+        isRouteMode = true
+        centerPin.visibility = View.GONE
+        centerPin.animate().cancel()
+        try { pinShadow.visibility = View.GONE } catch (e: Exception) {}
 
-    val originLatLng = originPlace!!.latLng!!
-    val destinationLatLng = destinationPlace!!.latLng!!
+        val originLatLng = originPlace!!.latLng!!
+        val destinationLatLng = destinationPlace!!.latLng!!
 
-    tvOverlayOrigin.text = cleanAddress(originPlace!!.name ?: "А")
-    tvOverlayDest.text = cleanAddress(destinationPlace!!.name ?: "Б")
+        tvOverlayOrigin.text = cleanAddress(originPlace!!.name ?: "А")
+        tvOverlayDest.text = cleanAddress(destinationPlace!!.name ?: "Б")
 
-    // Скрываем оверлеи до тех пор, пока маршрут не начнет плавно рисоваться
-    overlayOrigin.visibility = View.GONE
-    overlayDest.visibility = View.GONE
+        // Скрываем оверлеи до тех пор, пока маршрут не начнет плавно рисоваться
+        overlayOrigin.visibility = View.GONE
+        overlayDest.visibility = View.GONE
 
-    // Очищаем карту сразу, но маркеры пока НЕ ставим, чтобы они не мигали
-    mMap?.clear() 
+        // Очищаем карту сразу, но маркеры пока НЕ ставим, чтобы они не мигали
+        mMap?.clear()
 
-    // ФИКС БАГА: Мы полностью удалили предварительный animateCamera(bounds).
-    // Теперь камера не будет резко "отлетать" назад к твоему местоположению.
-    // Она дождется ответа от сервера и плавно отрисует маршрут через drawStylishRoute.
+        // ФИКС БАГА: Мы полностью удалили предварительный animateCamera(bounds).
+        // Теперь камера не будет резко "отлетать" назад к твоему местоположению.
+        // Она дождется ответа от сервера и плавно отрисует маршрут через drawStylishRoute.
 
-    // ДЕЛЕГИРУЕМ В VIEWMODEL
-    viewModel.fetchDirections(
-        originLatLng, 
-        destinationLatLng, 
-        currentWaypoints
-    )
-    
-    // Показываем панель тарифов (загрузка начнется, когда придет маршрут)
-    fetchTariffsAndShowPanel()
-}
-    
+        // ДЕЛЕГИРУЕМ В VIEWMODEL
+        viewModel.fetchDirections(
+            originLatLng,
+            destinationLatLng,
+            currentWaypoints
+        )
+
+        // Показываем панель тарифов (загрузка начнется, когда придет маршрут)
+        fetchTariffsAndShowPanel()
+    }
+
     private fun showTariffsPanel() {
-       fetchTariffsAndShowPanel()
+        fetchTariffsAndShowPanel()
     }
 
     private fun drawStylishRoute(path: List<LatLng>, orderStatus: String) {
@@ -3133,71 +3088,70 @@ class RoundedBackgroundSpan(
         }
     }
     private fun startRouteRevealAnimation(colorMain: Int, colorBorder: Int, path: List<LatLng>) {
-    if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
-    revealInterface()
+        if (polylineMain == null || polylineBorder == null || viewModel.currentRoutePolyline == null) return
+        revealInterface()
 
-    // 🔥 ФИКС: Гасим пульсацию на время анимации появления (Reveal)
-    routeAnimator?.cancel()
-    routeAnimator = null
-    polylineAnim?.remove()
-    polylineAnim = null
+        // 🔥 ФИКС: Гасим пульсацию на время анимации появления (Reveal)
+        routeAnimator?.cancel()
+        routeAnimator = null
+        polylineAnim?.remove()
+        polylineAnim = null
 
-    revealAnimator?.cancel()
-    revealAnimator = ValueAnimator.ofInt(0, 255)
-    revealAnimator?.duration = 1000
-    revealAnimator?.addUpdateListener { animator ->
-        val alpha = animator.animatedValue as Int
-        try {
-            val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
-            val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
-            
-            polylineMain?.color = newMainColor
-            polylineBorder?.color = newBorderColor
-        } catch (e: Exception) {}
-    }
+        revealAnimator?.cancel()
+        revealAnimator = ValueAnimator.ofInt(0, 255)
+        revealAnimator?.duration = 1000
+        revealAnimator?.addUpdateListener { animator ->
+            val alpha = animator.animatedValue as Int
+            try {
+                val newMainColor = Color.argb(alpha, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
+                val newBorderColor = Color.argb(alpha, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
 
-    markerRevealAnimator?.cancel()
-    markerRevealAnimator = ValueAnimator.ofFloat(0f, 1f)
-    markerRevealAnimator?.duration = 1000
-    markerRevealAnimator?.addUpdateListener { animator ->
-        val alpha = animator.animatedValue as Float
-        try {
-            originMarker?.alpha = alpha
-            destinationMarker?.alpha = alpha
-            waypointMarkers.forEach { it.alpha = alpha }
-        } catch (e: Exception) {}
-    }
+                polylineMain?.color = newMainColor
+                polylineBorder?.color = newBorderColor
+            } catch (e: Exception) {}
+        }
 
-    overlayOrigin.animate().alpha(1f).setDuration(1000).start()
-    overlayDest.animate().alpha(1f).setDuration(1000).start()
+        markerRevealAnimator?.cancel()
+        markerRevealAnimator = ValueAnimator.ofFloat(0f, 1f)
+        markerRevealAnimator?.duration = 1000
+        markerRevealAnimator?.addUpdateListener { animator ->
+            val alpha = animator.animatedValue as Float
+            try {
+                originMarker?.alpha = alpha
+                destinationMarker?.alpha = alpha
+                waypointMarkers.forEach { it.alpha = alpha }
+            } catch (e: Exception) {}
+        }
 
-    revealAnimator?.addListener(object : AnimatorListenerAdapter() {
-        override fun onAnimationEnd(animation: Animator) {
-            if (viewModel.currentRoutePolyline != null) {
-                animateRoute(path)
-            }
+        overlayOrigin.animate().alpha(1f).setDuration(1000).start()
+        overlayDest.animate().alpha(1f).setDuration(1000).start()
 
-            // 🔥 ФИКС ПОВТОРНОГО ЗАТИРАНИЯ КАРТЫ ПРИ ОТМЕНЕ:
-            // Вызываем автоматический пересчет интерфейса только для АКТИВНЫХ статусов (поиск, в пути и т.д.).
-            // Если заказ уже CANCELLED или COMPLETED, повторно вызывать updateStatusUI нельзя,
-            // иначе сцена сотрется через mMap?.clear() внутри drawStylishRoute!
-            viewModel.activeOrder.value?.let { currentOrder ->
-                if (currentOrder.status != "CANCELLED" && currentOrder.status != "COMPLETED") {
-                    updateStatusUI(currentOrder)
+        revealAnimator?.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (viewModel.currentRoutePolyline != null) {
+                    animateRoute(path)
+                }
+
+                // 🔥 ФИКС ПОВТОРНОГО ЗАТИРАНИЯ КАРТЫ ПРИ ОТМЕНЕ:
+                // Вызываем автоматический пересчет интерфейса только для АКТИВНЫХ статусов (поиск, в пути и т.д.).
+                // Если заказ уже CANCELLED или COMPLETED, повторно вызывать updateStatusUI нельзя,
+                // иначе сцена сотрется через mMap?.clear() внутри drawStylishRoute!
+                viewModel.activeOrder.value?.let { currentOrder ->
+                    if (currentOrder.status != "CANCELLED" && currentOrder.status != "COMPLETED") {
+                        updateStatusUI(currentOrder)
+                    }
                 }
             }
-        }
-    })
+        })
 
-    revealAnimator?.start()
-    markerRevealAnimator?.start()
-}
-    
-    
+        revealAnimator?.start()
+        markerRevealAnimator?.start()
+    }
+
+
 
     fun incrementUnreadMessages() {
-        unreadChatMessages++
-        updateChatBadgeUI()
+        ChatEventBus.triggerUpdateAsync()
         showToast("Нове повідомлення від водія!")
     }
 
@@ -3216,15 +3170,15 @@ class RoundedBackgroundSpan(
         // ЖЕСТКО УБИВАЕМ АНИМАЦИЮ, если она сейчас идет (это спасает от залипания фона)
         orderDetailsAnimator?.cancel()
         orderDetailsAnimator = null
-        
+
         isOrderDetailsExpanded = false
         val overlay = findViewById<View>(R.id.map_solid_overlay)
-        
+
         layoutExpandableDetails.visibility = View.GONE
         val params = layoutExpandableDetails.layoutParams
         params.height = 0
         layoutExpandableDetails.layoutParams = params
-        
+
         overlay?.visibility = View.GONE
         overlay?.alpha = 0f
     }
@@ -3234,16 +3188,16 @@ class RoundedBackgroundSpan(
         mMap?.clear()
 
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-             try {
-                 mMap?.isMyLocationEnabled = true
-             } catch (e: Exception) {}
+            try {
+                mMap?.isMyLocationEnabled = true
+            } catch (e: Exception) {}
         }
 
-        originMarker = null 
+        originMarker = null
         destinationMarker = null
         waypointMarkers.clear()
-        
-        // УМНЫЙ СБРОС: Если при очистке маршрута мы вернулись на главный экран, 
+
+        // УМНЫЙ СБРОС: Если при очистке маршрута мы вернулись на главный экран,
         // вместо обнуления мы сразу возвращаем паддинг для логотипа Google
         if (::creationPanelCard.isInitialized && creationPanelCard.visibility == View.VISIBLE) {
             updateMapPadding(creationPanelCard, extraBottomDp = 2f, topPaddingDp = 20f, recenterMap = false)
@@ -3270,14 +3224,14 @@ class RoundedBackgroundSpan(
         pickupPolyline?.remove()
         pickupPolyline = null
         pickupRoutePoints.clear()
-        
+
         // <-- 2. ЖЕСТКО УБИВАЕМ ВСЕ АНИМАТОРЫ
         routeAnimator?.cancel()
         routeAnimator = null
-        
+
         revealAnimator?.cancel()
         revealAnimator = null
-        
+
         markerRevealAnimator?.cancel()
         markerRevealAnimator = null
 
@@ -3291,23 +3245,23 @@ class RoundedBackgroundSpan(
     }
 
     private fun updateDrawerHeader() {
-    // 1. Получаем актуальное имя из твоего хранилища (например, SessionManager)
-    // Если используешь базу данных или SharedPreferences, бери данные оттуда
-    val currentName = sessionManager.getUserName() // твой метод получения имени
+        // 1. Получаем актуальное имя из твоего хранилища (например, SessionManager)
+        // Если используешь базу данных или SharedPreferences, бери данные оттуда
+        val currentName = sessionManager.getUserName() // твой метод получения имени
 
-    // 2. Находим TextView в боковом меню
-    // ВАЖНО: Если у тебя стандартный NavigationView, то поиск выглядит так:
-    // val headerView = binding.navigationView.getHeaderView(0)
-    // val tvUserName = headerView.findViewById<TextView>(R.id.tv_user_name)
-    
-    // Если у тебя просто кастомная шторка (LinearLayout), то просто:
-    val tvUserName = findViewById<TextView>(R.id.profile_user_name) // замени на свой ID TextView имени
+        // 2. Находим TextView в боковом меню
+        // ВАЖНО: Если у тебя стандартный NavigationView, то поиск выглядит так:
+        // val headerView = binding.navigationView.getHeaderView(0)
+        // val tvUserName = headerView.findViewById<TextView>(R.id.tv_user_name)
 
-    // 3. Обновляем текст
-    if (!currentName.isNullOrEmpty()) {
-        tvUserName?.text = currentName
+        // Если у тебя просто кастомная шторка (LinearLayout), то просто:
+        val tvUserName = findViewById<TextView>(R.id.profile_user_name) // замени на свой ID TextView имени
+
+        // 3. Обновляем текст
+        if (!currentName.isNullOrEmpty()) {
+            tvUserName?.text = currentName
+        }
     }
-}
 
     private fun fetchTariffsAndShowPanel() {
         viewModel.stopListeningNearbyDrivers(webSocketManager)
@@ -3352,273 +3306,273 @@ class RoundedBackgroundSpan(
     }
 
     private fun showCustomScheduleDialog() {
-    val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
-    val view = layoutInflater.inflate(R.layout.dialog_schedule_ride, null)
-    dialog.setContentView(view)
+        val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+        val view = layoutInflater.inflate(R.layout.dialog_schedule_ride, null)
+        dialog.setContentView(view)
 
-    dialog.window?.let { window ->
-        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-        val controller = WindowInsetsControllerCompat(window, view)
-        
-        if (sessionManager.isDarkMode()) {
-            window.navigationBarColor = Color.BLACK
-            controller.isAppearanceLightNavigationBars = false // Светлые иконки
+        dialog.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            val controller = WindowInsetsControllerCompat(window, view)
+
+            if (sessionManager.isDarkMode()) {
+                window.navigationBarColor = Color.BLACK
+                controller.isAppearanceLightNavigationBars = false // Светлые иконки
+            } else {
+                window.navigationBarColor = Color.WHITE
+                controller.isAppearanceLightNavigationBars = true  // Темные иконки
+            }
+        }
+
+        // ==========================================
+        // 1. НАХОДИМ ВСЕ ЭЛЕМЕНТЫ ИНТЕРФЕЙСА ЗДЕСЬ
+        // ==========================================
+        val tabDate = view.findViewById<TextView>(R.id.tab_date)
+        val tabTime = view.findViewById<TextView>(R.id.tab_time)
+        val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_schedule)
+
+        // Сами барабаны (нужны для получения выбранных значений)
+        val datePicker = view.findViewById<NumberPicker>(R.id.date_picker_widget)
+        val timePicker = view.findViewById<TimePicker>(R.id.time_picker_widget)
+
+        // Наши новые обертки (нужны только для переключения видимости экранов)
+        val dateContainer = view.findViewById<FrameLayout>(R.id.date_picker_container)
+        val timeContainer = view.findViewById<FrameLayout>(R.id.time_picker_container)
+
+
+        // ==========================================
+        // 2. НАСТРОЙКА БАРАБАНОВ И ГЕНЕРАЦИЯ ДАТ
+        // ==========================================
+        val availableDates = mutableListOf<Calendar>()
+        val displayStrings = mutableListOf<String>()
+        val dateFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale("uk", "UA"))
+
+        for (i in 0..6) {
+            val cal = Calendar.getInstance()
+            cal.add(Calendar.DAY_OF_MONTH, i)
+            availableDates.add(cal)
+
+            when (i) {
+                0 -> displayStrings.add("Сьогодні, ${dateFormat.format(cal.time)}")
+                1 -> displayStrings.add("Завтра, ${dateFormat.format(cal.time)}")
+                else -> displayStrings.add(dateFormat.format(cal.time))
+            }
+        }
+
+        // Настраиваем барабан дат
+        datePicker.minValue = 0
+        datePicker.maxValue = displayStrings.size - 1
+        datePicker.displayedValues = displayStrings.toTypedArray()
+        datePicker.wrapSelectorWheel = false
+        datePicker.descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+
+        // Настраиваем барабан времени
+        timePicker.setIs24HourView(true)
+
+        // Высчитываем минимальное время (текущее + 40 минут) для дефолтного отображения
+        val defaultScheduleTime = Calendar.getInstance().apply {
+            add(Calendar.MINUTE, 40)
+        }
+        val defaultHour = defaultScheduleTime.get(Calendar.HOUR_OF_DAY)
+        val defaultMinute = defaultScheduleTime.get(Calendar.MINUTE)
+
+        // Устанавливаем это время в барабан с учетом версии Android устройства
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            timePicker.hour = defaultHour
+            timePicker.minute = defaultMinute
         } else {
-            window.navigationBarColor = Color.WHITE
-            controller.isAppearanceLightNavigationBars = true  // Темные иконки
+            @Suppress("DEPRECATION")
+            timePicker.currentHour = defaultHour
+            @Suppress("DEPRECATION")
+            timePicker.currentMinute = defaultMinute
         }
-    }
-
-    // ==========================================
-    // 1. НАХОДИМ ВСЕ ЭЛЕМЕНТЫ ИНТЕРФЕЙСА ЗДЕСЬ
-    // ==========================================
-    val tabDate = view.findViewById<TextView>(R.id.tab_date)
-    val tabTime = view.findViewById<TextView>(R.id.tab_time)
-    val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_schedule)
-
-    // Сами барабаны (нужны для получения выбранных значений)
-    val datePicker = view.findViewById<NumberPicker>(R.id.date_picker_widget)
-    val timePicker = view.findViewById<TimePicker>(R.id.time_picker_widget)
-    
-    // Наши новые обертки (нужны только для переключения видимости экранов)
-    val dateContainer = view.findViewById<FrameLayout>(R.id.date_picker_container)
-    val timeContainer = view.findViewById<FrameLayout>(R.id.time_picker_container)
 
 
-    // ==========================================
-    // 2. НАСТРОЙКА БАРАБАНОВ И ГЕНЕРАЦИЯ ДАТ
-    // ==========================================
-    val availableDates = mutableListOf<Calendar>()
-    val displayStrings = mutableListOf<String>()
-    val dateFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale("uk", "UA"))
+        // ==========================================
+        // 3. ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК
+        // ==========================================
+        fun updateTabs(isDateSelected: Boolean) {
+            val colorPrimary = ContextCompat.getColor(this@HomeActivity, R.color.text_primary)
+            val colorBg = ContextCompat.getColor(this@HomeActivity, R.color.card_background)
+            val colorSecondary = ContextCompat.getColor(this@HomeActivity, R.color.text_secondary)
 
-    for (i in 0..6) {
-        val cal = Calendar.getInstance()
-        cal.add(Calendar.DAY_OF_MONTH, i)
-        availableDates.add(cal)
-        
-        when (i) {
-            0 -> displayStrings.add("Сьогодні, ${dateFormat.format(cal.time)}")
-            1 -> displayStrings.add("Завтра, ${dateFormat.format(cal.time)}")
-            else -> displayStrings.add(dateFormat.format(cal.time))
+            if (isDateSelected) {
+                tabDate.setBackgroundResource(R.drawable.bg_button_primary)
+                tabDate.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
+                tabDate.setTextColor(colorBg)
+
+                tabTime.background = null
+                tabTime.backgroundTintList = null
+                tabTime.setTextColor(colorSecondary)
+
+                // Прячем/показываем КОНТЕЙНЕРЫ, а не сами пикеры
+                dateContainer.visibility = View.VISIBLE
+                timeContainer.visibility = View.GONE
+            } else {
+                tabTime.setBackgroundResource(R.drawable.bg_button_primary)
+                tabTime.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
+                tabTime.setTextColor(colorBg)
+
+                tabDate.background = null
+                tabDate.backgroundTintList = null
+                tabDate.setTextColor(colorSecondary)
+
+                // Прячем/показываем КОНТЕЙНЕРЫ, а не сами пикеры
+                dateContainer.visibility = View.GONE
+                timeContainer.visibility = View.VISIBLE
+            }
         }
-    }
 
-    // Настраиваем барабан дат
-    datePicker.minValue = 0
-    datePicker.maxValue = displayStrings.size - 1
-    datePicker.displayedValues = displayStrings.toTypedArray()
-    datePicker.wrapSelectorWheel = false 
-    datePicker.descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS 
-
-    // Настраиваем барабан времени
-    timePicker.setIs24HourView(true)
-
-    // Высчитываем минимальное время (текущее + 40 минут) для дефолтного отображения
-    val defaultScheduleTime = Calendar.getInstance().apply {
-        add(Calendar.MINUTE, 40)
-    }
-    val defaultHour = defaultScheduleTime.get(Calendar.HOUR_OF_DAY)
-    val defaultMinute = defaultScheduleTime.get(Calendar.MINUTE)
-
-    // Устанавливаем это время в барабан с учетом версии Android устройства
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        timePicker.hour = defaultHour
-        timePicker.minute = defaultMinute
-    } else {
-        @Suppress("DEPRECATION")
-        timePicker.currentHour = defaultHour
-        @Suppress("DEPRECATION")
-        timePicker.currentMinute = defaultMinute
-    }
+        // Слушатели нажатий на вкладки (по умолчанию открываем вкладку даты)
+        tabDate.setOnClickListener { updateTabs(true) }
+        tabTime.setOnClickListener { updateTabs(false) }
 
 
-    // ==========================================
-    // 3. ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК
-    // ==========================================
-    fun updateTabs(isDateSelected: Boolean) {
-        val colorPrimary = ContextCompat.getColor(this@HomeActivity, R.color.text_primary)
-        val colorBg = ContextCompat.getColor(this@HomeActivity, R.color.card_background)
-        val colorSecondary = ContextCompat.getColor(this@HomeActivity, R.color.text_secondary)
+        // ==========================================
+        // 4. ЛОГИКА КНОПКИ ПОДТВЕРЖДЕНИЯ
+        // ==========================================
+        btnConfirm.setOnClickListener {
+            // Берем готовый день из нашего массива
+            val selectedIndex = datePicker.value
+            val selectedCalendar = availableDates[selectedIndex].clone() as Calendar
 
-        if (isDateSelected) {
-            tabDate.setBackgroundResource(R.drawable.bg_button_primary)
-            tabDate.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
-            tabDate.setTextColor(colorBg)
+            // Добавляем к нему время
+            val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
+            val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
 
-            tabTime.background = null
-            tabTime.backgroundTintList = null
-            tabTime.setTextColor(colorSecondary)
+            selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
+            selectedCalendar.set(Calendar.MINUTE, minute)
+            selectedCalendar.set(Calendar.SECOND, 0)
+            selectedCalendar.set(Calendar.MILLISECOND, 0)
 
-            // Прячем/показываем КОНТЕЙНЕРЫ, а не сами пикеры
-            dateContainer.visibility = View.VISIBLE
-            timeContainer.visibility = View.GONE
-        } else {
-            tabTime.setBackgroundResource(R.drawable.bg_button_primary)
-            tabTime.backgroundTintList = android.content.res.ColorStateList.valueOf(colorPrimary)
-            tabTime.setTextColor(colorBg)
+            // --- НОВАЯ ЛОГИКА ПРОВЕРКИ 40 МИНУТ ---
+            val minAllowedTime = Calendar.getInstance()
+            minAllowedTime.add(Calendar.MINUTE, 40) // Добавляем 40 минут к текущему времени
 
-            tabDate.background = null
-            tabDate.backgroundTintList = null
-            tabDate.setTextColor(colorSecondary)
-
-            // Прячем/показываем КОНТЕЙНЕРЫ, а не сами пикеры
-            dateContainer.visibility = View.GONE
-            timeContainer.visibility = View.VISIBLE
+            if (selectedCalendar.before(minAllowedTime)) {
+                showToast("Попереднє замовлення можливе мінімум за 40 хвилин")
+                updateTabs(false) // Автоматически перекидываем на вкладку времени для исправления
+            } else {
+                scheduledDate = selectedCalendar // Сохраняем выбранную дату в глобальную переменную
+                updateOrderButtonWithTime()      // Обновляем UI главной кнопки
+                dialog.dismiss()
+            }
         }
+
+        // Запускаем диалог
+        dialog.show()
     }
 
-    // Слушатели нажатий на вкладки (по умолчанию открываем вкладку даты)
-    tabDate.setOnClickListener { updateTabs(true) }
-    tabTime.setOnClickListener { updateTabs(false) }
 
 
-    // ==========================================
-    // 4. ЛОГИКА КНОПКИ ПОДТВЕРЖДЕНИЯ
-    // ==========================================
-    btnConfirm.setOnClickListener {
-    // Берем готовый день из нашего массива
-    val selectedIndex = datePicker.value
-    val selectedCalendar = availableDates[selectedIndex].clone() as Calendar
+    private fun showDriverHealthDialog(issues: List<String>) {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_driver_health)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
-    // Добавляем к нему время
-    val hour = if (Build.VERSION.SDK_INT >= 23) timePicker.hour else timePicker.currentHour
-    val minute = if (Build.VERSION.SDK_INT >= 23) timePicker.minute else timePicker.currentMinute
+        val tvIssues = dialog.findViewById<TextView>(R.id.tv_health_issues_list)
+        val btnOk = dialog.findViewById<Button>(R.id.btn_understand_health)
 
-    selectedCalendar.set(Calendar.HOUR_OF_DAY, hour)
-    selectedCalendar.set(Calendar.MINUTE, minute)
-    selectedCalendar.set(Calendar.SECOND, 0)
-    selectedCalendar.set(Calendar.MILLISECOND, 0)
+        // --- ОБНОВЛЕНО: Форматируем список с висячим отступом прямо здесь ---
+        val builder = android.text.SpannableStringBuilder()
+        // Вычисляем 16dp отступа в пикселях в зависимости от плотности экрана устройства
+        val marginPx = (16 * resources.displayMetrics.density).toInt()
 
-    // --- НОВАЯ ЛОГИКА ПРОВЕРКИ 40 МИНУТ ---
-    val minAllowedTime = Calendar.getInstance()
-    minAllowedTime.add(Calendar.MINUTE, 40) // Добавляем 40 минут к текущему времени
+        issues.forEachIndexed { index, item ->
+            if (item.isNotBlank()) {
+                val start = builder.length
+                builder.append("•  $item") // Строим строку (значок + пробелы + текст особенности)
+                val end = builder.length
 
-    if (selectedCalendar.before(minAllowedTime)) {
-        showToast("Попереднє замовлення можливе мінімум за 40 хвилин")
-        updateTabs(false) // Автоматически перекидываем на вкладку времени для исправления
-    } else {
-        scheduledDate = selectedCalendar // Сохраняем выбранную дату в глобальную переменную
-        updateOrderButtonWithTime()      // Обновляем UI главной кнопки
-        dialog.dismiss()
+                // ХИТРЫЙ ФИКС: Для первой строки отступ 0 (значок прижат к краю),
+                // а для всех автоматически перенесенных строк — отступ marginPx (встанут ровно под текст)
+                builder.setSpan(
+                    android.text.style.LeadingMarginSpan.Standard(0, marginPx),
+                    start,
+                    end,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+
+                // Разделяем элементы списка обычным переносом строки
+                if (index < issues.lastIndex) {
+                    builder.append("\n")
+                }
+            }
+        }
+        tvIssues.text = builder
+        // --------------------------------------------------------------------
+
+        btnOk.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
-}
+    private fun updateOrderButtonWithTime() {
+        if (scheduledDate != null) {
+            val now = Calendar.getInstance()
 
-    // Запускаем диалог
-    dialog.show()
-}
+            // Форматуємо час (наприклад, "15:30")
+            val timeSdf = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
+            val timeStr = timeSdf.format(scheduledDate!!.time)
 
+            // Визначаємо день (Сьогодні, Завтра або конкретна дата)
+            val dateStr = when {
+                isSameDay(scheduledDate!!, now) -> "Сьогодні, $timeStr"
+                isTomorrow(scheduledDate!!, now) -> "Завтра, $timeStr"
+                else -> {
+                    // Для української локалі (наприклад, "24 лют")
+                    val dayMonthSdf = java.text.SimpleDateFormat("d MMM", Locale("uk", "UA"))
+                    "${dayMonthSdf.format(scheduledDate!!.time)}, $timeStr"
+                }
+            }
 
+            // Завжди тільки "Замовити"
+            val topText = getString(R.string.btn_order)
 
-private fun showDriverHealthDialog(issues: List<String>) {
-    val dialog = Dialog(this)
-    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-    dialog.setContentView(R.layout.dialog_driver_health)
-    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            // Об'єднуємо з переносом рядка
+            val fullText = "$topText\n$dateStr"
+            val spannable = SpannableString(fullText)
 
-    val tvIssues = dialog.findViewById<TextView>(R.id.tv_health_issues_list)
-    val btnOk = dialog.findViewById<Button>(R.id.btn_understand_health)
-
-    // --- ОБНОВЛЕНО: Форматируем список с висячим отступом прямо здесь ---
-    val builder = android.text.SpannableStringBuilder()
-    // Вычисляем 16dp отступа в пикселях в зависимости от плотности экрана устройства
-    val marginPx = (16 * resources.displayMetrics.density).toInt() 
-
-    issues.forEachIndexed { index, item ->
-        if (item.isNotBlank()) {
-            val start = builder.length
-            builder.append("•  $item") // Строим строку (значок + пробелы + текст особенности)
-            val end = builder.length
-
-            // ХИТРЫЙ ФИКС: Для первой строки отступ 0 (значок прижат к краю), 
-            // а для всех автоматически перенесенных строк — отступ marginPx (встанут ровно под текст)
-            builder.setSpan(
-                android.text.style.LeadingMarginSpan.Standard(0, marginPx),
-                start,
-                end,
-                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            // Робимо нижній рядок (дату і час) трохи меншим (75% від основного розміру)
+            spannable.setSpan(
+                RelativeSizeSpan(0.75f),
+                topText.length + 1,
+                fullText.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
 
-            // Разделяем элементы списка обычным переносом строки
-            if (index < issues.lastIndex) {
-                builder.append("\n")
-            }
-        }
-    }
-    tvIssues.text = builder
-    // --------------------------------------------------------------------
+            // Застосовуємо текст до кнопки
+            btnOrderTaxi.text = spannable
 
-    btnOk.setOnClickListener {
-        dialog.dismiss()
-    }
-
-    dialog.show()
-}
-    private fun updateOrderButtonWithTime() {
-    if (scheduledDate != null) {
-        val now = Calendar.getInstance()
-        
-        // Форматуємо час (наприклад, "15:30")
-        val timeSdf = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
-        val timeStr = timeSdf.format(scheduledDate!!.time)
-
-        // Визначаємо день (Сьогодні, Завтра або конкретна дата)
-        val dateStr = when {
-            isSameDay(scheduledDate!!, now) -> "Сьогодні, $timeStr"
-            isTomorrow(scheduledDate!!, now) -> "Завтра, $timeStr"
-            else -> {
-                // Для української локалі (наприклад, "24 лют")
-                val dayMonthSdf = java.text.SimpleDateFormat("d MMM", Locale("uk", "UA"))
-                "${dayMonthSdf.format(scheduledDate!!.time)}, $timeStr"
-            }
-        }
-
-        // Завжди тільки "Замовити"
-        val topText = getString(R.string.btn_order)
-
-        // Об'єднуємо з переносом рядка
-        val fullText = "$topText\n$dateStr"
-        val spannable = SpannableString(fullText)
-        
-        // Робимо нижній рядок (дату і час) трохи меншим (75% від основного розміру)
-        spannable.setSpan(
-            RelativeSizeSpan(0.75f), 
-            topText.length + 1, 
-            fullText.length, 
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-
-        // Застосовуємо текст до кнопки
-        btnOrderTaxi.text = spannable
-        
-    } else {
-        // --- ТЕПЕРЬ ЦЕНЫ НЕТ И ЗДЕСЬ ---
-        // Якщо час не обрано - просто "Замовити"
-        if (selectedTariffItem != null) {
-            btnOrderTaxi.text = getString(R.string.btn_order)
         } else {
-            btnOrderTaxi.text = "Оберіть тариф"
+            // --- ТЕПЕРЬ ЦЕНЫ НЕТ И ЗДЕСЬ ---
+            // Якщо час не обрано - просто "Замовити"
+            if (selectedTariffItem != null) {
+                btnOrderTaxi.text = getString(R.string.btn_order)
+            } else {
+                btnOrderTaxi.text = "Оберіть тариф"
+            }
         }
+
+        // Завжди фарбуємо іконку календаря у фірмовий темний колір
+        btnSchedule.setColorFilter(android.graphics.Color.parseColor("#454754"))
     }
-    
-    // Завжди фарбуємо іконку календаря у фірмовий темний колір
-btnSchedule.setColorFilter(android.graphics.Color.parseColor("#454754"))
-}
 
-private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
-    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
-           cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
-}
+    private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
+        return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+                cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+    }
 
 
 
-private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
-    val tomorrow = Calendar.getInstance()
-    tomorrow.timeInMillis = now.timeInMillis
-    tomorrow.add(Calendar.DAY_OF_YEAR, 1)
-    return isSameDay(target, tomorrow)
-}
+    private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
+        val tomorrow = Calendar.getInstance()
+        tomorrow.timeInMillis = now.timeInMillis
+        tomorrow.add(Calendar.DAY_OF_YEAR, 1)
+        return isSameDay(target, tomorrow)
+    }
 
     private fun loadSectors() {
         ApiClient.instance.getSectors().enqueue(object : retrofit2.Callback<List<SectorDto>> {
@@ -3635,10 +3589,10 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         ApiClient.instance.getCarIconUrl().enqueue(object : Callback<Map<String, String>> {
             override fun onResponse(call: Call<Map<String, String>>, response: Response<Map<String, String>>) {
                 // Защита от краша: проверяем, жив ли экран в момент асинхронного ответа
-                if (isFinishing || isDestroyed) return 
-                
+                if (isFinishing || isDestroyed) return
+
                 var url = response.body()?.get("url")
-                
+
                 if (!url.isNullOrEmpty()) {
                     // 🔥 БЕЗОПАСНОСТЬ: Подмена на локальный IP работает ТОЛЬКО во время разработки (Debug)
                     if (BuildConfig.DEBUG && url!!.contains("localhost")) {
@@ -3654,7 +3608,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                                 if (isFinishing || isDestroyed) return // Повторная проверка перед отрисовкой
                                 val scaled = Bitmap.createScaledBitmap(resource, 180, 180, false)
                                 customCarIcon = BitmapDescriptorFactory.fromBitmap(scaled)
-                                
+
                                 if (driverMarker != null) {
                                     driverMarker?.setIcon(customCarIcon)
                                 }
@@ -3740,14 +3694,14 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         // Жестко останавливаем старый аниматор перед запуском нового
         routeAnimator?.cancel()
         routeAnimator = null
-        
+
         // Удаляем старую анимационную линию, если она осталась в памяти
         polylineAnim?.remove()
         polylineAnim = null
 
         val isDark = sessionManager.isDarkMode()
         val colorBase = ContextCompat.getColor(this, R.color.route_main)
-        
+
         val colorGlow = if (isDark) {
             Color.rgb(240, 240, 240)
         } else {
@@ -3766,7 +3720,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         polylineAnim = mMap?.addPolyline(animOpts)
 
         val totalDurationMs = 5500f
-        val argbEvaluator = android.animation.ArgbEvaluator() 
+        val argbEvaluator = android.animation.ArgbEvaluator()
 
         var lastColor = 0
 
@@ -3782,13 +3736,13 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                         animator.cancel()
                         return@addUpdateListener
                     }
-                    
+
                     // 🔥 ОПТИМИЗАЦИЯ 60 FPS: Ограничитель в 50мс полностью удален!
                     // Цвет плавно пересчитывается на каждом кадре дисплея,
                     // создавая дорогой и мягкий эффект "дыхания" линии маршрута.
                     val progress = animator.animatedValue as Float
                     val timeMs = progress * totalDurationMs
-                    
+
                     val fraction = when {
                         timeMs <= 750f -> timeMs / 750f
                         timeMs <= 1250f -> 1f
@@ -3797,17 +3751,17 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
                     }
 
                     val currentColor = argbEvaluator.evaluate(fraction, colorBase, colorGlow) as Int
-                    
+
                     // Защита нативного хипа: шлем вызов Google Maps только если цвет реально изменился
                     if (currentColor != lastColor) {
                         lastColor = currentColor
                         polylineAnim?.color = currentColor
                     }
-                    
+
                 } catch (_: Exception) {}
             }
         }
-        
+
         routeAnimator?.start()
     }
 
@@ -3905,12 +3859,12 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         if (!cardMask.isNullOrEmpty()) {
             val fullText = getString(R.string.payment_card_format, cardMask)
             val spannable = SpannableString(fullText)
-            
+
             val startIndex = fullText.indexOf(cardMask)
             if (startIndex != -1) {
                 val bgColor = ContextCompat.getColor(this, R.color.menu_background_color)
                 val textColor = ContextCompat.getColor(this, R.color.text_primary)
-                
+
                 spannable.setSpan(
                     RoundedBackgroundSpan(
                         backgroundColor = bgColor,
@@ -3970,13 +3924,13 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
             // Сохраняем выбранный метод оплаты в заказе и сессии
             if (viewModel.activeOrder.value != null) {
+                // Для активного заказа ждем подтверждения от сервера (внутри ViewModel)
                 viewModel.updateActiveOrderPaymentMethod(selectedMethod)
+            } else {
+                sessionManager.savePaymentMethod(selectedMethod)
+                currentPaymentMethod = selectedMethod
+                updatePaymentIcon()
             }
-            sessionManager.savePaymentMethod(selectedMethod)
-            
-            // Обновляем UI локально
-            currentPaymentMethod = selectedMethod
-            updatePaymentIcon()
 
             dialog.dismiss()
         }
@@ -3990,50 +3944,50 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     }
 
     private fun fetchClientProfile() {
-    val token = sessionManager.fetchAuthToken()
-    if (token.isNullOrEmpty()) return
+        val token = sessionManager.fetchAuthToken()
+        if (token.isNullOrEmpty()) return
 
-    ApiClient.instance.getClientProfile().enqueue(object : retrofit2.Callback<com.taxiapp.client.network.ClientProfileResponse> {
-        override fun onResponse(
-            call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>,
-            response: retrofit2.Response<com.taxiapp.client.network.ClientProfileResponse>
-        ) {
-            // 🔥 ЖИЗНЕННЫЙ ЦИКЛ: Если пользователь вышел с экрана до того, как пришел профиль — глушим коллбек
-            if (isFinishing || isDestroyed) return
+        ApiClient.instance.getClientProfile().enqueue(object : retrofit2.Callback<com.taxiapp.client.network.ClientProfileResponse> {
+            override fun onResponse(
+                call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>,
+                response: retrofit2.Response<com.taxiapp.client.network.ClientProfileResponse>
+            ) {
+                // 🔥 ЖИЗНЕННЫЙ ЦИКЛ: Если пользователь вышел с экрана до того, как пришел профиль — глушим коллбек
+                if (isFinishing || isDestroyed) return
 
-            if (response.isSuccessful && response.body() != null) {
-                val profile = response.body()!!
+                if (response.isSuccessful && response.body() != null) {
+                    val profile = response.body()!!
 
-                // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ СЛЕПОТЫ СОКЕТОВ:
-                val oldId = sessionManager.fetchUserId()
-                sessionManager.saveUserId(profile.id)
+                    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ СЛЕПОТЫ СОКЕТОВ:
+                    val oldId = sessionManager.fetchUserId()
+                    sessionManager.saveUserId(profile.id)
 
-                sessionManager.saveCardMask(profile.cardMask)
+                    sessionManager.saveCardMask(profile.cardMask)
 
-                if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
-                    sessionManager.savePaymentMethod("CASH")
+                    if (profile.cardMask.isNullOrEmpty() && sessionManager.fetchPaymentMethod() == "CARD") {
+                        sessionManager.savePaymentMethod("CASH")
 
-                    if (activeOrderId != null) {
-                        viewModel.updateActiveOrderPaymentMethod("CASH")
+                        if (activeOrderId != null) {
+                            viewModel.updateActiveOrderPaymentMethod("CASH")
+                        }
                     }
-                }
 
-                updatePaymentIcon()
-                
-                if (oldId == -1L && profile.id != -1L) {
-                    Log.d("WS_TAXI_DEBUG", "🔄 ID получен из профиля (${profile.id}), перезапускаем WebSocket подписку!")
-                    viewModel.startOrderSocketListening(webSocketManager)
-                }
+                    updatePaymentIcon()
 
-                updateDrawerHeader()
+                    if (oldId == -1L && profile.id != -1L) {
+                        Log.d("WS_TAXI_DEBUG", "🔄 ID получен из профиля (${profile.id}), перезапускаем WebSocket подписку!")
+                        viewModel.startOrderSocketListening(webSocketManager)
+                    }
+
+                    updateDrawerHeader()
+                }
             }
-        }
 
-        override fun onFailure(call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
-            // Игнорируем ошибку сети в фоне
-        }
-    })
-}
+            override fun onFailure(call: retrofit2.Call<com.taxiapp.client.network.ClientProfileResponse>, t: Throwable) {
+                // Игнорируем ошибку сети в фоне
+            }
+        })
+    }
 
     private fun showChangePriceDialogForActiveOrder(basePrice: Double, currentAddedValue: Double) {
         val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
@@ -4043,7 +3997,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         // Настройка статус баров (оставляем твой код)
         dialog.window?.let { window ->
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-            window.statusBarColor = Color.TRANSPARENT 
+            window.statusBarColor = Color.TRANSPARENT
 
             val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
             if (isNightMode) {
@@ -4074,13 +4028,13 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
         val minPrice = basePrice.toInt()
         val maxPrice = (basePrice * 3).toInt() // Умножаем на 3, как ты и хотел!
-        
+
         // Текущее положение ползунка — это базовая цена + текущая надбавка
         var currentPrice = minPrice + currentAddedValue.toInt()
 
         val range = maxPrice - minPrice
         seekBar.max = range
-        
+
         fun updateUI() {
             tvPrice.text = "$currentPrice ₴"
             val progress = currentPrice - minPrice
@@ -4201,43 +4155,14 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
 
 
     private fun animateMarker(marker: Marker, toPosition: LatLng, toRotation: Float) {
-        val startPosition = marker.position
-        val startRotation = marker.rotation
-
-        // 📏 Вычисляем расстояние между старой и новой позицией машины
-        val distance = com.google.maps.android.SphericalUtil.computeDistanceBetween(startPosition, toPosition)
-        
-        // 🔥 ФИКС: Если машина проехала больше 1.5 метров, вычисляем идеальный угол направления движения.
-        // Если машина стоит на месте, плавно оставляем текущий курс или угол от сервера.
-        val finalRotation = if (distance > 1.5) {
-            com.google.maps.android.SphericalUtil.computeHeading(startPosition, toPosition).toFloat()
-        } else {
-            toRotation
-        }
-
-        val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
-        valueAnimator.duration = 2000 
-        valueAnimator.interpolator = LinearInterpolator()
-        valueAnimator.addUpdateListener { animation ->
-            val v = animation.animatedFraction
-            val lng = v * toPosition.longitude + (1 - v) * startPosition.longitude
-            val lat = v * toPosition.latitude + (1 - v) * startPosition.latitude
-            marker.position = LatLng(lat, lng)
-            
-            // Плавное вращение с учетом перехода через 180/-180 градусов
-            var delta = finalRotation - startRotation
-            if (delta > 180) delta -= 360
-            if (delta < -180) delta += 360
-            marker.rotation = startRotation + (v * delta)
-        }
-        valueAnimator.start()
+        markerAnimationController.animateMarker(marker, toPosition, toRotation)
     }
-    
+
     private fun startStatusBlinking() {
         if (::statusBlinkAnimator.isInitialized && statusBlinkAnimator.isRunning) return
 
         statusBlinkAnimator = ObjectAnimator.ofFloat(orderStatusText, "alpha", 1f, 0.4f, 1f)
-        statusBlinkAnimator.duration = 1500 
+        statusBlinkAnimator.duration = 1500
         statusBlinkAnimator.repeatCount = ValueAnimator.INFINITE
         statusBlinkAnimator.repeatMode = ValueAnimator.REVERSE
         statusBlinkAnimator.start()
@@ -4361,7 +4286,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
     private fun stopStatusBlinking() {
         if (::statusBlinkAnimator.isInitialized) {
             statusBlinkAnimator.cancel()
-            orderStatusText.alpha = 1f 
+            orderStatusText.alpha = 1f
         }
     }
 
@@ -4377,7 +4302,7 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
             overlayDest.visibility = View.GONE
             return
         }
-        
+
         val originLoc = originPlace?.latLng
         val destLoc = destinationPlace?.latLng
         val projection = mMap!!.projection
@@ -4397,13 +4322,13 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         val viewWidth = view.width
         val viewHeight = view.height
         val screenWidth = resources.displayMetrics.widthPixels
-        
-        var isRouteGoingUp = false 
+
+        var isRouteGoingUp = false
 
         if (decodedRoutePoints != null && decodedRoutePoints!!.isNotEmpty()) {
             val projection = mMap!!.projection
             val routePoints = decodedRoutePoints!!
-            
+
             val compareLatLng = if (isStartPoint) {
                 if (routePoints.size > 1) routePoints[1] else routePoints[0]
             } else {
@@ -4437,14 +4362,14 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
             finalX = screenWidth - margin - viewWidth
         }
 
-        val topSafeArea = convertDpToPixel(50f) 
-        val bottomSafeArea = resources.displayMetrics.heightPixels - convertDpToPixel(150f) 
+        val topSafeArea = convertDpToPixel(50f)
+        val bottomSafeArea = resources.displayMetrics.heightPixels - convertDpToPixel(150f)
 
         if (finalY < topSafeArea) {
             finalY = targetY + verticalPadding
         }
         else if (finalY + viewHeight > bottomSafeArea) {
-             finalY = targetY - viewHeight - verticalPadding
+            finalY = targetY - viewHeight - verticalPadding
         }
 
         view.x = finalX
@@ -4512,87 +4437,43 @@ private fun isTomorrow(target: Calendar, now: Calendar): Boolean {
         }
     }
     private fun startWaitingTimer(order: TaxiOrderDto) {
-        stopWaitingTimer()
-
-        val timeSource = order.waitingStartTime ?: order.arrivedAt
-        if (timeSource.isNullOrBlank()) {
-            cardWaitingTimer.visibility = View.GONE
-            return
+        if (::orderTimersController.isInitialized) {
+            orderTimersController.startWaitingTimer(order, cardWaitingTimer, tvNewWaitingTimer)
         }
-
-        cardWaitingTimer.visibility = View.VISIBLE
-
-        val cleanTime = timeSource.substringBefore(".").substringBefore("Z")
-        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-
-        val arrivedTime = try {
-            format.parse(cleanTime)?.time ?: return
-        } catch (e: Exception) {
-            return
-        }
-
-        waitingTimerRunnable = object : Runnable {
-            override fun run() {
-                val now = System.currentTimeMillis()
-                // 🟢 Если часы рассинхронизированы, не выходим, а начинаем с 0
-                val diffMs = if (now >= arrivedTime) now - arrivedTime else 0L
-
-                val diffMinutesFull = diffMs / (1000 * 60).toDouble()
-                val freeMins = order.freeWaitingMinutes
-
-                if (diffMinutesFull <= freeMins) {
-                    // 1. БЕСПЛАТНОЕ ОЖИДАНИЕ (Обратный отсчет)
-                    val remainingMs = (freeMins * 60 * 1000) - diffMs
-                    val remMin = (remainingMs / (1000 * 60)).toInt().coerceAtLeast(0)
-                    val remSec = ((remainingMs / 1000) % 60).toInt().coerceAtLeast(0)
-
-                    tvNewWaitingTimer.text = String.format("%02d:%02d", remMin, remSec)
-                    tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.text_secondary))
-                } else {
-                    // 2. ПЛАТНОЕ ОЖИДАНИЕ (+00:01, +00:02...)
-                    val paidMs = diffMs - (freeMins * 60 * 1000)
-                    val paidMin = (paidMs / (1000 * 60)).toInt()
-                    val paidSec = ((paidMs / 1000) % 60).toInt()
-
-                    tvNewWaitingTimer.text = String.format("+%02d:%02d", paidMin, paidSec)
-                    tvNewWaitingTimer.setTextColor(ContextCompat.getColor(this@HomeActivity, R.color.taxi_red_cancel))
-                }
-                waitingTimerHandler.postDelayed(this, 1000)
-            }
-        }
-        waitingTimerHandler.post(waitingTimerRunnable!!)
     }
 
-private fun stopWaitingTimer() {
-    waitingTimerRunnable?.let { waitingTimerHandler.removeCallbacks(it) }
-    waitingTimerRunnable = null
-    cardWaitingTimer.visibility = View.GONE // Скрываем табло
-}
+    private fun stopWaitingTimer() {
+        if (::orderTimersController.isInitialized) {
+            orderTimersController.stopWaitingTimer(
+                if (::cardWaitingTimer.isInitialized) cardWaitingTimer else null
+            )
+        }
+    }
 
     private fun displayTariffs() {
-    if (availableTariffs.isEmpty()) {
-        showToast("Немає тарифів")
-        return
-    }
-
-    if (!hasTrackedTariffsView) {
-        com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariffs_view", "${availableTariffs.size} тарифи(ів)")
-        hasTrackedTariffsView = true 
-    }
-
-    // ВОТ ОН, ТОТ САМЫЙ ХАРДКОД:
-    val INCLUDED_KM = 3.0
-    val totalKm = routeDistanceMeters / 1000.0
-    val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
-
-    availableTariffs.forEach { tariff ->
-        if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
-            tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
-        } else {
-            val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
-            tariffCustomPrices[tariff.id] = ceil(localPrice)
+        if (availableTariffs.isEmpty()) {
+            showToast("Немає тарифів")
+            return
         }
-    }
+
+        if (!hasTrackedTariffsView) {
+            com.taxiapp.client.analytics.AnalyticsManager.trackCustomEvent("tariffs_view", "${availableTariffs.size} тарифи(ів)")
+            hasTrackedTariffsView = true
+        }
+
+        // ВОТ ОН, ТОТ САМЫЙ ХАРДКОД:
+        val INCLUDED_KM = 3.0
+        val totalKm = routeDistanceMeters / 1000.0
+        val billableKm = if (totalKm > INCLUDED_KM) totalKm - INCLUDED_KM else 0.0
+
+        availableTariffs.forEach { tariff ->
+            if (tariff.calculatedPrice != null && tariff.calculatedPrice!! > 0) {
+                tariffCustomPrices[tariff.id] = tariff.calculatedPrice!!
+            } else {
+                val localPrice = tariff.basePrice + (billableKm * tariff.pricePerKm)
+                tariffCustomPrices[tariff.id] = ceil(localPrice)
+            }
+        }
 
         // Заливаем список в адаптер
         tariffAdapter.submitList(availableTariffs, routeDistanceMeters)
@@ -4601,24 +4482,24 @@ private fun stopWaitingTimer() {
         // ЕДИНСТВЕННЫЙ И ЧИСТЫЙ БЛОК ОПРЕДЕЛЕНИЯ СТАТУСА ВЫБОРА
         if (selectedTariffItem == null) {
             // ПЕРВАЯ ЗАГРУЗКА: скроллим вверх ТОЛЬКО ОДИН РАЗ при открытии панели
-            tariffsRecyclerView.scrollToPosition(0) 
-            
-            val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) } 
+            tariffsRecyclerView.scrollToPosition(0)
+
+            val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) }
                 ?: availableTariffs.firstOrNull()
 
             if (defaultTariff != null) {
                 val finalPrice = tariffCustomPrices[defaultTariff.id] ?: defaultTariff.basePrice
-                
+
                 val item = TariffItem(
-                    tariff = defaultTariff, 
-                    priceString = String.format("%.0f", finalPrice), 
-                    priceValue = finalPrice, 
+                    tariff = defaultTariff,
+                    priceString = String.format("%.0f", finalPrice),
+                    priceValue = finalPrice,
                     addedValue = 0.0
-                ) 
-                
+                )
+
                 selectedTariffItem = item
                 tariffAdapter.setSelectedTariffId(defaultTariff.id)
-                
+
                 btnOrderTaxi.isEnabled = true
                 updateOrderButtonWithTime()
             }
@@ -4626,17 +4507,17 @@ private fun stopWaitingTimer() {
             // ОБНОВЛЕНИЕ ЦЕН ИЛИ КЛИК ПОЛЬЗОВАТЕЛЯ: скролл больше НЕ ТРОГАЕМ!
             val item = selectedTariffItem!!
             val newBasePrice = tariffCustomPrices[item.tariff.id]
-            
+
             if (newBasePrice != null) {
                 selectedTariffItem = item.copy(
                     priceValue = newBasePrice,
                     priceString = String.format("%.0f", newBasePrice)
                 )
             }
-            
+
             // Восстанавливаем подсветку выбранного тарифа в адаптере
             tariffAdapter.setSelectedTariffId(item.tariff.id)
-            
+
             btnOrderTaxi.isEnabled = true
             updateOrderButtonWithTime()
         }
@@ -4649,10 +4530,10 @@ private fun stopWaitingTimer() {
     private fun setLocationButtonAnchor(anchorId: Int) {
         val btnLocation = findViewById<View>(R.id.btn_recenter_location)
         val params = btnLocation.layoutParams as RelativeLayout.LayoutParams
-        
+
         params.removeRule(RelativeLayout.ABOVE)
         params.addRule(RelativeLayout.ABOVE, anchorId)
-        
+
         btnLocation.layoutParams = params
     }
 
@@ -4715,110 +4596,110 @@ private fun stopWaitingTimer() {
         viewModel.createOrder(request)
     }
     private fun showChangePriceDialog() {
-    val selectedItem = tariffAdapter.getSelectedTariff()
-    if (selectedItem == null) {
-        showToast("Спочатку оберіть тариф")
-        return
-    }
-
-    val currentTotalInAdapter = selectedItem.priceValue
-    val oldAddedValue = selectedItem.addedValue
-    val basePriceWithServices = currentTotalInAdapter - oldAddedValue
-
-    val minPrice = basePriceWithServices.toInt()
-    val maxPrice = (basePriceWithServices * 3).toInt()
-    
-    var currentPrice = (basePriceWithServices + oldAddedValue).toInt()
-
-    val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
-    val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
-    dialog.setContentView(view)
-    
-    // Умная настройка системных баров в зависимости от темы
-    dialog.window?.let { window ->
-        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-        window.statusBarColor = Color.TRANSPARENT 
-
-        // Проверяем, включена ли сейчас темная тема на устройстве
-        val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-
-        if (isNightMode) {
-            // ДЛЯ ТЕМНОЙ ТЕМЫ: Тотально черный бар и светлые иконки
-            window.navigationBarColor = ContextCompat.getColor(this, android.R.color.black)
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                var flags = window.decorView.systemUiVisibility
-                // Убираем флаги "светлого" фона, чтобы иконки стали белыми
-                flags = flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
-                flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-                window.decorView.systemUiVisibility = flags
-            }
-        } else {
-            // ДЛЯ СВЕТЛОЙ ТЕМЫ: Белый бар и темные иконки
-            window.navigationBarColor = ContextCompat.getColor(this, android.R.color.white)
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                var flags = window.decorView.systemUiVisibility
-                // Добавляем флаги "светлого" фона, чтобы иконки стали черными/серыми
-                flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-                flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                window.decorView.systemUiVisibility = flags
-            }
+        val selectedItem = tariffAdapter.getSelectedTariff()
+        if (selectedItem == null) {
+            showToast("Спочатку оберіть тариф")
+            return
         }
-    }
 
-    val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
-    val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
-    val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
-    val seekBar = view.findViewById<SeekBar>(R.id.seekbar_price)
-    val btnSave = view.findViewById<Button>(R.id.btn_save_price)
-    val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
+        val currentTotalInAdapter = selectedItem.priceValue
+        val oldAddedValue = selectedItem.addedValue
+        val basePriceWithServices = currentTotalInAdapter - oldAddedValue
 
-    val range = maxPrice - minPrice
-    seekBar.max = range
-    
-    fun updateUI() {
-        tvPrice.text = "$currentPrice ₴"
-        val progress = currentPrice - minPrice
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            seekBar.setProgress(progress, true)
-        } else {
-            seekBar.progress = progress
-        }
-    }
+        val minPrice = basePriceWithServices.toInt()
+        val maxPrice = (basePriceWithServices * 3).toInt()
 
-    updateUI()
+        var currentPrice = (basePriceWithServices + oldAddedValue).toInt()
 
-    seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-        override fun onProgressChanged(p0: SeekBar?, progress: Int, fromUser: Boolean) {
-            if (fromUser) {
-                currentPrice = minPrice + progress
-                tvPrice.text = "$currentPrice ₴"
+        val dialog = BottomSheetDialog(this, R.style.BottomSheetDialogTheme)
+        val view = layoutInflater.inflate(R.layout.dialog_change_price, null)
+        dialog.setContentView(view)
+
+        // Умная настройка системных баров в зависимости от темы
+        dialog.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.statusBarColor = Color.TRANSPARENT
+
+            // Проверяем, включена ли сейчас темная тема на устройстве
+            val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+            if (isNightMode) {
+                // ДЛЯ ТЕМНОЙ ТЕМЫ: Тотально черный бар и светлые иконки
+                window.navigationBarColor = ContextCompat.getColor(this, android.R.color.black)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    var flags = window.decorView.systemUiVisibility
+                    // Убираем флаги "светлого" фона, чтобы иконки стали белыми
+                    flags = flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
+                    flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                    window.decorView.systemUiVisibility = flags
+                }
+            } else {
+                // ДЛЯ СВЕТЛОЙ ТЕМЫ: Белый бар и темные иконки
+                window.navigationBarColor = ContextCompat.getColor(this, android.R.color.white)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    var flags = window.decorView.systemUiVisibility
+                    // Добавляем флаги "светлого" фона, чтобы иконки стали черными/серыми
+                    flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+                    flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    window.decorView.systemUiVisibility = flags
+                }
             }
         }
-        override fun onStartTrackingTouch(p0: SeekBar?) {}
-        override fun onStopTrackingTouch(p0: SeekBar?) {}
-    })
 
-    btnPlus.setOnClickListener {
-        if (currentPrice + 10 <= maxPrice) {
-            currentPrice += 10
-            updateUI()
-        } else {
-            currentPrice = maxPrice
-            updateUI()
-        }
-    }
+        val tvPrice = view.findViewById<TextView>(R.id.tv_dialog_price)
+        val btnMinus = view.findViewById<View>(R.id.btn_price_minus)
+        val btnPlus = view.findViewById<View>(R.id.btn_price_plus)
+        val seekBar = view.findViewById<SeekBar>(R.id.seekbar_price)
+        val btnSave = view.findViewById<Button>(R.id.btn_save_price)
+        val btnClose = view.findViewById<View>(R.id.btn_close_dialog)
 
-    btnMinus.setOnClickListener {
-        if (currentPrice - 10 >= minPrice) {
-            currentPrice -= 10
-            updateUI()
-        } else {
-            currentPrice = minPrice
-            updateUI()
+        val range = maxPrice - minPrice
+        seekBar.max = range
+
+        fun updateUI() {
+            tvPrice.text = "$currentPrice ₴"
+            val progress = currentPrice - minPrice
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                seekBar.setProgress(progress, true)
+            } else {
+                seekBar.progress = progress
+            }
         }
-    }
+
+        updateUI()
+
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(p0: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    currentPrice = minPrice + progress
+                    tvPrice.text = "$currentPrice ₴"
+                }
+            }
+            override fun onStartTrackingTouch(p0: SeekBar?) {}
+            override fun onStopTrackingTouch(p0: SeekBar?) {}
+        })
+
+        btnPlus.setOnClickListener {
+            if (currentPrice + 10 <= maxPrice) {
+                currentPrice += 10
+                updateUI()
+            } else {
+                currentPrice = maxPrice
+                updateUI()
+            }
+        }
+
+        btnMinus.setOnClickListener {
+            if (currentPrice - 10 >= minPrice) {
+                currentPrice -= 10
+                updateUI()
+            } else {
+                currentPrice = minPrice
+                updateUI()
+            }
+        }
 
         btnSave.setOnClickListener {
             val newAddedValue = (currentPrice - minPrice).toDouble()
@@ -4836,10 +4717,10 @@ private fun stopWaitingTimer() {
             dialog.dismiss()
         }
 
-    btnClose.setOnClickListener { dialog.dismiss() }
-    dialog.show()
-}
-    
+        btnClose.setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
+
     private fun cancelCurrentOrder() {
         val token = sessionManager.fetchAuthToken() ?: return
 
@@ -4867,7 +4748,7 @@ private fun stopWaitingTimer() {
             }
             override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
                 if (isFinishing || isDestroyed) return
-                
+
                 if (BuildConfig.DEBUG) {
                     android.util.Log.e("CancelOrder", "Network error", t)
                 }
@@ -4884,7 +4765,7 @@ private fun stopWaitingTimer() {
         val widthSpec = View.MeasureSpec.makeMeasureSpec(cardWidth, View.MeasureSpec.EXACTLY)
         val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         layoutExpandableDetails.measure(widthSpec, heightSpec)
-        
+
         maxDetailsHeight = layoutExpandableDetails.measuredHeight
         val startHeight = layoutExpandableDetails.height
         val targetHeight = if (expand) maxDetailsHeight else 0
@@ -4900,7 +4781,7 @@ private fun stopWaitingTimer() {
 
         val animator = ValueAnimator.ofInt(startHeight, targetHeight)
         orderDetailsAnimator = animator
-        
+
         animator.duration = 250
         animator.addUpdateListener { animation ->
             val h = animation.animatedValue as Int
@@ -4934,86 +4815,86 @@ private fun stopWaitingTimer() {
 
     // НОВИЙ МЕТОД: Малює красивий діалог
     private fun showCustomCancelDialog(reasons: List<CancellationReasonDto>) {
-    val dialog = Dialog(this)
-    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-    dialog.setContentView(R.layout.dialog_cancel_reason)
-    
-    // Робимо фон вікна прозорим, щоб спрацювали закруглення від CardView
-    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_cancel_reason)
 
-    val rgReasons = dialog.findViewById<android.widget.RadioGroup>(R.id.rg_cancel_reasons)
-    val btnConfirm = dialog.findViewById<android.widget.Button>(R.id.btn_confirm_cancel)
+        // Робимо фон вікна прозорим, щоб спрацювали закруглення від CardView
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
-    // --- НАЛАШТУВАННЯ КОЛЬОРУ ДЛЯ КРУЖЕЧКІВ ---
-    val yellowColor = androidx.core.content.ContextCompat.getColor(this, R.color.taxi_yellow)
-    val colorStateList = android.content.res.ColorStateList(
-        arrayOf(
-            intArrayOf(-android.R.attr.state_checked), // Стан: не обрано
-            intArrayOf(android.R.attr.state_checked)    // Стан: обрано
-        ),
-        intArrayOf(
-            android.graphics.Color.GRAY, // Сірий контур для неактивного стану
-            yellowColor                  // Ваш жовтий для активного стану
+        val rgReasons = dialog.findViewById<android.widget.RadioGroup>(R.id.rg_cancel_reasons)
+        val btnConfirm = dialog.findViewById<android.widget.Button>(R.id.btn_confirm_cancel)
+
+        // --- НАЛАШТУВАННЯ КОЛЬОРУ ДЛЯ КРУЖЕЧКІВ ---
+        val yellowColor = androidx.core.content.ContextCompat.getColor(this, R.color.taxi_yellow)
+        val colorStateList = android.content.res.ColorStateList(
+            arrayOf(
+                intArrayOf(-android.R.attr.state_checked), // Стан: не обрано
+                intArrayOf(android.R.attr.state_checked)    // Стан: обрано
+            ),
+            intArrayOf(
+                android.graphics.Color.GRAY, // Сірий контур для неактивного стану
+                yellowColor                  // Ваш жовтий для активного стану
+            )
         )
-    )
 
-    // Динамічно створюємо кнопки (RadioButton) для кожної причини
-    for ((index, reason) in reasons.withIndex()) {
-        val rb = android.widget.RadioButton(this)
-        rb.id = index // Встановлюємо ID як індекс у списку
-        rb.text = reason.reasonText
-        rb.textSize = 16f
-        rb.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
-        
-        // ЗАСТОСОВУЄМО КОЛІР ТІНТУ
-        rb.buttonTintList = colorStateList
-        
-        // Додаємо відступи між варіантами для краси
-        val params = android.widget.RadioGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        params.setMargins(0, 12, 0, 12)
-        rb.layoutParams = params
-        rb.setPadding(16, 0, 0, 0) // Відступ тексту від кружечка
+        // Динамічно створюємо кнопки (RadioButton) для кожної причини
+        for ((index, reason) in reasons.withIndex()) {
+            val rb = android.widget.RadioButton(this)
+            rb.id = index // Встановлюємо ID як індекс у списку
+            rb.text = reason.reasonText
+            rb.textSize = 16f
+            rb.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_primary))
 
-        rgReasons.addView(rb)
-    }
+            // ЗАСТОСОВУЄМО КОЛІР ТІНТУ
+            rb.buttonTintList = colorStateList
 
-    // За замовчуванням обираємо перший пункт (щоб кнопка підтвердити не відправляла null)
-    if (reasons.isNotEmpty()) {
-        rgReasons.check(0)
-    }
+            // Додаємо відступи між варіантами для краси
+            val params = android.widget.RadioGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            params.setMargins(0, 12, 0, 12)
+            rb.layoutParams = params
+            rb.setPadding(16, 0, 0, 0) // Відступ тексту від кружечка
 
-    // Обробка натискання на кнопку "Підтвердити"
-    btnConfirm.setOnClickListener {
-        // ДОДАНО: Миттєво згортаємо панель і прибираємо фон перед відправкою запиту!
-        animateOrderDetailsToState(false)
-
-        val checkedId = rgReasons.checkedRadioButtonId
-        if (checkedId != -1) {
-            // Оскільки ID дорівнює індексу масиву, легко дістаємо текст
-            val selectedReason = reasons[checkedId].reasonText
-            viewModel.cancelOrder(selectedReason)
-        } else {
-            viewModel.cancelOrder(null)
+            rgReasons.addView(rb)
         }
-        dialog.dismiss() // Закриваємо діалог
-    }
 
-    dialog.show()
-}
+        // За замовчуванням обираємо перший пункт (щоб кнопка підтвердити не відправляла null)
+        if (reasons.isNotEmpty()) {
+            rgReasons.check(0)
+        }
+
+        // Обробка натискання на кнопку "Підтвердити"
+        btnConfirm.setOnClickListener {
+            // ДОДАНО: Миттєво згортаємо панель і прибираємо фон перед відправкою запиту!
+            animateOrderDetailsToState(false)
+
+            val checkedId = rgReasons.checkedRadioButtonId
+            if (checkedId != -1) {
+                // Оскільки ID дорівнює індексу масиву, легко дістаємо текст
+                val selectedReason = reasons[checkedId].reasonText
+                viewModel.cancelOrder(selectedReason)
+            } else {
+                viewModel.cancelOrder(null)
+            }
+            dialog.dismiss() // Закриваємо діалог
+        }
+
+        dialog.show()
+    }
 
     private fun showActiveOrderPanel(order: TaxiOrderDto) {
-    viewModel.stopListeningNearbyDrivers(webSocketManager)
-    nearbyDriverMarkers.values.forEach { it.remove() }
-    nearbyDriverMarkers.clear()
-    // 1. Проверяем, была ли панель скрыта до этого
-    val isFirstShow = activeOrderCard.visibility != View.VISIBLE || ivMenuIcon.tag != "order_mode"
+        viewModel.stopListeningNearbyDrivers(webSocketManager)
+        nearbyDriverMarkers.values.forEach { it.remove() }
+        nearbyDriverMarkers.clear()
+        // 1. Проверяем, была ли панель скрыта до этого
+        val isFirstShow = activeOrderCard.visibility != View.VISIBLE || ivMenuIcon.tag != "order_mode"
 
-    findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
-    findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
+        findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
+        findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
         val isSearch = order.status == "REQUESTED" || order.status == "OFFERING" || order.status == "SCHEDULED"
         if (isSearch) {
             layoutDriverFoundState.visibility = View.GONE
@@ -5024,33 +4905,33 @@ private fun stopWaitingTimer() {
             tvDriverFirstName.text = ""
             tvCarDetailsSubtitle.text = ""
         }
-    activeOrderCard.visibility = View.VISIBLE
-    tariffsPanel.visibility = View.GONE
-    
-    // Вирішення 5: Приховуємо панель вводу А і Б, щоб не було накладання
-    creationPanelCard.visibility = View.GONE
-    addressPanel.visibility = View.GONE
+        activeOrderCard.visibility = View.VISIBLE
+        tariffsPanel.visibility = View.GONE
 
-    // Вирішення 3: Приховуємо кнопку "Моє місцезнаходження"
-    btnRecenter.visibility = View.GONE  
+        // Вирішення 5: Приховуємо панель вводу А і Б, щоб не було накладання
+        creationPanelCard.visibility = View.GONE
+        addressPanel.visibility = View.GONE
 
-    // ВСТАВЬ ЭТОТ ВАРИАНТ ВЗАМЕН УДАЛЕННОГО:
-ivMenuIcon.tag = "order_mode"
+        // Вирішення 3: Приховуємо кнопку "Моє місцезнаходження"
+        btnRecenter.visibility = View.GONE
 
-if (isFirstShow && order.status != "REQUESTED" && order.status != "OFFERING") {
+        // ВСТАВЬ ЭТОТ ВАРИАНТ ВЗАМЕН УДАЛЕННОГО:
+        ivMenuIcon.tag = "order_mode"
+
+        if (isFirstShow && order.status != "REQUESTED" && order.status != "OFFERING") {
             updateMapPadding(activeOrderCard, 0f, 20f)
         }
 
 // Вирішення 4: Робимо кнопку меню видимою і перетворюємо её на кнопку "Назад"
-btnMenu.visibility = View.VISIBLE
-ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
-val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
-ivMenuIcon.setColorFilter(adaptiveColor)
+        btnMenu.visibility = View.VISIBLE
+        ivMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
+        val adaptiveColor = ContextCompat.getColor(this, R.color.text_primary)
+        ivMenuIcon.setColorFilter(adaptiveColor)
 
-    try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
+        try { btnOpenPromo.visibility = View.GONE } catch (e: Exception) {}
 
-        tvActiveOrderPrice.text = String.format("%.0f ₴", order.price)
-        tvSearchOrderPrice.text = String.format("%.0f ₴", order.price)
+        tvActiveOrderPrice.text = String.format("%.0f ₴", order.effectiveClientPrice)
+        tvSearchOrderPrice.text = String.format("%.0f ₴", order.effectiveClientPrice)
         tvSearchTariffSubtitle.text = order.tariffName ?: "Стандарт"
         val tvPaymentText = findViewById<TextView>(R.id.tv_active_order_payment_text)
 
@@ -5069,71 +4950,71 @@ ivMenuIcon.setColorFilter(adaptiveColor)
             }
         }
 
-    // ==========================================
-    // НАЧАЛО ОБНОВЛЕННОГО БЛОКА: 2. Маршрут
-    // ==========================================
-    
-    // Находим главные TextView для адресов А и Б
-    findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
-    findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
+        // ==========================================
+        // НАЧАЛО ОБНОВЛЕННОГО БЛОКА: 2. Маршрут
+        // ==========================================
 
-    // Получаем контейнер как LinearLayout, чтобы динамически управлять вложенными элементами
-    val llRouteWaypoints = findViewById<LinearLayout>(R.id.ll_route_waypoints)
-    
-    // Обязательно очищаем контейнер от старых точек (чтобы адреса не дублировались при обновлении статуса заказа)
-    llRouteWaypoints.removeAllViews()
+        // Находим главные TextView для адресов А и Б
+        findViewById<TextView>(R.id.tv_order_route_origin).text = cleanAddress(order.fromAddress ?: "А")
+        findViewById<TextView>(R.id.tv_order_route_dest).text = cleanAddress(order.toAddress ?: "Б")
 
-    // Проверяем, пришел ли от сервера массив дополнительных остановок
-    if (!order.stops.isNullOrEmpty()) {
-        llRouteWaypoints.visibility = View.VISIBLE
-        
-        // Проходимся по каждой промежуточной точке маршрута
-        order.stops.forEach { stop ->
-            // Инфлейтим (надуваем) кастомный XML-шаблон для одной точки
-            val stopView = layoutInflater.inflate(R.layout.item_active_order_waypoint, llRouteWaypoints, false)
-            
-            // Находим TextView внутри шаблона и сетим туда чистый адрес без обрезаний
-            val tvAddress = stopView.findViewById<TextView>(R.id.tv_waypoint_address)
-            tvAddress.text = cleanAddress(stop.address)
-            
-            // Добавляем готовую строчку с адресом в наш вертикальный контейнер
-            llRouteWaypoints.addView(stopView)
+        // Получаем контейнер как LinearLayout, чтобы динамически управлять вложенными элементами
+        val llRouteWaypoints = findViewById<LinearLayout>(R.id.ll_route_waypoints)
+
+        // Обязательно очищаем контейнер от старых точек (чтобы адреса не дублировались при обновлении статуса заказа)
+        llRouteWaypoints.removeAllViews()
+
+        // Проверяем, пришел ли от сервера массив дополнительных остановок
+        if (!order.stops.isNullOrEmpty()) {
+            llRouteWaypoints.visibility = View.VISIBLE
+
+            // Проходимся по каждой промежуточной точке маршрута
+            order.stops.forEach { stop ->
+                // Инфлейтим (надуваем) кастомный XML-шаблон для одной точки
+                val stopView = layoutInflater.inflate(R.layout.item_active_order_waypoint, llRouteWaypoints, false)
+
+                // Находим TextView внутри шаблона и сетим туда чистый адрес без обрезаний
+                val tvAddress = stopView.findViewById<TextView>(R.id.tv_waypoint_address)
+                tvAddress.text = cleanAddress(stop.address)
+
+                // Добавляем готовую строчку с адресом в наш вертикальный контейнер
+                llRouteWaypoints.addView(stopView)
+            }
+        } else {
+            // Если дополнительных остановок в заказе нет, полностью скрываем контейнер
+            llRouteWaypoints.visibility = View.GONE
         }
-    } else {
-        // Если дополнительных остановок в заказе нет, полностью скрываем контейнер
-        llRouteWaypoints.visibility = View.GONE
-    }
-    
-    // ==========================================
-    // КОНЕЦ ОБНОВЛЕННОГО БЛОКА
-    // ==========================================
 
-    updateActiveOrderTariffIcon(order)
+        // ==========================================
+        // КОНЕЦ ОБНОВЛЕННОГО БЛОКА
+        // ==========================================
 
-    // Доп. услуги
-    if (order.services.isNotEmpty()) {
-        tvOrderServices.visibility = View.VISIBLE
-        tvOrderServices.text = "+ " + order.services.joinToString(", ") { it.name }
-    } else {
-        tvOrderServices.visibility = View.GONE
-    }
+        updateActiveOrderTariffIcon(order)
 
-    // Комментарий
-    val tvCommentTitle = findViewById<View>(R.id.tv_comment_title)
-    val layoutOrderCommentCard = findViewById<View>(R.id.layout_order_comment_card)
-    val tvOrderCommentText = findViewById<TextView>(R.id.tv_order_comment)
+        // Доп. услуги
+        if (order.services.isNotEmpty()) {
+            tvOrderServices.visibility = View.VISIBLE
+            tvOrderServices.text = "+ " + order.services.joinToString(", ") { it.name }
+        } else {
+            tvOrderServices.visibility = View.GONE
+        }
 
-    if (!order.comment.isNullOrBlank()) {
-        tvCommentTitle.visibility = View.VISIBLE
-        layoutOrderCommentCard.visibility = View.VISIBLE
-        tvOrderCommentText.text = order.comment 
-    } else {
-        tvCommentTitle.visibility = View.GONE
-        layoutOrderCommentCard.visibility = View.GONE
-    }
+        // Комментарий
+        val tvCommentTitle = findViewById<View>(R.id.tv_comment_title)
+        val layoutOrderCommentCard = findViewById<View>(R.id.layout_order_comment_card)
+        val tvOrderCommentText = findViewById<TextView>(R.id.tv_order_comment)
+
+        if (!order.comment.isNullOrBlank()) {
+            tvCommentTitle.visibility = View.VISIBLE
+            layoutOrderCommentCard.visibility = View.VISIBLE
+            tvOrderCommentText.text = order.comment
+        } else {
+            tvCommentTitle.visibility = View.GONE
+            layoutOrderCommentCard.visibility = View.GONE
+        }
         stopPeriodicNearbyDriversRefresh()
-    updateStatusUI(order)
-}
+        updateStatusUI(order)
+    }
     private fun drawPickupRoute(polylineStr: String?) {
         if (polylineStr.isNullOrEmpty() || mMap == null) return
         try {
@@ -5198,7 +5079,7 @@ ivMenuIcon.setColorFilter(adaptiveColor)
         params.bottomMargin = convertDpToPixel(bottomMarginDp).toInt()
         btnRoute.layoutParams = params
     }
-private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
+    private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         if (!::layoutExpandableDetails.isInitialized) return
 
         val ivOrderTariffIcon = layoutExpandableDetails.findViewById<ImageView>(R.id.iv_order_tariff_icon)
@@ -5234,7 +5115,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             ivOrderTariffIcon.setImageResource(R.drawable.ic_taxi_model_standard)
         }
     }
-    
+
     private fun checkOrderStatus() {
         // Оставлен как заглушка, если вдруг где-то вызывается,
         // но основная логика теперь в ViewModel
@@ -5256,7 +5137,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
         // 2. Синхронно скрываем/показываем иконки И текстовые подписи
         val componentVisibility = if (isLoading && !isOrdering) View.INVISIBLE else View.VISIBLE
-        
+
         // Гасим/проявляем иконки
         findViewById<View>(R.id.iv_comment_icon).visibility = componentVisibility
         findViewById<View>(R.id.iv_payment_icon).visibility = componentVisibility
@@ -5279,7 +5160,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             paymentText.visibility = View.VISIBLE
             paymentText.tag = null
         }
-        
+
         // 4. Блокируем клики на время загрузки
         findViewById<View>(R.id.btn_open_comment).isEnabled = !isLoading
         findViewById<View>(R.id.btn_open_payment).isEnabled = !isLoading
@@ -5297,7 +5178,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             val end = route[i + 1]
 
             val pointOnSegment = findNearestPointOnSegment(rawLocation, start, end)
-            
+
             val distance = SphericalUtil.computeDistanceBetween(rawLocation, pointOnSegment)
 
             if (distance < minDistance) {
@@ -5357,75 +5238,75 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
     }
 
     private fun showRatingDialog(orderId: String, driverName: String?) { // <-- ИЗМЕНИЛИ НА String
-    if (isRatingDialogVisible) return
-    isRatingDialogVisible = true 
+        if (isRatingDialogVisible) return
+        isRatingDialogVisible = true
 
-    val dialog = Dialog(this)
-    dialog.requestWindowFeature(Window.FEATURE_NO_TITLE) 
-    dialog.setContentView(R.layout.dialog_rate_driver)
-    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-    dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    dialog.setCancelable(false)
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_rate_driver)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.setCancelable(false)
 
-    // 🛡️ Дозволяємо скасування кнопкою "Назад", але забороняємо випадковий клік повз діалог
-    dialog.setCancelable(true)
-    dialog.setCanceledOnTouchOutside(false)
-    dialog.setOnCancelListener {
-        dialog.dismiss()
-        isRatingDialogVisible = false
-        autoRateAndDismissCompletedOrder(orderId)
-    }
+        // 🛡️ Дозволяємо скасування кнопкою "Назад", але забороняємо випадковий клік повз діалог
+        dialog.setCancelable(true)
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnCancelListener {
+            dialog.dismiss()
+            isRatingDialogVisible = false
+            autoRateAndDismissCompletedOrder(orderId)
+        }
 
-    val etComment = dialog.findViewById<EditText>(R.id.et_comment)
-    val btnSubmit = dialog.findViewById<Button>(R.id.btn_submit_rating)
-    
-    val stars = listOf(
-        dialog.findViewById<ImageView>(R.id.star_1),
-        dialog.findViewById<ImageView>(R.id.star_2),
-        dialog.findViewById<ImageView>(R.id.star_3),
-        dialog.findViewById<ImageView>(R.id.star_4),
-        dialog.findViewById<ImageView>(R.id.star_5)
-    )
+        val etComment = dialog.findViewById<EditText>(R.id.et_comment)
+        val btnSubmit = dialog.findViewById<Button>(R.id.btn_submit_rating)
 
-    var currentRating = 0 
+        val stars = listOf(
+            dialog.findViewById<ImageView>(R.id.star_1),
+            dialog.findViewById<ImageView>(R.id.star_2),
+            dialog.findViewById<ImageView>(R.id.star_3),
+            dialog.findViewById<ImageView>(R.id.star_4),
+            dialog.findViewById<ImageView>(R.id.star_5)
+        )
 
-    // Дістаємо твій колір taxi_yellow з ресурсів
-    val activeStarColor = ContextCompat.getColor(this, R.color.taxi_yellow)
-    val inactiveStarColor = Color.parseColor("#808080") // Залишаємо сірий для неактивних
+        var currentRating = 0
 
-    stars.forEachIndexed { index, imageView ->
-        imageView.setOnClickListener {
-            currentRating = index + 1 
-            
-            stars.forEachIndexed { i, star ->
-                if (i < currentRating) {
-                    star.setColorFilter(activeStarColor) 
-                } else {
-                    star.setColorFilter(inactiveStarColor) 
+        // Дістаємо твій колір taxi_yellow з ресурсів
+        val activeStarColor = ContextCompat.getColor(this, R.color.taxi_yellow)
+        val inactiveStarColor = Color.parseColor("#808080") // Залишаємо сірий для неактивних
+
+        stars.forEachIndexed { index, imageView ->
+            imageView.setOnClickListener {
+                currentRating = index + 1
+
+                stars.forEachIndexed { i, star ->
+                    if (i < currentRating) {
+                        star.setColorFilter(activeStarColor)
+                    } else {
+                        star.setColorFilter(inactiveStarColor)
+                    }
                 }
             }
         }
-    }
 
-    btnSubmit.setOnClickListener {
-        if (currentRating == 0) {
-            showToast("Будь ласка, поставте оцінку")
-            return@setOnClickListener
+        btnSubmit.setOnClickListener {
+            if (currentRating == 0) {
+                showToast("Будь ласка, поставте оцінку")
+                return@setOnClickListener
+            }
+
+            btnSubmit.isEnabled = false
+            btnSubmit.text = "Відправка..."
+
+            val comment = etComment.text.toString()
+            sendRating(orderId, currentRating, comment, dialog)
         }
 
-        btnSubmit.isEnabled = false
-        btnSubmit.text = "Відправка..."
+        dialog.setOnDismissListener {
+            isRatingDialogVisible = false
+        }
 
-        val comment = etComment.text.toString()
-        sendRating(orderId, currentRating, comment, dialog)
+        dialog.show()
     }
-
-    dialog.setOnDismissListener {
-        isRatingDialogVisible = false
-    }
-
-    dialog.show()
-}
 
     private fun sendRating(orderId: String, score: Int, comment: String, dialog: Dialog) { // <-- ИЗМЕНИЛИ НА String
         val token = sessionManager.fetchAuthToken()
@@ -5553,7 +5434,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 orderStatusText.text = "Заплановано"
                 tvSearchTariffSubtitle.text = order.tariffName ?: "Стандарт"
                 tvSearchTariffSubtitle.visibility = View.VISIBLE
-                tvSearchOrderPrice.text = String.format("%.0f ₴", order.price)
+                tvSearchOrderPrice.text = String.format("%.0f ₴", order.effectiveClientPrice)
                 stopStatusBlinking()
 
                 layoutSearchControls.visibility = View.VISIBLE
@@ -5584,7 +5465,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 orderStatusText.text = "Пошук вільного авто"
                 tvSearchTariffSubtitle.text = order.tariffName ?: "Стандарт"
                 tvSearchTariffSubtitle.visibility = View.VISIBLE
-                tvSearchOrderPrice.text = String.format("%.0f ₴", order.price)
+                tvSearchOrderPrice.text = String.format("%.0f ₴", order.effectiveClientPrice)
                 startStatusBlinking()
                 animatedBorderHeader.startBorderAnimation()
 
@@ -5612,7 +5493,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 )
 
                 // Анимация радара на Точке А
-                if (!isRadarAnimationRunning) {
+                if (!searchRadarController.isRunning) {
                     startRadarAnimation(originLoc)
                 }
 
@@ -5702,7 +5583,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
 
-                
+
                 stopStatusBlinking()
 
                 // Переключаем шапку на стиль с прибытием
@@ -5779,7 +5660,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
 
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
-                
+
                 stopStatusBlinking()
 
                 layoutHeaderSearchContent.visibility = View.GONE
@@ -5837,7 +5718,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
 
-                
+
                 stopStatusBlinking()
 
                 layoutHeaderSearchContent.visibility = View.GONE
@@ -5988,7 +5869,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 stopWaitingTimer()
 
                 layoutPaymentCompleted.visibility = View.VISIBLE
-                tvFinalPaymentPrice.text = String.format("%.0f ₴", order.price)
+                tvFinalPaymentPrice.text = String.format("%.0f ₴", order.effectiveClientPrice)
 
                 val targetBottomPaddingPx = convertDpToPixel(20f).toInt()
                 layoutPaymentCompleted.setPadding(
@@ -6108,36 +5989,23 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         animateMapPadding(fromHeight, toHeight, recenterMap)
     }
 
-    // ➕ Додати методи в HomeActivity.kt:
     private fun checkAndScheduleBoostPrompt(order: TaxiOrderDto) {
-        if (viewModel.isBoostPromptShown) return
-
-        stopBoostTimer()
-
-        val createdAtStr = order.createdAt ?: return
-        val createdTime = try {
-            val cleanTime = createdAtStr.substringBefore(".").substringBefore("Z")
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).parse(cleanTime)?.time ?: return
-        } catch (e: Exception) { return }
-
-        val elapsedSeconds = ((System.currentTimeMillis() - createdTime) / 1000).toInt()
-        val targetDelaySeconds = 180 - elapsedSeconds // 3 хвилини = 180 сек
-
-        if (targetDelaySeconds <= 0) {
-            showBoostPriceDialog()
-        } else {
-            boostRunnable = Runnable {
-                if (!isFinishing && !isDestroyed && (viewModel.activeOrder.value?.status == "REQUESTED" || viewModel.activeOrder.value?.status == "OFFERING")) {
-                    showBoostPriceDialog()
-                }
-            }
-            boostTimerHandler.postDelayed(boostRunnable!!, (targetDelaySeconds * 1000).toLong())
-        }
+        if (!::orderTimersController.isInitialized) return
+        orderTimersController.checkAndScheduleBoostPrompt(
+            order = order,
+            isBoostPromptShown = viewModel.isBoostPromptShown,
+            canShowBoostNow = {
+                !isFinishing && !isDestroyed &&
+                        (viewModel.activeOrder.value?.status == "REQUESTED" || viewModel.activeOrder.value?.status == "OFFERING")
+            },
+            onTriggerBoostDialog = { showBoostPriceDialog() }
+        )
     }
 
     private fun stopBoostTimer() {
-        boostRunnable?.let { boostTimerHandler.removeCallbacks(it) }
-        boostRunnable = null
+        if (::orderTimersController.isInitialized) {
+            orderTimersController.stopBoostTimer()
+        }
         boostDialog?.dismiss()
         boostDialog = null
     }
@@ -6278,7 +6146,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 }
 
                 var panelHeight = bottomPanel.height
-                
+
                 // Если система еще не построила кадр и высота равна 0, принудительно измеряем панель программно
                 if (panelHeight == 0) {
                     val widthSpec = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
@@ -6332,11 +6200,11 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
                 if (::pinContainer.isInitialized) {
                     if (bottomPanel.id == R.id.bottom_sheet_card || bottomPanel.id == R.id.layout_map_picker_panel) {
                         val shiftY = (totalBottomPadding - topPadding) / 2f
-                        
+
                         // Плавное скольжение пина, которое идеально синхронизируется с инерцией карты Google
                         pinContainer.animate()
                             .translationY(-shiftY)
-                            .setDuration(200) 
+                            .setDuration(200)
                             .start()
                     } else {
                         // Возвращаем пин в геометрический центр экрана при переходе на другие экраны
@@ -6510,7 +6378,7 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
         setIntent(intent)
 
         val savedId = sessionManager.fetchActiveOrderId()
-        if (!savedId.isNullOrEmpty()) { 
+        if (!savedId.isNullOrEmpty()) {
             this@HomeActivity.activeOrderId = savedId
             viewModel.activeOrderId = savedId
             viewModel.checkOrderStatusOnce(savedId)
@@ -6576,17 +6444,17 @@ private fun updateActiveOrderTariffIcon(order: TaxiOrderDto) {
             }
         }
     }
-    
+
     private fun resetUI() {
         tariffCustomPrices.clear()
         tariffAdapter.clearCustomPrices()
     }
-    
-    private fun showCitySelectorDialog() { 
+
+    private fun showCitySelectorDialog() {
         val intent = Intent(this, CityPickerActivity::class.java)
-        cityPickerLauncher.launch(intent) 
+        cityPickerLauncher.launch(intent)
     }
-    
+
     override fun onCreateOptionsMenu(menu: Menu?): Boolean { return true }
     override fun onOptionsItemSelected(item: MenuItem): Boolean { return true }
 }

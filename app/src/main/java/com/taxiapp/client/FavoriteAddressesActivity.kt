@@ -1,52 +1,57 @@
 package com.taxiapp.client
 
 import android.app.Activity
-import android.content.Intent
-import android.os.Bundle
-import android.view.View
-import android.widget.ImageView
 import android.app.Dialog
-import com.google.android.gms.maps.GoogleMap
-import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.Button
-import android.widget.LinearLayout
+import android.content.Intent
+import android.graphics.Color
+import android.location.Geocoder
+import android.os.Bundle
+import android.text.TextUtils
 import android.view.Gravity
-import android.view.animation.BounceInterpolator
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.BounceInterpolator
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.cardview.widget.CardView
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import android.view.WindowManager
-import android.graphics.Color
-import android.text.TextUtils
-import androidx.cardview.widget.CardView
-import com.google.android.gms.maps.MapView
-import com.google.android.gms.maps.CameraUpdateFactory
 import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.android.libraries.places.api.model.Place
+import com.taxiapp.client.utils.AddressUtils
+import com.taxiapp.client.utils.SessionManager
+import com.taxiapp.client.utils.ViewUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.libraries.places.api.model.Place
-import com.taxiapp.client.utils.SessionManager
-import com.taxiapp.client.utils.ViewUtils
 
 class FavoriteAddressesActivity : BaseActivity() {
 
     private lateinit var sessionManager: SessionManager
 
-    // UI
     private lateinit var tvHomeTitle: TextView
     private lateinit var tvHomeAddress: TextView
     private lateinit var tvWorkTitle: TextView
     private lateinit var tvWorkAddress: TextView
 
-    // Режим вибору (щоб знати, що ми зараз редагуємо)
     private var isEditingHome = true
+    private var activeMapDialog: Dialog? = null
+    private var activeMapView: MapView? = null
+    private var geocodeJob: Job? = null
 
     private val addressPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
@@ -66,7 +71,11 @@ class FavoriteAddressesActivity : BaseActivity() {
     }
 
     private fun showMapPickerDialog() {
+        cleanupMapDialog()
+
         val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        activeMapDialog = dialog
+
         val density = resources.displayMetrics.density
         val dp = { value: Int -> (value * density).toInt() }
 
@@ -93,13 +102,12 @@ class FavoriteAddressesActivity : BaseActivity() {
             clipToPadding = false
         }
 
-        // 1. Google Map
         val mapView = MapView(this).apply {
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
+        activeMapView = mapView
         rootLayout.addView(mapView)
 
-        // 2. Pin Container
         val pinContainer = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
             clipChildren = false
@@ -113,7 +121,7 @@ class FavoriteAddressesActivity : BaseActivity() {
         }
         pinContainer.addView(pinShadow)
 
-        val centerPin = androidx.appcompat.widget.AppCompatImageView(this).apply {
+        val centerPin = AppCompatImageView(this).apply {
             layoutParams = FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER)
             setImageResource(R.drawable.ic_avatar_custom)
             translationY = -32f * density
@@ -123,7 +131,6 @@ class FavoriteAddressesActivity : BaseActivity() {
         pinContainer.addView(centerPin)
         rootLayout.addView(pinContainer)
 
-        // 3. Кнопка "Назад" (ФИКС: Теперь возвращает в текстовый ввод адреса)
         val btnBackCard = CardView(this).apply {
             layoutParams = FrameLayout.LayoutParams(dp(48), dp(48)).apply {
                 setMargins(dp(16), dp(50), 0, 0)
@@ -143,7 +150,6 @@ class FavoriteAddressesActivity : BaseActivity() {
         btnBackCard.addView(ivBackIcon)
 
         btnBackCard.setOnClickListener {
-            // Закрываем карту и перенаправляем обратно в экран поиска адреса с сохранением режима (Дом/Робота)
             val intent = Intent(this@FavoriteAddressesActivity, AddressPickerActivity::class.java).apply {
                 if (isEditingHome) {
                     putExtra(AddressPickerActivity.EXTRA_PICKER_MODE, AddressPickerActivity.MODE_SAVE_HOME)
@@ -163,7 +169,6 @@ class FavoriteAddressesActivity : BaseActivity() {
         }
         rootLayout.addView(btnBackCard)
 
-        // 4. Нижняя панель адреса
         val bottomPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(180), Gravity.BOTTOM)
@@ -191,7 +196,7 @@ class FavoriteAddressesActivity : BaseActivity() {
             text = getString(R.string.map_searching_address)
             textSize = 18f
             setTextColor(getColor(R.color.text_primary))
-            typeface = fontMontserratBold // Оставляем только нативный Montserrat Bold
+            typeface = fontMontserratBold
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -201,7 +206,6 @@ class FavoriteAddressesActivity : BaseActivity() {
         textContainer.addView(tvAddress)
         bottomPanel.addView(textContainer)
 
-        // Кнопка подтверждения
         val btnConfirmContainer = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)).apply {
                 topMargin = dp(8)
@@ -214,8 +218,8 @@ class FavoriteAddressesActivity : BaseActivity() {
             text = getString(R.string.btn_confirm)
             isAllCaps = false
             textSize = 18f
-            letterSpacing = 0.05f // Оставляем фирменное растяжение букв
-            typeface = fontMontserrat // Оставляем только нативный Montserrat Bold
+            letterSpacing = 0.05f
+            typeface = fontMontserrat
             setTextColor(Color.parseColor("#454754"))
             setBackgroundColor(Color.TRANSPARENT)
             stateListAnimator = null
@@ -227,19 +231,30 @@ class FavoriteAddressesActivity : BaseActivity() {
 
         dialog.setContentView(rootLayout)
 
+        // Обов'язкове звільнення ресурсів Google MapView при закритті діалогу (фікс витоку пам'яті)
+        dialog.setOnDismissListener {
+            geocodeJob?.cancel()
+            try {
+                mapView.onPause()
+                mapView.onStop()
+                mapView.onDestroy()
+            } catch (_: Exception) {}
+            if (activeMapView === mapView) activeMapView = null
+            if (activeMapDialog === dialog) activeMapDialog = null
+        }
+
         mapView.onCreate(null)
+        mapView.onStart()
         mapView.onResume()
         mapView.getMapAsync { googleMap ->
             if (sessionManager.isDarkMode()) {
-                try { googleMap.setMapStyle(com.google.android.gms.maps.model.MapStyleOptions.loadRawResourceStyle(this, R.raw.map_style_dark)) } catch (e: Exception) {}
+                try { googleMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(this, R.raw.map_style_dark)) } catch (_: Exception) {}
             } else {
-                try { googleMap.setMapStyle(com.google.android.gms.maps.model.MapStyleOptions.loadRawResourceStyle(this, R.raw.map_style_standard)) } catch (e: Exception) {}
+                try { googleMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(this, R.raw.map_style_standard)) } catch (_: Exception) {}
             }
 
             googleMap.uiSettings.isZoomControlsEnabled = false
             googleMap.uiSettings.isMyLocationButtonEnabled = false
-
-            // ФИКС: Сдвигаем область карты вверх на высоту панели, чтобы логотип Google закрепился на границе блока
             googleMap.setPadding(0, 0, 0, dp(180))
 
             val currentCity = sessionManager.fetchUserCity()
@@ -251,6 +266,7 @@ class FavoriteAddressesActivity : BaseActivity() {
 
             googleMap.setOnCameraMoveStartedListener { reason ->
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+                    geocodeJob?.cancel()
                     tvAddress.text = getString(R.string.map_searching_address)
 
                     centerPin.animate().cancel()
@@ -290,18 +306,20 @@ class FavoriteAddressesActivity : BaseActivity() {
                     .setDuration(250)
                     .start()
 
-                lifecycleScope.launch(Dispatchers.IO) {
+                geocodeJob?.cancel()
+                geocodeJob = lifecycleScope.launch(Dispatchers.IO) {
                     val addressResult = try {
-                        val geocoder = android.location.Geocoder(this@FavoriteAddressesActivity, Locale("uk", "UA"))
+                        val lang = sessionManager.getLanguage()
+                        val geocoder = Geocoder(this@FavoriteAddressesActivity, Locale(lang))
                         @Suppress("DEPRECATION")
                         val addresses = geocoder.getFromLocation(target.latitude, target.longitude, 1)
                         if (!addresses.isNullOrEmpty()) {
-                            cleanAddress(addresses[0].getAddressLine(0))
+                            AddressUtils.formatAddress(addresses[0].getAddressLine(0))
                         } else null
                     } catch (e: Exception) { null }
 
                     withContext(Dispatchers.Main) {
-                        tvAddress.text = addressResult ?: "Точка на карті"
+                        tvAddress.text = addressResult?.takeIf { it.isNotBlank() } ?: getString(R.string.point_on_map)
                     }
                 }
             }
@@ -316,6 +334,24 @@ class FavoriteAddressesActivity : BaseActivity() {
         }
 
         dialog.show()
+    }
+
+    private fun cleanupMapDialog() {
+        geocodeJob?.cancel()
+        activeMapView?.let { mv ->
+            try {
+                mv.onPause()
+                mv.onStop()
+                mv.onDestroy()
+            } catch (_: Exception) {}
+        }
+        activeMapView = null
+        activeMapDialog?.let { dlg ->
+            if (dlg.isShowing) {
+                try { dlg.dismiss() } catch (_: Exception) {}
+            }
+        }
+        activeMapDialog = null
     }
 
     private fun saveAndUpdateAddress(name: String?, lat: Double, lng: Double) {
@@ -335,7 +371,7 @@ class FavoriteAddressesActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try { ViewUtils.makeImmersive(this) } catch (e: Exception) {}
+        try { ViewUtils.makeImmersive(this) } catch (_: Exception) {}
         setContentView(R.layout.activity_favorite_addresses)
 
         sessionManager = SessionManager(applicationContext)
@@ -345,16 +381,13 @@ class FavoriteAddressesActivity : BaseActivity() {
         tvWorkTitle = findViewById(R.id.tv_work_title)
         tvWorkAddress = findViewById(R.id.tv_work_address)
 
-        // Кнопка Назад
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
 
-        // Клік ДІМ
         findViewById<View>(R.id.card_home).setOnClickListener {
             isEditingHome = true
             openPicker()
         }
 
-        // Клік РОБОТА
         findViewById<View>(R.id.card_work).setOnClickListener {
             isEditingHome = false
             openPicker()
@@ -363,33 +396,32 @@ class FavoriteAddressesActivity : BaseActivity() {
         updateUI()
     }
 
+    override fun onDestroy() {
+        cleanupMapDialog()
+        super.onDestroy()
+    }
+
     private fun updateUI() {
         val home = sessionManager.getHomeAddress()
         val work = sessionManager.getWorkAddress()
 
-        // --- ДІМ ---
         if (home != null) {
             tvHomeTitle.text = "Дім"
-            tvHomeAddress.text = cleanAddress(home.name ?: "")
-            // Если адрес уже добавлен, пусть будет text_secondary (он хорошо читается)
+            tvHomeAddress.text = AddressUtils.formatAddress(home.name ?: "")
             tvHomeAddress.setTextColor(getColor(R.color.text_secondary))
         } else {
-            tvHomeTitle.text = "Додати дім"
-            tvHomeAddress.text = "Вкажіть адресу"
-            // МЕНЯЕМ ЦВЕТ ПОДСКАЗКИ НА text_hint
+            tvHomeTitle.text = getString(R.string.title_add_home)
+            tvHomeAddress.text = getString(R.string.hint_provide_address)
             tvHomeAddress.setTextColor(getColor(R.color.text_hint))
         }
 
-        // --- РОБОТА ---
         if (work != null) {
             tvWorkTitle.text = "Робота"
-            tvWorkAddress.text = cleanAddress(work.name ?: "")
-            // Если адрес уже добавлен
+            tvWorkAddress.text = AddressUtils.formatAddress(work.name ?: "")
             tvWorkAddress.setTextColor(getColor(R.color.text_secondary))
         } else {
-            tvWorkTitle.text = "Додати роботу"
-            tvWorkAddress.text = "Вкажіть адресу"
-            // МЕНЯЕМ ЦВЕТ ПОДСКАЗКИ НА text_hint
+            tvWorkTitle.text = getString(R.string.title_add_work)
+            tvWorkAddress.text = getString(R.string.hint_provide_address)
             tvWorkAddress.setTextColor(getColor(R.color.text_hint))
         }
     }
@@ -397,8 +429,6 @@ class FavoriteAddressesActivity : BaseActivity() {
     private fun openPicker() {
         val intent = Intent(this, AddressPickerActivity::class.java)
 
-        // --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
-        // Передаем правильный режим
         if (isEditingHome) {
             intent.putExtra(AddressPickerActivity.EXTRA_PICKER_MODE, AddressPickerActivity.MODE_SAVE_HOME)
         } else {
@@ -414,14 +444,5 @@ class FavoriteAddressesActivity : BaseActivity() {
         }
 
         addressPickerLauncher.launch(intent)
-    }
-
-    // Функція очищення (дубльована, але це найнадійніше)
-    private fun cleanAddress(fullAddress: String): String {
-        var result = fullAddress
-        val removeList = listOf(", Україна", "Україна", ", Ukraine", "Ukraine", ", UA", "UA", ", Київ", "Київ", ", Львів", "Львів", ", Одеса", "Одеса", ", 01000", ", 02000")
-        for (word in removeList) { result = result.replace(word, "", ignoreCase = true) }
-        result = result.replace(Regex(",\\s?\\d{5}"), "")
-        return result.trim().removeSuffix(",").trim()
     }
 }

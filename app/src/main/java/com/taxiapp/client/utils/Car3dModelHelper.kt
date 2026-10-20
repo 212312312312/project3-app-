@@ -8,6 +8,23 @@ import com.taxiapp.client.R
 
 object Car3dModelHelper {
 
+    @Volatile
+    private var cachedAssetsList: Set<String>? = null
+
+    private fun getAssetsSet(context: Context): Set<String> {
+        cachedAssetsList?.let { return it }
+        synchronized(this) {
+            cachedAssetsList?.let { return it }
+            val loaded = try {
+                context.applicationContext.assets.list("cars_3d")?.toSet() ?: emptySet()
+            } catch (e: Exception) {
+                emptySet()
+            }
+            cachedAssetsList = loaded
+            return loaded
+        }
+    }
+
     fun bindCar3dImage(
         context: Context,
         imageView: ImageView,
@@ -17,26 +34,21 @@ object Car3dModelHelper {
         val type = (visualTypeRaw ?: "STANDARD").trim().lowercase()
         val color = (colorKeyRaw ?: "WHITE").trim().lowercase()
 
-        val assetsList = try {
-            context.assets.list("cars_3d")?.toSet() ?: emptySet()
-        } catch (e: Exception) {
-            emptySet()
-        }
+        val assetsList = getAssetsSet(context)
 
-        // 1. Ищем точное совпадение: car_3d_business_blue.webp или business_blue.webp
         val targetFileName = when {
             "car_3d_${type}_${color}.webp" in assetsList -> "car_3d_${type}_${color}.webp"
             "${type}_${color}.webp" in assetsList -> "${type}_${color}.webp"
-            // 2. Если класса нет (например, business еще не залит) — берем standard в цвете авто!
             "car_3d_standard_${color}.webp" in assetsList -> "car_3d_standard_${color}.webp"
             "standard_${color}.webp" in assetsList -> "standard_${color}.webp"
-            // 3. Если и этого цвета нет — берем белый standard
             "car_3d_standard_white.webp" in assetsList -> "car_3d_standard_white.webp"
             "standard_white.webp" in assetsList -> "standard_white.webp"
             else -> null
         }
 
-        Log.d("CAR_3D_DEBUG", "🚗 Запрос: type='$type', color='$color' -> Выбран файл: $targetFileName")
+        if (com.taxiapp.client.BuildConfig.DEBUG) {
+            Log.d("CAR_3D_DEBUG", "🚗 Запрос: type='$type', color='$color' -> Выбран файл: $targetFileName")
+        }
 
         if (targetFileName != null) {
             val assetUrl = "file:///android_asset/cars_3d/$targetFileName"

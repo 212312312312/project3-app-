@@ -5,9 +5,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
@@ -23,15 +23,11 @@ class HelpTariffsActivity : BaseActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var sessionManager: SessionManager
+    private var progressBar: ProgressBar? = null
 
-    // Текстові поля для деталей (знизу екрану)
     private lateinit var tvPriceBase: TextView
     private lateinit var tvPriceKm: TextView
     private lateinit var tvPriceMin: TextView
-
-    // Налаштування сервера
-    private val SERVER_IP = "192.168.0.107" // Твій актуальний IP
-    private val SERVER_PORT = "8080"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +39,7 @@ class HelpTariffsActivity : BaseActivity() {
 
         findViewById<View>(R.id.btn_back).setOnClickListener { finish() }
 
+        progressBar = findViewById(R.id.progressBar)
         recyclerView = findViewById(R.id.rv_tariffs)
         recyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
@@ -54,18 +51,24 @@ class HelpTariffsActivity : BaseActivity() {
     }
 
     private fun loadTariffs() {
-        // Вызов очищен от token
-        ApiClient.instance.getTariffs().enqueue(object : Callback<List<CarTariffDto>> {
+        progressBar?.visibility = View.VISIBLE
+
+        ApiClient.instance.getActiveTariffs().enqueue(object : Callback<List<CarTariffDto>> {
             override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
+                if (isFinishing || isDestroyed) return
+                progressBar?.visibility = View.GONE
+
                 if (response.isSuccessful) {
                     val tariffs = response.body() ?: emptyList()
-                    // ... твой код отображения тарифов (настройка адаптера) ...
+                    setupAdapter(tariffs)
                 } else {
                     Toast.makeText(this@HelpTariffsActivity, "Помилка завантаження", Toast.LENGTH_SHORT).show()
                 }
             }
 
             override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
+                if (isFinishing || isDestroyed) return
+                progressBar?.visibility = View.GONE
                 Toast.makeText(this@HelpTariffsActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
             }
         })
@@ -79,18 +82,15 @@ class HelpTariffsActivity : BaseActivity() {
         }
 
         recyclerView.adapter = adapter
-        // Відразу показуємо деталі першого тарифу
         updateDetails(tariffs[0])
     }
 
     private fun updateDetails(tariff: CarTariffDto) {
         tvPriceBase.text = "${tariff.basePrice.toInt()} ₴"
         tvPriceKm.text = "${tariff.pricePerKm.toInt()} ₴"
-        // Використовуємо правильне поле для хвилин очікування
         tvPriceMin.text = "${tariff.pricePerWaitingMinute.toInt()} ₴"
     }
 
-    // --- ВНУТРІШНІЙ АДАПТЕР ---
     private inner class HelpAdapter(
         private val list: List<CarTariffDto>,
         private val onSelected: (CarTariffDto) -> Unit
@@ -101,16 +101,24 @@ class HelpTariffsActivity : BaseActivity() {
         inner class HelpViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             val icon: ImageView = itemView.findViewById(R.id.iv_tariff_icon)
             val name: TextView = itemView.findViewById(R.id.tv_tariff_name)
-
-            // Використовуємо itemView як кореневий елемент для зміни прозорості
             val rootLayout: View = itemView
 
             fun bind(tariff: CarTariffDto, isSelected: Boolean) {
                 name.text = tariff.name
 
-                // --- ЗАВАНТАЖЕННЯ КАРТИНКИ ---
-                if (!tariff.imageUrl.isNullOrEmpty()) {
-                    val fullUrl = "http://$SERVER_IP:$SERVER_PORT/uploads/${tariff.imageUrl}"
+                val rawUrl = tariff.imageUrl
+                if (!rawUrl.isNullOrEmpty()) {
+                    val fullUrl = if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+                        rawUrl
+                    } else {
+                        val cleanPath = rawUrl.replace("\\", "/").replace(Regex("/{2,}"), "/").trimStart('/')
+                        val baseUrlRoot = ApiClient.BASE_URL.substringBefore("api/v1/")
+                        if (cleanPath.startsWith("uploads/")) {
+                            "${baseUrlRoot}${cleanPath}"
+                        } else {
+                            "${baseUrlRoot}uploads/${cleanPath}"
+                        }
+                    }
 
                     Glide.with(itemView.context)
                         .load(fullUrl)
@@ -121,16 +129,13 @@ class HelpTariffsActivity : BaseActivity() {
                     icon.setImageResource(R.drawable.ic_taxi_model_standard)
                 }
 
-                // --- ЛОГІКА ВИДІЛЕННЯ (ALPHA) ---
-                if (isSelected) {
-                    rootLayout.alpha = 1.0f
-                } else {
-                    rootLayout.alpha = 0.5f
-                }
+                rootLayout.alpha = if (isSelected) 1.0f else 0.5f
 
                 itemView.setOnClickListener {
+                    val newPos = bindingAdapterPosition
+                    if (newPos == RecyclerView.NO_POSITION) return@setOnClickListener
                     val prev = selectedPosition
-                    selectedPosition = adapterPosition
+                    selectedPosition = newPos
                     notifyItemChanged(prev)
                     notifyItemChanged(selectedPosition)
                     onSelected(tariff)

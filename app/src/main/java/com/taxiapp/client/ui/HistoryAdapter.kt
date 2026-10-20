@@ -1,11 +1,9 @@
 package com.taxiapp.client.ui
 
 import android.graphics.Color
-import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,10 +12,12 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.R
 import com.taxiapp.client.network.dto.TaxiOrderDto
-import java.text.SimpleDateFormat
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 class HistoryAdapter(
@@ -29,14 +29,36 @@ class HistoryAdapter(
     companion object {
         private const val VIEW_TYPE_ACTIVE = 1
         private const val VIEW_TYPE_ARCHIVE = 2
+
+        private val UK_LOCALE = Locale("uk")
+        private val INPUT_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+        private val SCHEDULED_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yy", Locale.US)
+        private val ARCHIVE_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", UK_LOCALE)
+        private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", UK_LOCALE)
     }
 
     fun submitList(newOrders: List<TaxiOrderDto>) {
-        orders = newOrders.toMutableList()
-        notifyDataSetChanged()
+        val oldOrders = orders
+        val updatedOrders = newOrders.toList()
+        orders = updatedOrders
+
+        val diffResult = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = oldOrders.size
+            override fun getNewListSize(): Int = updatedOrders.size
+
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return oldOrders[oldItemPosition].id == updatedOrders[newItemPosition].id
+            }
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                return oldOrders[oldItemPosition] == updatedOrders[newItemPosition]
+            }
+        })
+        diffResult.dispatchUpdatesTo(this)
     }
 
     fun addOrders(moreOrders: List<TaxiOrderDto>) {
+        if (moreOrders.isEmpty()) return
         val startPos = orders.size
         val mutable = orders.toMutableList()
         mutable.addAll(moreOrders)
@@ -109,14 +131,10 @@ class HistoryAdapter(
                 "SCHEDULED" -> {
                     try {
                         val rawScheduled = order.scheduledAt?.take(19) ?: ""
-                        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                        val date = inputFormat.parse(rawScheduled)
+                        val date = LocalDateTime.parse(rawScheduled, INPUT_FORMATTER)
 
-                        val dateFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
-                        val timeFormat = SimpleDateFormat("HH:mm", Locale.US)
-
-                        tvDateTime.text = date?.let { dateFormat.format(it) } ?: rawScheduled
-                        tvTime.text = date?.let { timeFormat.format(it) } ?: ""
+                        tvDateTime.text = date.format(SCHEDULED_DATE_FORMATTER)
+                        tvTime.text = date.format(TIME_FORMATTER)
                         tvTime.visibility = View.VISIBLE
                     } catch (e: Exception) {
                         tvDateTime.text = order.scheduledAt?.replace("T", " ")?.take(16) ?: ""
@@ -181,16 +199,12 @@ class HistoryAdapter(
             tvTo.text = order.toAddress
             tvPrice.text = "${order.price.toInt()} ₴"
 
-            // Способ оплаты
             if (order.paymentMethod?.uppercase() == "CARD") {
                 ivPaymentType.setImageResource(R.drawable.ic_card)
             } else {
                 ivPaymentType.setImageResource(R.drawable.ic_cash)
             }
 
-            // Цвет треугольника статуса
-            val context = itemView.context
-            // Колір куточка статусу (яскраві суцільні кольори)
             when (order.status) {
                 "COMPLETED" -> {
                     vStatusCorner.background?.setTint(
@@ -203,44 +217,33 @@ class HistoryAdapter(
                     )
                 }
                 else -> {
-                    // Защитная заглушка для компилятора: скрываем уголок, если статус неизвестен
                     vStatusCorner.background?.setTint(Color.TRANSPARENT)
                 }
             }
 
-            // Форматирование даты и времени в одну линию
             try {
-                val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                val date = inputFormat.parse(order.createdAt?.take(19) ?: "")
-                if (date != null) {
-                    val dateFormat = SimpleDateFormat("d MMM yyyy", Locale("uk"))
-                    val timeFormat = SimpleDateFormat("HH:mm", Locale("uk"))
+                val rawCreated = order.createdAt?.take(19) ?: ""
+                val date = LocalDateTime.parse(rawCreated, INPUT_FORMATTER)
+                val dateStr = date.format(ARCHIVE_DATE_FORMATTER)
 
-                    val dateStr = dateFormat.format(date) // "24 серп. 2026"
-
-                    val spannable = SpannableString(dateStr)
-                    val dayPart = dateStr.substringBefore(" ")
-                    if (dayPart.isNotEmpty() && dayPart.all { it.isDigit() }) {
-                        spannable.setSpan(
-                            RelativeSizeSpan(1.25f),
-                            0,
-                            dayPart.length,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                        )
-                    }
-
-                    tvDate.text = spannable
-                    tvTime.text = timeFormat.format(date)
-                } else {
-                    tvDate.text = order.createdAt?.take(10) ?: "Дата"
-                    tvTime.text = "--:--"
+                val spannable = SpannableString(dateStr)
+                val dayPart = dateStr.substringBefore(" ")
+                if (dayPart.isNotEmpty() && dayPart.all { it.isDigit() }) {
+                    spannable.setSpan(
+                        RelativeSizeSpan(1.25f),
+                        0,
+                        dayPart.length,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
                 }
+
+                tvDate.text = spannable
+                tvTime.text = date.format(TIME_FORMATTER)
             } catch (e: Exception) {
                 tvDate.text = order.createdAt?.take(10) ?: "Дата"
                 tvTime.text = "--:--"
             }
 
-            // Промежуточные остановки
             containerWaypoints?.removeAllViews()
             if (!order.stops.isNullOrEmpty()) {
                 containerWaypoints?.visibility = View.VISIBLE

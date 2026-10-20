@@ -13,18 +13,22 @@ import androidx.fragment.app.DialogFragment
 import com.google.android.material.button.MaterialButton
 import com.taxiapp.client.R
 import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.MessageResponse // Переконайся, що імпорт є
-import com.taxiapp.client.network.dto.ApplyPromoRequestDto // Наш новий DTO
+import com.taxiapp.client.network.MessageResponse
+import com.taxiapp.client.network.dto.ApplyPromoRequestDto
 import com.taxiapp.client.utils.SessionManager
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
 class EnterPromoDialog(
-    private val onSuccess: () -> Unit
+    private val onSuccess: (() -> Unit)? = null
 ) : DialogFragment() {
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
         dialog?.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog?.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         return inflater.inflate(R.layout.dialog_enter_promo, container, false)
@@ -50,26 +54,28 @@ class EnterPromoDialog(
                 Toast.makeText(context, "Введіть код", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            sendPromoCode(code)
+            sendPromoCode(code, btnActivate)
         }
     }
 
-    private fun sendPromoCode(code: String) {
-        val context = context ?: return
-        val sessionManager = SessionManager(context)
-        val token = sessionManager.fetchAuthToken() ?: return
+    private fun sendPromoCode(code: String, btnActivate: MaterialButton) {
+        val ctx = context ?: return
+        val sessionManager = SessionManager(ctx)
+        if (sessionManager.fetchAuthToken() == null) return
 
-        // Створюємо DTO
+        btnActivate.isEnabled = false
         val request = ApplyPromoRequestDto(code)
 
-        // Викликаємо правильний метод applyPromo
         ApiClient.instance.applyPromo(request).enqueue(object : Callback<MessageResponse> {
             override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
+                if (!isAdded) return
+                btnActivate.isEnabled = true
+
                 if (response.isSuccessful) {
                     val msg = response.body()?.message ?: "Промокод успішно активовано!"
-                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                    onSuccess() // Оновлюємо список або інтерфейс
-                    dismiss()
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                    onSuccess?.invoke()
+                    dismissAllowingStateLoss()
                 } else {
                     val errorMsg = when (response.code()) {
                         404 -> "Промокод не знайдено"
@@ -77,11 +83,14 @@ class EnterPromoDialog(
                         400 -> "Термін дії коду вичерпано"
                         else -> "Помилка активації: ${response.code()}"
                     }
-                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                 }
             }
+
             override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
-                Toast.makeText(context, "Помилка мережі", Toast.LENGTH_SHORT).show()
+                if (!isAdded) return
+                btnActivate.isEnabled = true
+                Toast.makeText(requireContext(), "Помилка мережі", Toast.LENGTH_SHORT).show()
             }
         })
     }
