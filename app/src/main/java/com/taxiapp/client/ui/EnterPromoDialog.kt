@@ -10,15 +10,14 @@ import android.view.Window
 import android.widget.EditText
 import android.widget.Toast
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.taxiapp.client.R
 import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.MessageResponse
 import com.taxiapp.client.network.dto.ApplyPromoRequestDto
 import com.taxiapp.client.utils.SessionManager
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 class EnterPromoDialog(
     private val onSuccess: (() -> Unit)? = null
@@ -66,9 +65,10 @@ class EnterPromoDialog(
         btnActivate.isEnabled = false
         val request = ApplyPromoRequestDto(code)
 
-        ApiClient.instance.applyPromo(request).enqueue(object : Callback<MessageResponse> {
-            override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
-                if (!isAdded) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.applyPromo(request)
+                if (!isAdded) return@launch
                 btnActivate.isEnabled = true
 
                 if (response.isSuccessful) {
@@ -85,13 +85,13 @@ class EnterPromoDialog(
                     }
                     Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                 }
-            }
-
-            override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
-                if (!isAdded) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isAdded) return@launch
                 btnActivate.isEnabled = true
                 Toast.makeText(requireContext(), "Помилка мережі", Toast.LENGTH_SHORT).show()
             }
-        })
+        }
     }
 }

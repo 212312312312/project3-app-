@@ -1,10 +1,9 @@
 package com.taxiapp.client.network
 
-import com.taxiapp.client.network.dto.*
 import com.taxiapp.client.data.model.TaxiService
-import retrofit2.Call
-import retrofit2.http.*
+import com.taxiapp.client.network.dto.*
 import retrofit2.Response
+import retrofit2.http.*
 
 data class ErrorResponse(val message: String)
 data class MessageResponse(val message: String)
@@ -19,14 +18,21 @@ data class ClientProfileResponse(
     val id: Long,
     val phoneNumber: String,
     val fullName: String,
+    val email: String? = null,
     val isBlocked: Boolean,
-    val cardMask: String?
+    val cardMask: String?,
+    val tripsCount: Int? = 0,
+    val rating: Double? = 5.0
+)
+
+data class UpdateClientProfileRequestDto(
+    val fullName: String
 )
 
 data class TokenRefreshRequestDto(val refreshToken: String)
 data class GoogleAuthRequestDto(
     val idToken: String,
-    val acquisitionSource: String? = null // Добавили поле трекинга рекламы
+    val acquisitionSource: String? = null
 )
 data class InitBindCardResponse(val paymentUrl: String)
 
@@ -34,50 +40,60 @@ interface ApiService {
 
     // --- АВТОРИЗАЦІЯ ---
     @POST("auth/client/sms/request")
-    fun requestSmsCode(@Body request: SmsRequestDto): Call<MessageResponse>
+    suspend fun requestSmsCode(@Body request: SmsRequestDto): Response<MessageResponse>
 
     @POST("auth/client/sms/verify")
-    fun verifySmsCode(@Body request: SmsVerifyDto): Call<LoginResponseDto>
+    suspend fun verifySmsCode(@Body request: SmsVerifyDto): Response<LoginResponseDto>
 
     @POST("auth/client/google")
-    fun loginWithGoogle(@Body request: GoogleAuthRequestDto): Call<LoginResponseDto>
+    suspend fun loginWithGoogle(@Body request: GoogleAuthRequestDto): Response<LoginResponseDto>
 
     @POST("auth/client/link-phone")
-    fun linkPhone(@Body request: SmsVerifyDto): Call<LoginResponseDto>
+    suspend fun linkPhone(@Body request: SmsVerifyDto): Response<LoginResponseDto>
 
     @POST("auth/refresh")
-    fun refreshToken(@Body request: TokenRefreshRequestDto): Call<LoginResponseDto>
+    suspend fun refreshToken(@Body request: TokenRefreshRequestDto): Response<LoginResponseDto>
 
     @POST("auth/fcm-token")
-    fun updateFcmToken(@Body body: Map<String, String>): Call<Void>
+    suspend fun updateFcmToken(@Body body: Map<String, String>): Response<Unit>
 
     // --- ОПЛАТА ---
     @POST("payments/bind-card/init")
-    fun initBindCard(): Call<InitBindCardResponse>
+    suspend fun initBindCard(): Response<InitBindCardResponse>
 
     @DELETE("payments/unbind-card")
-    fun unbindCard(): Call<MessageResponseDto>
+    suspend fun unbindCard(): Response<MessageResponseDto>
 
-    // --- ТАРИФИ ---
+    // --- ТАРИФИ ТА МАРШРУТИ ---
     @GET("public/tariffs")
-    fun getActiveTariffs(): Call<List<CarTariffDto>>
+    suspend fun getActiveTariffs(): Response<List<CarTariffDto>>
 
     @GET("public/tariffs")
-    fun getTariffs(): Call<List<CarTariffDto>>
+    suspend fun getTariffs(): Response<List<CarTariffDto>>
+
+    @POST("public/route")
+    suspend fun calculateRoute(@Body request: RouteRequestDto): Response<RouteResponseDto>
+
+    @GET("public/reverse-geocode")
+    suspend fun reverseGeocode(
+        @Query("lat") lat: Double,
+        @Query("lng") lng: Double,
+        @Query("lang") lang: String = "uk"
+    ): Response<ReverseGeocodeResponseDto>
 
     // --- АКЦІЇ ТА ПРОМОКОДИ ---
     @GET("client/promos")
-    fun getClientPromos(): Call<List<ClientPromoProgressDto>>
+    suspend fun getClientPromos(): Response<List<ClientPromoProgressDto>>
 
     @GET("client/promos/discount")
-    fun getActiveDiscount(): Call<ActiveDiscountDto>
+    suspend fun getActiveDiscount(): Response<ActiveDiscountDto>
 
     @POST("client/promos/apply")
-    fun applyPromo(@Body request: ApplyPromoRequestDto): Call<MessageResponse>
+    suspend fun applyPromo(@Body request: ApplyPromoRequestDto): Response<MessageResponse>
 
     // --- ЗАМОВЛЕННЯ ---
     @POST("client/orders")
-    fun createOrder(@Body request: CreateOrderRequestDto): Call<TaxiOrderDto>
+    suspend fun createOrder(@Body request: CreateOrderRequestDto): Response<TaxiOrderDto>
 
     @GET("client/orders/{id}")
     suspend fun getOrder(@Path("id") id: String): Response<TaxiOrderDto>
@@ -91,77 +107,76 @@ interface ApiService {
 
     // --- ЗАМОВЛЕННЯ (ІСТОРІЯ З ПАГІНАЦІЄЮ) ---
     @GET("orders/history")
-    fun getHistory(
+    suspend fun getHistory(
         @Query("page") page: Int = 0,
         @Query("size") size: Int = 30
-    ): Call<List<TaxiOrderDto>>
+    ): Response<List<TaxiOrderDto>>
 
     @POST("client/orders/{id}/cancel")
-    fun cancelOrder(@Path("id") orderId: String): Call<TaxiOrderDto> // <-- String
-
-    @POST("client/orders/{id}/cancel")
-    fun cancelOrder(
-        @Path("id") orderId: String, // <-- String
+    suspend fun cancelOrder(
+        @Path("id") orderId: String,
         @Query("reasonText") reasonText: String? = null
-    ): Call<TaxiOrderDto>
+    ): Response<TaxiOrderDto>
 
     @PUT("orders/{id}/price")
-    fun updateOrderPrice(
-        @Path("id") orderId: String, // <-- String
+    suspend fun updateOrderPrice(
+        @Path("id") orderId: String,
         @Query("addedValue") addedValue: Double
-    ): Call<MessageResponseDto>
+    ): Response<MessageResponseDto>
 
     @PUT("orders/{id}/payment-method")
-    fun updatePaymentMethod(
-        @Path("id") orderId: String, // <-- String
+    suspend fun updatePaymentMethod(
+        @Path("id") orderId: String,
         @Query("method") method: String
-    ): Call<MessageResponseDto>
+    ): Response<MessageResponseDto>
 
     @GET("cancellation-reasons")
-    fun getCancellationReasons(@Query("target") target: String): Call<List<CancellationReasonDto>>
+    suspend fun getCancellationReasons(@Query("target") target: String): Response<List<CancellationReasonDto>>
 
     @POST("public/calculate-price")
-    fun calculatePrice(@Body request: CalculatePriceRequestDto): Call<List<CarTariffDto>>
+    suspend fun calculatePrice(@Body request: CalculatePriceRequestDto): Response<List<CarTariffDto>>
 
-    // --- НАСТРОЙКИ ---
+    // --- НАЛАШТУВАННЯ ---
     @GET("public/settings/payment-methods")
-    fun getPaymentMethodsSettings(): Call<Map<String, Boolean>>
-    // --- ІНШЕ ---
+    suspend fun getPaymentMethodsSettings(): Response<Map<String, Boolean>>
+
+    // --- ПРОФІЛЬ ТА ІНШЕ ---
     @DELETE("client/account")
-    fun deleteAccount(): Call<MessageResponse>
+    suspend fun deleteAccount(): Response<MessageResponse>
 
     @POST("client/rate")
-    fun rateDriver(@Body request: RateDriverRequest): Call<MessageResponse>
+    suspend fun rateDriver(@Body request: RateDriverRequest): Response<MessageResponse>
 
     @GET("client/profile")
-    fun getClientProfile(): Call<ClientProfileResponse>
+    suspend fun getClientProfile(): Response<ClientProfileResponse>
+
+    @PUT("client/profile")
+    suspend fun updateClientProfile(@Body request: UpdateClientProfileRequestDto): Response<ClientProfileResponse>
 
     @GET("client/orders")
-    fun getHistory(): Call<List<TaxiOrderDto>>
-
-    @GET("client/orders")
-    fun getOrderHistory(): Call<List<TaxiOrderDto>>
+    suspend fun getOrderHistory(): Response<List<TaxiOrderDto>>
 
     @GET("client/news")
-    fun getClientNews(): Call<List<NewsDto>>
+    suspend fun getClientNews(): Response<List<NewsDto>>
 
     @POST("client/analytics/events")
-    fun sendAnalyticsEvents(@Body request: ClientEventBatchRequest): Call<Void>
+    suspend fun sendAnalyticsEvents(@Body request: ClientEventBatchRequest): Response<Unit>
+
     @GET("client/services")
-    fun getServices(): Call<List<TaxiService>>
+    suspend fun getServices(): Response<List<TaxiService>>
 
     @GET("public/sectors")
-    fun getSectors(): Call<List<SectorDto>>
+    suspend fun getSectors(): Response<List<SectorDto>>
 
     @GET("chat/{orderId}")
-    fun getChatMessages(@Path("orderId") orderId: String): Call<List<ChatMessageDto>> // <-- String
+    suspend fun getChatMessages(@Path("orderId") orderId: String): Response<List<ChatMessageDto>>
 
     @POST("chat/client/{orderId}")
-    fun sendChatMessage(
-        @Path("orderId") orderId: String, // <-- String
+    suspend fun sendChatMessage(
+        @Path("orderId") orderId: String,
         @Body request: SendMessageRequest
-    ): Call<ChatMessageDto>
+    ): Response<ChatMessageDto>
 
     @GET("public/settings/car-icon")
-    fun getCarIconUrl(): Call<Map<String, String>>
+    suspend fun getCarIconUrl(): Response<Map<String, String>>
 }

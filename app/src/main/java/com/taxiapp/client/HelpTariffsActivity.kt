@@ -8,6 +8,7 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
@@ -15,9 +16,8 @@ import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.CarTariffDto
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 class HelpTariffsActivity : BaseActivity() {
 
@@ -53,9 +53,10 @@ class HelpTariffsActivity : BaseActivity() {
     private fun loadTariffs() {
         progressBar?.visibility = View.VISIBLE
 
-        ApiClient.instance.getActiveTariffs().enqueue(object : Callback<List<CarTariffDto>> {
-            override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getActiveTariffs()
+                if (isFinishing || isDestroyed) return@launch
                 progressBar?.visibility = View.GONE
 
                 if (response.isSuccessful) {
@@ -64,14 +65,14 @@ class HelpTariffsActivity : BaseActivity() {
                 } else {
                     Toast.makeText(this@HelpTariffsActivity, "Помилка завантаження", Toast.LENGTH_SHORT).show()
                 }
-            }
-
-            override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 progressBar?.visibility = View.GONE
                 Toast.makeText(this@HelpTariffsActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
             }
-        })
+        }
     }
 
     private fun setupAdapter(tariffs: List<CarTariffDto>) {

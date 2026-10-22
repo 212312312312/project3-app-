@@ -13,8 +13,11 @@ import okhttp3.CertificatePinner
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import org.json.JSONObject
+import retrofit2.Call
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
+import retrofit2.http.POST
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -87,7 +90,7 @@ object ApiClient {
 
             return try {
                 logDebug("AUTH REFRESH: Requesting new JWT from /auth/refresh...")
-                val refreshResponse = authService.refreshToken(TokenRefreshRequestDto(refreshToken)).execute()
+                val refreshResponse = authService.refreshTokenSync(TokenRefreshRequestDto(refreshToken)).execute()
                 if (refreshResponse.isSuccessful && refreshResponse.body() != null) {
                     val loginResponse = refreshResponse.body()!!
                     sm.saveAuthToken(loginResponse.token)
@@ -183,7 +186,12 @@ object ApiClient {
         .addConverterFactory(GsonConverterFactory.create())
         .build()
 
-    private val authService = cleanRetrofit.create(ApiService::class.java)
+    private interface AuthRefreshService {
+        @POST("auth/refresh")
+        fun refreshTokenSync(@Body request: TokenRefreshRequestDto): Call<LoginResponseDto>
+    }
+
+    private val authService = cleanRetrofit.create(AuthRefreshService::class.java)
 
     // Перехоплювач токенів (Проактивний + 401 Авто-Refresh сесії)
     private val authInterceptor = Interceptor { chain ->

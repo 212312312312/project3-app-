@@ -4,41 +4,34 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.TaxiOrderDto
 import com.taxiapp.client.utils.SessionManager
-import com.taxiapp.client.utils.ViewUtils // <--- Не забудь переконатися, що імпорт є
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.taxiapp.client.utils.ViewUtils
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-class StatsActivity : BaseActivity()  {
+class StatsActivity : BaseActivity() {
 
-    // UI View Variables
     private lateinit var tvKm: TextView
     private lateinit var tvHours: TextView
     private lateinit var tvOrders: TextView
     private lateinit var tvTariff: TextView
     private lateinit var tvDay: TextView
 
-    // DATA
     private var allOrders: List<TaxiOrderDto> = emptyList()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-    private val dateFormatMs = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.getDefault()) // <-- ДОБАВИТЬ
+    private val dateFormatMs = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 1. Спочатку завантажуємо Layout
         setContentView(R.layout.activity_stats)
 
-        // 2. ВИПРАВЛЕННЯ: Використовуємо ViewUtils замість ручного коду!
-        // Він містить правильну логіку для "челки" (DisplayCutout)
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) { e.printStackTrace() }
 
         initViews()
@@ -64,19 +57,24 @@ class StatsActivity : BaseActivity()  {
             return
         }
 
-        ApiClient.instance.getOrderHistory().enqueue(object : Callback<List<TaxiOrderDto>> {
-            override fun onResponse(call: Call<List<TaxiOrderDto>>, response: Response<List<TaxiOrderDto>>) {
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getOrderHistory()
+                if (isFinishing || isDestroyed) return@launch
                 if (response.isSuccessful && response.body() != null) {
                     allOrders = response.body()!!.filter { it.status == "COMPLETED" }
                     calculateAndShowStats(allOrders)
                 } else {
                     Toast.makeText(this@StatsActivity, "Немає даних", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    Toast.makeText(this@StatsActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
+                }
             }
-            override fun onFailure(call: Call<List<TaxiOrderDto>>, t: Throwable) {
-                Toast.makeText(this@StatsActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
-            }
-        })
+        }
     }
 
     private fun calculateAndShowStats(orders: List<TaxiOrderDto>) {
@@ -111,11 +109,9 @@ class StatsActivity : BaseActivity()  {
     private fun parseDate(dateString: String?): Date? {
         if (dateString == null) return null
         return try {
-            // Сначала пробуем распарсить стандартный формат
             dateFormat.parse(dateString)
         } catch (e: Exception) {
             try {
-                // Если не вышло, пробуем формат с миллисекундами (как присылает сервер в логах)
                 dateFormatMs.parse(dateString)
             } catch (ex: Exception) {
                 null

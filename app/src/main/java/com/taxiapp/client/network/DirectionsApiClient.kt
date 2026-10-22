@@ -1,34 +1,30 @@
 package com.taxiapp.client.network
 
-import com.taxiapp.client.network.dto.DirectionsResponse
-import retrofit2.Call
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.http.GET
-import retrofit2.http.Query
+import com.taxiapp.client.network.dto.RoutePointDto
+import com.taxiapp.client.network.dto.RouteRequestDto
+import com.taxiapp.client.network.dto.RouteResponseDto
+import retrofit2.Response
 
-interface DirectionsApiService {
-    @GET("directions/json")
-    fun getDirections(
-        @Query("origin") origin: String,
-        @Query("destination") destination: String,
-
-        // ИСПРАВЛЕНИЕ: Убрали encoded = true.
-        // Retrofit сам закодирует символы '|' в '%7C', что предотвратит ошибки 400 Bad Request.
-        @Query("waypoints") waypoints: String?,
-
-        @Query("key") apiKey: String
-    ): Call<DirectionsResponse>
-}
-
+/**
+ * Прокси-клиент маршрутизации на базе Kotlin Coroutines (suspend).
+ * Все маршруты строятся через серверный эндпоинт POST /api/v1/public/route (OSRM + Redis кэш).
+ */
 object DirectionsApiClient {
-    private const val BASE_URL = "https://maps.googleapis.com/maps/api/"
 
-    val instance: DirectionsApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl(BASE_URL)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(DirectionsApiService::class.java)
+    suspend fun calculateRoute(
+        originLat: Double,
+        originLng: Double,
+        destLat: Double,
+        destLng: Double,
+        waypoints: List<RoutePointDto>? = null
+    ): Response<RouteResponseDto> {
+        val request = RouteRequestDto(
+            originLat = originLat,
+            originLng = originLng,
+            destLat = destLat,
+            destLng = destLng,
+            waypoints = waypoints?.takeIf { it.isNotEmpty() }
+        )
+        return ApiClient.instance.calculateRoute(request)
     }
 }

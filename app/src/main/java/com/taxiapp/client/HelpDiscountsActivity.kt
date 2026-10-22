@@ -6,19 +6,17 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.ClientPromoProgressDto
 import com.taxiapp.client.ui.DiscountAdapter
 import com.taxiapp.client.ui.EnterPromoDialog
-import com.taxiapp.client.ui.PromoDetailsBottomSheet // <-- Переконайтесь, що є імпорт
-import com.taxiapp.client.utils.SessionManager
+import com.taxiapp.client.ui.PromoDetailsBottomSheet
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 class HelpDiscountsActivity : BaseActivity() {
 
@@ -32,24 +30,20 @@ class HelpDiscountsActivity : BaseActivity() {
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) {}
         setContentView(R.layout.activity_help_discounts)
 
-        // Ініціалізація Views
         recyclerView = findViewById(R.id.rv_discounts_list)
         progressBar = findViewById(R.id.progressBar)
         emptyState = findViewById(R.id.ll_empty_state)
 
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
 
-        // Кнопка "Додати промокод"
         findViewById<View>(R.id.btn_add_promo).setOnClickListener {
             val dialog = EnterPromoDialog {
-                loadDiscounts() // Оновлюємо список після успішного введення
+                loadDiscounts()
             }
             dialog.show(supportFragmentManager, "PromoDialog")
         }
 
-        // --- НАЛАШТУВАННЯ АДАПТЕРА З КЛІКОМ ---
         adapter = DiscountAdapter { promoItem ->
-            // Цей код виконається, коли юзер натисне на картку
             val bottomSheet = PromoDetailsBottomSheet(promoItem)
             bottomSheet.show(supportFragmentManager, "PromoDetails")
         }
@@ -65,9 +59,10 @@ class HelpDiscountsActivity : BaseActivity() {
         recyclerView.visibility = View.GONE
         emptyState.visibility = View.GONE
 
-        // Вызов очищен от ручной передачи токена
-        ApiClient.instance.getClientPromos().enqueue(object : Callback<List<ClientPromoProgressDto>> {
-            override fun onResponse(call: Call<List<ClientPromoProgressDto>>, response: Response<List<ClientPromoProgressDto>>) {
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getClientPromos()
+                if (isFinishing || isDestroyed) return@launch
                 progressBar.visibility = View.GONE
 
                 if (response.isSuccessful) {
@@ -83,14 +78,15 @@ class HelpDiscountsActivity : BaseActivity() {
                     Toast.makeText(this@HelpDiscountsActivity, "Помилка завантаження", Toast.LENGTH_SHORT).show()
                     showEmptyState()
                 }
-            }
-
-            override fun onFailure(call: Call<List<ClientPromoProgressDto>>, t: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 progressBar.visibility = View.GONE
                 Toast.makeText(this@HelpDiscountsActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
                 showEmptyState()
             }
-        })
+        }
     }
 
     private fun showList(list: List<ClientPromoProgressDto>) {

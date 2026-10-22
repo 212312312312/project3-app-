@@ -18,9 +18,10 @@ import com.taxiapp.client.analytics.AnalyticsManager
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.OrderStatusBus
 import com.taxiapp.client.utils.SessionManager
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
@@ -116,15 +117,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onNewToken(token)
         val sessionManager = SessionManager(applicationContext)
         if (!sessionManager.fetchAuthToken().isNullOrEmpty()) {
-            try {
-                val body = mapOf("fcmToken" to token)
-                ApiClient.instance.updateFcmToken(body).enqueue(
-                    object : Callback<Void> {
-                        override fun onResponse(call: Call<Void>, response: Response<Void>) {}
-                        override fun onFailure(call: Call<Void>, t: Throwable) {}
-                    }
-                )
-            } catch (_: Exception) {}
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                try {
+                    val body = mapOf("token" to token)
+                    ApiClient.instance.updateFcmToken(body)
+                } catch (_: Exception) {}
+            }
         }
     }
 

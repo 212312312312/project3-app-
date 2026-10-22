@@ -13,43 +13,42 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.lifecycle.lifecycleScope
 import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.MessageResponse
+import com.taxiapp.client.network.UpdateClientProfileRequestDto
 import com.taxiapp.client.utils.LocaleHelper
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class UserDetailsActivity : BaseActivity() {
 
     private lateinit var sessionManager: SessionManager
     private lateinit var etName: EditText
     private lateinit var tvPhone: TextView
-
-    // Змінна для великої літери аватара
     private lateinit var tvAvatarLetter: TextView
-
-    // Змінна для відображення рейтингу
     private lateinit var tvUserRatingValue: TextView
-
-    // НОВЕ: Змінна для кнопки зміни мови
     private lateinit var btnLanguage: ImageView
 
-    // Змінні для повідомлення (Toast)
     private lateinit var customToastContainer: CardView
     private lateinit var tvToastMessage: TextView
     private lateinit var ivToastIcon: ImageView
     private val toastHandler = Handler(Looper.getMainLooper())
     private val hideToastRunnable = Runnable { hideTopMessage() }
+
+    companion object {
+        private val profileSyncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,23 +57,18 @@ class UserDetailsActivity : BaseActivity() {
 
         sessionManager = SessionManager(applicationContext)
 
-        // --- ІНІЦІАЛІЗАЦІЯ UI ---
         etName = findViewById(R.id.et_user_name)
         tvPhone = findViewById(R.id.tv_user_phone)
         tvAvatarLetter = findViewById(R.id.tv_avatar_letter_large)
         tvUserRatingValue = findViewById(R.id.tv_user_rating_value)
-
-        // НОВЕ: Ініціалізація кнопки мови
         btnLanguage = findViewById(R.id.btn_language)
 
-        // Ініціалізація тоста
         try {
             customToastContainer = findViewById(R.id.custom_toast_container)
             tvToastMessage = findViewById(R.id.tv_toast_message)
             ivToastIcon = findViewById(R.id.iv_toast_icon)
         } catch (e: Exception) {}
 
-        // --- ЗАПОВНЕННЯ ДАНИМИ ---
         val savedName = sessionManager.getUserName()
         etName.setText(savedName)
         updateAvatarLetter(savedName)
@@ -82,18 +76,16 @@ class UserDetailsActivity : BaseActivity() {
         val phone = sessionManager.getUserPhone()
         tvPhone.text = if (phone.isNotEmpty()) "+38$phone" else "+380 XX XXX XX XX"
 
-        // Встановлюємо рейтинг (Поки заглушка, пізніше можна брати з API або SessionManager)
-        updateUserRating("5.0")
+        updateUserRating(sessionManager.getUserRating())
+        refreshProfileFromServer()
 
-        // НОВЕ: Встановлюємо іконку мови при запуску екрану
         val currentLang = sessionManager.getLanguage()
         if (currentLang == "en") {
             btnLanguage.setImageResource(R.drawable.ic_flag_en)
         } else {
-            btnLanguage.setImageResource(R.drawable.ic_flag_ua) // Для всех остальных (uk) ставим UA флаг
+            btnLanguage.setImageResource(R.drawable.ic_flag_ua)
         }
 
-        // --- ЛОГІКА ДИНАМІЧНОЇ ЗМІНИ ЛІТЕРИ ---
         etName.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -102,30 +94,50 @@ class UserDetailsActivity : BaseActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // --- КНОПКИ ---
-
-        // 1. Назад
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { saveAndExit() }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { saveAndExit() }
         })
 
-        // 2. Вихід
         findViewById<View>(R.id.btn_logout).setOnClickListener { logoutAndExit() }
 
-        // 3. Видалення
         findViewById<View>(R.id.btn_delete_account).setOnClickListener {
             showCustomDeleteDialog()
         }
 
-        // НОВЕ: 4. Зміна мови
         btnLanguage.setOnClickListener {
             showLanguageDialog()
         }
     }
 
-    // НОВЕ: Логіка діалогу вибору мови
+    private fun refreshProfileFromServer() {
+        val token = sessionManager.fetchAuthToken()
+        if (token.isNullOrEmpty()) return
+
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getClientProfile()
+                if (isFinishing || isDestroyed) return@launch
+                val profile = response.body() ?: return@launch
+                if (response.isSuccessful) {
+                    profile.rating?.let { rating ->
+                        sessionManager.saveUserRating(rating)
+                        updateUserRating(sessionManager.getUserRating())
+                    }
+                    if (profile.fullName.isNotBlank() && !etName.hasFocus()) {
+                        val cleanPhone = if (profile.phoneNumber != "Не вказано") profile.phoneNumber else sessionManager.getUserPhone()
+                        sessionManager.saveUserInfo(profile.fullName, cleanPhone)
+                        etName.setText(profile.fullName)
+                        updateAvatarLetter(profile.fullName)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun showLanguageDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_language, null)
 
@@ -138,7 +150,6 @@ class UserDetailsActivity : BaseActivity() {
         val rbLangUa = dialogView.findViewById<RadioButton>(R.id.rb_lang_ua)
         val rbLangEn = dialogView.findViewById<RadioButton>(R.id.rb_lang_en)
 
-        // 1. Читаємо поточну мову з SessionManager і ставимо потрібну галочку
         val currentLang = sessionManager.getLanguage()
         if (currentLang == "en") {
             rbLangEn?.isChecked = true
@@ -147,16 +158,11 @@ class UserDetailsActivity : BaseActivity() {
         }
 
         btnSave?.setOnClickListener {
-            // 1. ИСПРАВЛЕНО: используем системный код "uk" вместо "ua"
             val selectedLang = if (rbLangEn?.isChecked == true) "en" else "uk"
 
-            // 2. Зберігаємо нову мову в сессию
             sessionManager.saveLanguage(selectedLang)
-
-            // 🚀 ДОБАВЛЕНО: Принудительно применяем язык на уровне системы для Карт и внешних SDK
             LocaleHelper.applyLanguage(selectedLang)
 
-            // 3. Оновлюємо іконку в хедері (имена твоих ресурсов drawable остаются прежними)
             if (selectedLang == "en") {
                 btnLanguage.setImageResource(R.drawable.ic_flag_en)
             } else {
@@ -165,8 +171,6 @@ class UserDetailsActivity : BaseActivity() {
 
             showTopMessage("Мову змінено / Language changed", false)
             dialog.dismiss()
-
-            // 4. Перезапускаємо Activity, щоб весь UI обновился
             recreate()
         }
 
@@ -209,10 +213,30 @@ class UserDetailsActivity : BaseActivity() {
 
     private fun saveAndExit() {
         val newName = etName.text.toString().trim()
-        if (newName.isNotEmpty()) {
+        if (newName.length >= 2) {
             val currentName = sessionManager.getUserName()
             if (newName != currentName) {
                 sessionManager.saveUserInfo(newName, sessionManager.getUserPhone())
+
+                val token = sessionManager.fetchAuthToken()
+                if (!token.isNullOrEmpty()) {
+                    val appSession = SessionManager(applicationContext)
+                    profileSyncScope.launch {
+                        try {
+                            val response = ApiClient.instance.updateClientProfile(UpdateClientProfileRequestDto(newName))
+                            val updated = response.body()
+                            if (response.isSuccessful && updated != null) {
+                                val cleanPhone = if (updated.phoneNumber != "Не вказано") {
+                                    updated.phoneNumber
+                                } else {
+                                    appSession.getUserPhone()
+                                }
+                                appSession.saveUserInfo(updated.fullName, cleanPhone)
+                                updated.rating?.let { appSession.saveUserRating(it) }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
             }
             setResult(RESULT_OK)
         }
@@ -220,27 +244,33 @@ class UserDetailsActivity : BaseActivity() {
     }
 
     private fun deleteAccountOnServer() {
-        val token = sessionManager.fetchAuthToken() ?: return
+        sessionManager.fetchAuthToken() ?: return
 
-        ApiClient.instance.deleteAccount().enqueue(object : Callback<MessageResponse> {
-            override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.deleteAccount()
+                if (isFinishing || isDestroyed) return@launch
                 if (response.isSuccessful) {
                     showTopMessage("Акаунт успішно видалено", false)
                     sessionManager.clearSession()
-                    Handler(Looper.getMainLooper()).postDelayed({
+                    delay(1500L)
+                    if (!isFinishing && !isDestroyed) {
                         val intent = Intent(this@UserDetailsActivity, MainActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         startActivity(intent)
                         finish()
-                    }, 1500)
+                    }
                 } else {
                     showTopMessage("Помилка: ${response.code()}", true)
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    showTopMessage("Помилка мережі", true)
+                }
             }
-            override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
-                showTopMessage("Помилка мережі", true)
-            }
-        })
+        }
     }
 
     private fun logoutAndExit() {

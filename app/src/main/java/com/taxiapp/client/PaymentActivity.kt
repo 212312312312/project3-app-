@@ -27,9 +27,9 @@ import com.taxiapp.client.network.WebSocketManager
 import com.taxiapp.client.network.dto.MessageResponseDto
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 class PaymentActivity : BaseActivity() {
 
@@ -116,9 +116,10 @@ class PaymentActivity : BaseActivity() {
     }
 
     private fun fetchPaymentSettings() {
-        ApiClient.instance.getPaymentMethodsSettings().enqueue(object : Callback<Map<String, Boolean>> {
-            override fun onResponse(call: Call<Map<String, Boolean>>, response: Response<Map<String, Boolean>>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getPaymentMethodsSettings()
+                if (isFinishing || isDestroyed) return@launch
                 if (response.isSuccessful && response.body() != null) {
                     val settings = response.body()!!
                     val isCardEnabled = settings["enable_card_payment"] ?: true
@@ -137,10 +138,10 @@ class PaymentActivity : BaseActivity() {
 
                     updateUI()
                 }
-            }
-
-            override fun onFailure(call: Call<Map<String, Boolean>>, t: Throwable) {}
-        })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {}
+        }
     }
 
     private fun updateUI() {
@@ -182,9 +183,10 @@ class PaymentActivity : BaseActivity() {
             btnConfirm.isEnabled = false
             btnConfirm.text = "Видалення..."
 
-            ApiClient.instance.unbindCard().enqueue(object : Callback<MessageResponseDto> {
-                override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
-                    if (isFinishing || isDestroyed) return
+            lifecycleScope.launch {
+                try {
+                    val response = ApiClient.instance.unbindCard()
+                    if (isFinishing || isDestroyed) return@launch
                     dialog.dismiss()
                     if (response.isSuccessful) {
                         sessionManager.saveCardMask(null)
@@ -192,14 +194,14 @@ class PaymentActivity : BaseActivity() {
                     } else {
                         Toast.makeText(this@PaymentActivity, "Помилка при видаленні", Toast.LENGTH_SHORT).show()
                     }
-                }
-
-                override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
-                    if (isFinishing || isDestroyed) return
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (isFinishing || isDestroyed) return@launch
                     dialog.dismiss()
                     Toast.makeText(this@PaymentActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
                 }
-            })
+            }
         }
         dialog.show()
     }
@@ -213,9 +215,10 @@ class PaymentActivity : BaseActivity() {
     }
 
     private fun fetchClientProfile() {
-        ApiClient.instance.getClientProfile().enqueue(object : Callback<ClientProfileResponse> {
-            override fun onResponse(call: Call<ClientProfileResponse>, response: Response<ClientProfileResponse>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getClientProfile()
+                if (isFinishing || isDestroyed) return@launch
                 if (response.isSuccessful && response.body() != null) {
                     val profile = response.body()!!
                     sessionManager.saveUserId(profile.id)
@@ -227,29 +230,30 @@ class PaymentActivity : BaseActivity() {
                     syncResultIntent()
                     updateUI()
                 }
-            }
-
-            override fun onFailure(call: Call<ClientProfileResponse>, t: Throwable) {}
-        })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {}
+        }
     }
 
     private fun bindNewCard() {
-        ApiClient.instance.initBindCard().enqueue(object : Callback<InitBindCardResponse> {
-            override fun onResponse(call: Call<InitBindCardResponse>, response: Response<InitBindCardResponse>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.initBindCard()
+                if (isFinishing || isDestroyed) return@launch
                 if (response.isSuccessful && response.body() != null) {
                     val url = response.body()!!.paymentUrl
                     showLiqPayWebView(url)
                 } else {
                     Toast.makeText(this@PaymentActivity, getString(R.string.card_bind_error), Toast.LENGTH_SHORT).show()
                 }
-            }
-
-            override fun onFailure(call: Call<InitBindCardResponse>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 Toast.makeText(this@PaymentActivity, getString(R.string.card_bind_error), Toast.LENGTH_SHORT).show()
             }
-        })
+        }
     }
 
     private fun isSafePaymentRedirectUrl(rawUrl: String): Boolean {

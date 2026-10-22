@@ -625,20 +625,12 @@ class AddressPickerActivity : BaseActivity() {
                 val latLng = LatLng(location.latitude, location.longitude)
                 userLatLng = latLng
 
-                // Выполняем блокирующий Geocoder в фоновом потоке Dispatchers.IO, чтобы не вызывать ANR
+                // Отказоустойчивый геокодинг (системный Geocoder + серверный фоллбэк Nominatim/Redis)
                 lifecycleScope.launch(Dispatchers.IO) {
-                    val resolvedAddress = try {
-                        val geocoder = Geocoder(this@AddressPickerActivity, Locale("uk", "UA"))
-                        @Suppress("DEPRECATION")
-                        val addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
-                        if (!addresses.isNullOrEmpty()) {
-                            AddressUtils.formatAddress(addresses[0].getAddressLine(0))
-                        } else {
-                            "Моє місцезнаходження"
-                        }
-                    } catch (e: Exception) {
-                        "Моє місцезнаходження"
-                    }
+                    val resolvedAddress = com.taxiapp.client.utils.ReverseGeocoderHelper.resolveAddress(
+                        context = this@AddressPickerActivity,
+                        latLng = latLng
+                    ) ?: "Моє місцезнаходження"
 
                     withContext(Dispatchers.Main) {
                         if (!isFinishing && !isDestroyed && activeEditText != null) {

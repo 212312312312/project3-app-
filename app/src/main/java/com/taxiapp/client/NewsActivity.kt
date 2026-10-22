@@ -3,23 +3,19 @@ package com.taxiapp.client
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.dto.NewsDto
 import com.taxiapp.client.ui.NewsAdapter
-import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import android.widget.LinearLayout
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
-class NewsActivity : BaseActivity()  {
+class NewsActivity : BaseActivity() {
 
     private lateinit var adapter: NewsAdapter
     private lateinit var progressBar: ProgressBar
@@ -31,14 +27,12 @@ class NewsActivity : BaseActivity()  {
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) {}
         setContentView(R.layout.activity_news)
 
-        // Init Views
         recyclerView = findViewById(R.id.rv_news_list)
         progressBar = findViewById(R.id.pb_loading)
         emptyState = findViewById(R.id.ll_empty_state)
 
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
 
-        // Setup RecyclerView
         adapter = NewsAdapter()
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
@@ -51,9 +45,10 @@ class NewsActivity : BaseActivity()  {
         recyclerView.visibility = View.GONE
         emptyState.visibility = View.GONE
 
-        // Вызов очищен от ручной передачи токена
-        ApiClient.instance.getClientNews().enqueue(object : Callback<List<NewsDto>> {
-            override fun onResponse(call: Call<List<NewsDto>>, response: Response<List<NewsDto>>) {
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getClientNews()
+                if (isFinishing || isDestroyed) return@launch
                 progressBar.visibility = View.GONE
 
                 if (response.isSuccessful) {
@@ -67,12 +62,13 @@ class NewsActivity : BaseActivity()  {
                 } else {
                     Toast.makeText(this@NewsActivity, "Помилка завантаження", Toast.LENGTH_SHORT).show()
                 }
-            }
-
-            override fun onFailure(call: Call<List<NewsDto>>, t: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 progressBar.visibility = View.GONE
                 Toast.makeText(this@NewsActivity, "Помилка мережі", Toast.LENGTH_SHORT).show()
             }
-        })
+        }
     }
 }

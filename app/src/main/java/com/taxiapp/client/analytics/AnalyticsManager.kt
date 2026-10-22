@@ -88,7 +88,7 @@ object AnalyticsManager {
 
         scope.launch {
             try {
-                val response = ApiClient.instance.sendAnalyticsEvents(request).execute()
+                val response = ApiClient.instance.sendAnalyticsEvents(request)
                 if (response.isSuccessful) {
                     if (com.taxiapp.client.BuildConfig.DEBUG) {
                         Log.d(TAG, "Analytics batch sent. Screens: ${eventsToSend.size}, Actions: ${customEventsToSend.size}")

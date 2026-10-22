@@ -37,6 +37,7 @@ class SessionManager(context: Context) {
         const val REFRESH_TOKEN = "refresh_token"
         const val USER_FULL_NAME = "user_full_name"
         const val USER_PHONE = "user_phone"
+        const val KEY_USER_RATING = "user_rating"
         const val USER_CITY_NAME = "user_city_name"
         const val USER_CITY_LAT = "user_city_lat"
         const val USER_CITY_LNG = "user_city_lng"
@@ -153,6 +154,13 @@ class SessionManager(context: Context) {
 
     fun getUserName(): String = prefs.getString(USER_FULL_NAME, "Райдер") ?: "Райдер"
     fun getUserPhone(): String = prefs.getString(USER_PHONE, "") ?: ""
+
+    fun saveUserRating(rating: Double) {
+        val formatted = String.format(java.util.Locale.US, "%.1f", rating)
+        prefs.edit().putString(KEY_USER_RATING, formatted).apply()
+    }
+
+    fun getUserRating(): String = prefs.getString(KEY_USER_RATING, "5.0") ?: "5.0"
 
     // --- CITY ---
     fun saveUserCity(city: CityData) {
@@ -301,6 +309,7 @@ class SessionManager(context: Context) {
             remove(ACTIVE_ORDER_ID)
             remove(USER_FULL_NAME)
             remove(USER_PHONE)
+            remove(KEY_USER_RATING)
             remove(KEY_PROMO_DISCOUNT)
             remove(KEY_PROMO_LIMIT)
             remove(KEY_CARD_MASK)

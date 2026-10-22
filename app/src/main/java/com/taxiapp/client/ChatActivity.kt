@@ -15,14 +15,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.WebSocketManager
-import com.taxiapp.client.network.dto.ChatMessageDto
 import com.taxiapp.client.network.dto.SendMessageRequest
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 
 class ChatActivity : BaseActivity() {
 
@@ -116,29 +113,27 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun loadMessageHistory(silent: Boolean = false) {
-        ApiClient.instance.getChatMessages(orderId).enqueue(object : Callback<List<ChatMessageDto>> {
-            override fun onResponse(call: Call<List<ChatMessageDto>>, response: Response<List<ChatMessageDto>>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getChatMessages(orderId)
+                if (isFinishing || isDestroyed) return@launch
                 if (response.isSuccessful) {
                     val messages = response.body() ?: emptyList()
                     val updated = chatAdapter.updateMessages(messages)
                     if (!silent || updated) {
                         scrollToBottom()
                     }
-                } else {
-                    if (!silent) {
-                        Toast.makeText(this@ChatActivity, "Помилка завантаження чату", Toast.LENGTH_SHORT).show()
-                    }
+                } else if (!silent) {
+                    Toast.makeText(this@ChatActivity, "Помилка завантаження чату", Toast.LENGTH_SHORT).show()
                 }
-            }
-
-            override fun onFailure(call: Call<List<ChatMessageDto>>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
-                if (!silent) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isFinishing && !isDestroyed && !silent) {
                     Toast.makeText(this@ChatActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
                 }
             }
-        })
+        }
     }
 
     private fun sendMessage(text: String) {
@@ -146,9 +141,10 @@ class ChatActivity : BaseActivity() {
         btnSend.isEnabled = false
         etMessage.text.clear()
 
-        ApiClient.instance.sendChatMessage(orderId, request).enqueue(object : Callback<ChatMessageDto> {
-            override fun onResponse(call: Call<ChatMessageDto>, response: Response<ChatMessageDto>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.sendChatMessage(orderId, request)
+                if (isFinishing || isDestroyed) return@launch
                 btnSend.isEnabled = true
 
                 if (response.isSuccessful) {
@@ -164,10 +160,10 @@ class ChatActivity : BaseActivity() {
                     }
                     Toast.makeText(this@ChatActivity, "Помилка відправки", Toast.LENGTH_SHORT).show()
                 }
-            }
-
-            override fun onFailure(call: Call<ChatMessageDto>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 btnSend.isEnabled = true
                 if (etMessage.text.isEmpty()) {
                     etMessage.setText(text)
@@ -175,7 +171,7 @@ class ChatActivity : BaseActivity() {
                 }
                 Toast.makeText(this@ChatActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
             }
-        })
+        }
     }
 
     override fun onStart() {

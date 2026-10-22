@@ -2,6 +2,32 @@ package com.taxiapp.client.network.dto
 
 import com.google.gson.annotations.SerializedName
 
+data class RoutePointDto(
+    val lat: Double,
+    val lng: Double
+)
+
+data class RouteRequestDto(
+    val originLat: Double,
+    val originLng: Double,
+    val destLat: Double,
+    val destLng: Double,
+    val waypoints: List<RoutePointDto>? = null
+)
+
+data class RouteResponseDto(
+    val polyline: String,
+    val distanceMeters: Int,
+    val durationSeconds: Int
+)
+
+data class ReverseGeocodeResponseDto(
+    val address: String,
+    val rawDisplayName: String? = null,
+    val source: String? = null
+)
+
+// Legacy DTOs (оставлены для обратной совместимости)
 data class DirectionsResponse(
     val routes: List<Route>
 )
@@ -18,17 +44,17 @@ data class OverviewPolyline(
 
 data class Leg(
     val distance: Distance,
-    val duration: Duration // <-- ДОБАВЛЕНО ЭТО ПОЛЕ
+    val duration: Duration
 )
 
 data class Distance(
     val text: String,
     @SerializedName("value")
-    val meters: Int // Google отдает "value", мы называем "meters"
+    val meters: Int
 )
 
 data class Duration(
     val text: String,
     @SerializedName("value")
-    val seconds: Int // <-- ВАЖНО: Google отдает "value", мы называем "seconds"
+    val seconds: Int
 )

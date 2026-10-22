@@ -2,19 +2,19 @@ package com.taxiapp.client.controllers
 
 import com.taxiapp.client.HomeViewModel
 import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.MessageResponse
 import com.taxiapp.client.network.RateDriverRequest
 import com.taxiapp.client.utils.SessionManager
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
- * Контроллер завершения и оценки заказа.
- * Разделяет явную отправку оценки пользователем и закрытие карточки завершенного заказа
- * без навязывания скрытой оценки 5 звезд при сворачивании приложения в onStop().
+ * Контроллер завершения и оценки заказа (на базе Kotlin Coroutines).
  */
 object OrderRatingController {
+
+    private val ratingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun submitRatingAndDismiss(
         orderId: String,
@@ -27,10 +27,11 @@ object OrderRatingController {
         val token = sessionManager.fetchAuthToken()
         if (!token.isNullOrEmpty() && score in 1..5) {
             val request = RateDriverRequest(orderId, score, comment)
-            ApiClient.instance.rateDriver(request).enqueue(object : Callback<MessageResponse> {
-                override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {}
-                override fun onFailure(call: Call<MessageResponse>, t: Throwable) {}
-            })
+            ratingScope.launch {
+                try {
+                    ApiClient.instance.rateDriver(request)
+                } catch (_: Exception) {}
+            }
         }
         viewModel.dismissCompletedOrder(orderId)
         viewModel.clearOrderState()

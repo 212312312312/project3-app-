@@ -45,9 +45,12 @@ import com.taxiapp.client.network.dto.SmsVerifyDto
 import com.taxiapp.client.utils.AppSignatureHelper
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class MainActivity : BaseActivity() {
 
@@ -243,9 +246,10 @@ class MainActivity : BaseActivity() {
         setLoading(true)
         val request = GoogleAuthRequestDto(idToken, marketingSource)
 
-        ApiClient.instance.loginWithGoogle(request).enqueue(object : Callback<LoginResponseDto> {
-            override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.loginWithGoogle(request)
+                if (isFinishing || isDestroyed) return@launch
                 setLoading(false)
                 if (response.isSuccessful) {
                     val body = response.body()
@@ -274,24 +278,25 @@ class MainActivity : BaseActivity() {
                 } else {
                     showToast("Помилка авторизації Google на сервері")
                 }
-            }
-
-            override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 setLoading(false)
                 showToast("Помилка мережі: ${t.message}")
             }
-        })
+        }
     }
 
     private fun verifySms(phone: String, code: String) {
         setLoading(true)
         val request = SmsVerifyDto(phoneNumber = phone, code = code, acquisitionSource = marketingSource)
 
-        if (isLinkingPhoneState) {
-            ApiClient.instance.linkPhone(request).enqueue(object : Callback<LoginResponseDto> {
-                override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
-                    if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                if (isLinkingPhoneState) {
+                    val response = ApiClient.instance.linkPhone(request)
+                    if (isFinishing || isDestroyed) return@launch
                     setLoading(false)
                     if (response.isSuccessful) {
                         val body = response.body()
@@ -304,18 +309,9 @@ class MainActivity : BaseActivity() {
                     } else {
                         handleSmsError(response.code())
                     }
-                }
-
-                override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
-                    if (isFinishing || isDestroyed) return
-                    setLoading(false)
-                    showToast("Помилка мережі: ${t.message}")
-                }
-            })
-        } else {
-            ApiClient.instance.verifySmsCode(request).enqueue(object : Callback<LoginResponseDto> {
-                override fun onResponse(call: Call<LoginResponseDto>, response: Response<LoginResponseDto>) {
-                    if (isFinishing || isDestroyed) return
+                } else {
+                    val response = ApiClient.instance.verifySmsCode(request)
+                    if (isFinishing || isDestroyed) return@launch
                     setLoading(false)
                     if (response.isSuccessful) {
                         val body = response.body()
@@ -335,13 +331,13 @@ class MainActivity : BaseActivity() {
                         handleSmsError(response.code())
                     }
                 }
-
-                override fun onFailure(call: Call<LoginResponseDto>, t: Throwable) {
-                    if (isFinishing || isDestroyed) return
-                    setLoading(false)
-                    showToast("Помилка мережі: ${t.message}")
-                }
-            })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Exception) {
+                if (isFinishing || isDestroyed) return@launch
+                setLoading(false)
+                showToast("Помилка мережі: ${t.message}")
+            }
         }
     }
 
@@ -450,9 +446,10 @@ class MainActivity : BaseActivity() {
     private fun requestSms(phone: String) {
         setLoading(true)
         val request = SmsRequestDto(phoneNumber = phone)
-        ApiClient.instance.requestSmsCode(request).enqueue(object : Callback<MessageResponse> {
-            override fun onResponse(call: Call<MessageResponse>, response: Response<MessageResponse>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.requestSmsCode(request)
+                if (isFinishing || isDestroyed) return@launch
                 setLoading(false)
                 if (response.isSuccessful) {
                     showSmsScreen(phone)
@@ -463,14 +460,14 @@ class MainActivity : BaseActivity() {
                     if (response.code() == 403) showToast("Доступ заборонено (Блок/Бан)")
                     else showToast("Помилка: ${response.message()}")
                 }
-            }
-
-            override fun onFailure(call: Call<MessageResponse>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 setLoading(false)
                 showToast("Помилка мережі: ${t.message}")
             }
-        })
+        }
     }
 
     private val smsRetrieverReceiver = object : BroadcastReceiver() {
@@ -531,10 +528,11 @@ class MainActivity : BaseActivity() {
             if (!task.isSuccessful) return@addOnCompleteListener
             val fcmToken = task.result
             val body = mapOf("token" to fcmToken)
-            ApiClient.instance.updateFcmToken(body).enqueue(object : Callback<Void> {
-                override fun onResponse(call: Call<Void>, response: Response<Void>) {}
-                override fun onFailure(call: Call<Void>, t: Throwable) {}
-            })
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                try {
+                    ApiClient.instance.updateFcmToken(body)
+                } catch (_: Exception) {}
+            }
         }
     }
 

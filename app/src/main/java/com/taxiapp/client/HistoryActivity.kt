@@ -18,18 +18,18 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.widget.CompoundButtonCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.tabs.TabLayout
 import com.taxiapp.client.network.ApiClient
-import com.taxiapp.client.network.dto.CancellationReasonDto
 import com.taxiapp.client.network.dto.TaxiOrderDto
 import com.taxiapp.client.ui.HistoryAdapter
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 class HistoryActivity : BaseActivity() {
 
@@ -49,7 +49,7 @@ class HistoryActivity : BaseActivity() {
     private val allLoadedOrders = mutableListOf<TaxiOrderDto>()
     private var fullOrderList: List<TaxiOrderDto> = emptyList()
 
-    private var activeHistoryCall: Call<List<TaxiOrderDto>>? = null
+    private var activeHistoryJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,7 +66,7 @@ class HistoryActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
-        activeHistoryCall?.cancel()
+        activeHistoryJob?.cancel()
         super.onDestroy()
     }
 
@@ -108,7 +108,6 @@ class HistoryActivity : BaseActivity() {
         val layoutManager = LinearLayoutManager(this)
         recyclerView.layoutManager = layoutManager
 
-        // --- СЛУХАЧ СКРОЛУ ДЛЯ БЕЗКІНЕЧНОЇ ПАГІНАЦІЇ ---
         recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
@@ -152,18 +151,17 @@ class HistoryActivity : BaseActivity() {
     private fun loadHistory(page: Int = 0, isInitial: Boolean = true) {
         if (isLoading && !isInitial) return
         if (isInitial) {
-            activeHistoryCall?.cancel()
+            activeHistoryJob?.cancel()
             currentPage = 0
             isLastPage = false
             progressBar.visibility = View.VISIBLE
         }
         isLoading = true
 
-        val call = ApiClient.instance.getHistory(page = page, size = pageSize)
-        activeHistoryCall = call
-        call.enqueue(object : Callback<List<TaxiOrderDto>> {
-            override fun onResponse(call: Call<List<TaxiOrderDto>>, response: Response<List<TaxiOrderDto>>) {
-                if (call.isCanceled || isFinishing || isDestroyed) return
+        activeHistoryJob = lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getHistory(page = page, size = pageSize)
+                if (isFinishing || isDestroyed) return@launch
                 isLoading = false
                 progressBar.visibility = View.GONE
 
@@ -189,22 +187,20 @@ class HistoryActivity : BaseActivity() {
 
                     val currentTab = try { tabLayout.selectedTabPosition } catch (e: Exception) { 0 }
                     filterList(currentTab)
-                } else {
-                    if (isInitial && allLoadedOrders.isEmpty()) {
-                        showEmpty()
-                    }
+                } else if (isInitial && allLoadedOrders.isEmpty()) {
+                    showEmpty()
                 }
-            }
-
-            override fun onFailure(call: Call<List<TaxiOrderDto>>, t: Throwable) {
-                if (call.isCanceled || isFinishing || isDestroyed) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 isLoading = false
                 progressBar.visibility = View.GONE
                 if (isInitial && allLoadedOrders.isEmpty()) {
                     showEmpty()
                 }
             }
-        })
+        }
     }
 
     private fun filterList(tabIndex: Int) {
@@ -255,9 +251,10 @@ class HistoryActivity : BaseActivity() {
         val rgReasons = dialog.findViewById<RadioGroup>(R.id.rg_cancel_reasons)
         val btnConfirm = dialog.findViewById<Button>(R.id.btn_confirm_cancel)
 
-        ApiClient.instance.getCancellationReasons("CLIENT").enqueue(object : Callback<List<CancellationReasonDto>> {
-            override fun onResponse(call: Call<List<CancellationReasonDto>>, response: Response<List<CancellationReasonDto>>) {
-                if (isFinishing || isDestroyed || !dialog.isShowing) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getCancellationReasons("CLIENT")
+                if (isFinishing || isDestroyed || !dialog.isShowing) return@launch
                 if (response.isSuccessful) {
                     val reasons = response.body()?.filter { it.isActive } ?: emptyList()
                     rgReasons.removeAllViews()
@@ -280,13 +277,14 @@ class HistoryActivity : BaseActivity() {
                 } else {
                     Toast.makeText(this@HistoryActivity, "Помилка завантаження причин скасування", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    Toast.makeText(this@HistoryActivity, "Помилка мережі при завантаженні причин", Toast.LENGTH_SHORT).show()
+                }
             }
-
-            override fun onFailure(call: Call<List<CancellationReasonDto>>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
-                Toast.makeText(this@HistoryActivity, "Помилка мережі при завантаженні причин", Toast.LENGTH_SHORT).show()
-            }
-        })
+        }
 
         btnConfirm.setOnClickListener {
             val checkedId = rgReasons.checkedRadioButtonId
@@ -308,9 +306,10 @@ class HistoryActivity : BaseActivity() {
     private fun cancelOrder(orderId: String, reasonText: String? = null) {
         Toast.makeText(this, "Скасування...", Toast.LENGTH_SHORT).show()
 
-        ApiClient.instance.cancelOrder(orderId, reasonText).enqueue(object : Callback<TaxiOrderDto> {
-            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
-                if (isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.cancelOrder(orderId, reasonText)
+                if (isFinishing || isDestroyed) return@launch
                 if (response.isSuccessful) {
                     Toast.makeText(this@HistoryActivity, "Замовлення скасовано", Toast.LENGTH_SHORT).show()
                     if (sessionManager.fetchActiveOrderId() == orderId) {
@@ -321,12 +320,13 @@ class HistoryActivity : BaseActivity() {
                     val msg = try { response.errorBody()?.string() } catch (e: Exception) { response.message() }
                     Toast.makeText(this@HistoryActivity, "Помилка: $msg", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    Toast.makeText(this@HistoryActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
+                }
             }
-
-            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
-                if (isFinishing || isDestroyed) return
-                Toast.makeText(this@HistoryActivity, "Помилка з'єднання", Toast.LENGTH_SHORT).show()
-            }
-        })
+        }
     }
 }

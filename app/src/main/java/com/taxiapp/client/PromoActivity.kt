@@ -5,21 +5,20 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.dto.ClientPromoProgressDto
+import com.taxiapp.client.ui.EnterPromoDialog
 import com.taxiapp.client.ui.PromoAdapter
 import com.taxiapp.client.ui.PromoDetailsBottomSheet
-import com.taxiapp.client.ui.EnterPromoDialog
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
-class PromoActivity : BaseActivity()  {
+class PromoActivity : BaseActivity() {
 
     private lateinit var adapter: PromoAdapter
     private lateinit var progressBar: ProgressBar
@@ -39,9 +38,6 @@ class PromoActivity : BaseActivity()  {
         emptyState = findViewById(R.id.ll_empty_state)
 
         findViewById<ImageView>(R.id.btn_back).setOnClickListener { finish() }
-
-        // Здесь больше нет обработчика нажатия на emptyState,
-        // поэтому диалог при клике на экран больше не появится.
 
         adapter = PromoAdapter { promoItem ->
             val bottomSheet = PromoDetailsBottomSheet(promoItem)
@@ -63,18 +59,15 @@ class PromoActivity : BaseActivity()  {
 
         progressBar.visibility = View.VISIBLE
 
-        ApiClient.instance.getClientPromos().enqueue(object : Callback<List<ClientPromoProgressDto>> {
-            override fun onResponse(call: Call<List<ClientPromoProgressDto>>, response: Response<List<ClientPromoProgressDto>>) {
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getClientPromos()
+                if (isFinishing || isDestroyed) return@launch
                 progressBar.visibility = View.GONE
 
                 if (response.isSuccessful) {
                     val fullList = response.body() ?: emptyList()
-
-                    // --- ИСПРАВЛЕНИЕ ЛОГИКИ ---
-                    // Мы показываем только те задания, где награда ЕЩЕ НЕ ДОСТУПНА.
-                    // Если isRewardAvailable == true, значит задание выполнено и оно ушло в "Мои скидки".
                     val activeTasks = fullList.filter { !it.isRewardAvailable }
-                    // ---------------------------
 
                     if (activeTasks.isEmpty()) {
                         showEmptyState()
@@ -84,13 +77,14 @@ class PromoActivity : BaseActivity()  {
                 } else {
                     showEmptyState()
                 }
-            }
-
-            override fun onFailure(call: Call<List<ClientPromoProgressDto>>, t: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 progressBar.visibility = View.GONE
                 showEmptyState()
             }
-        })
+        }
     }
 
     private fun showList(list: List<ClientPromoProgressDto>) {

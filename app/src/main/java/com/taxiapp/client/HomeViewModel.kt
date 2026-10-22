@@ -26,11 +26,11 @@ import com.taxiapp.client.service.OrderStatusService
 import com.taxiapp.client.utils.CityData
 import com.taxiapp.client.utils.LocationValidator
 import com.taxiapp.client.utils.SessionManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import retrofit2.Call
-import retrofit2.Callback
 import retrofit2.Response
 import java.math.BigDecimal
 import java.time.Instant
@@ -90,8 +90,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     var currentRoutePolyline: String? = null
 
     private var observedWebSocketManager: WebSocketManager? = null
-    private var activeDirectionsCall: Call<DirectionsResponse>? = null
-    private var activeCalculatePriceCall: Call<List<CarTariffDto>>? = null
+    private var directionsJob: Job? = null
+    private var calculatePriceJob: Job? = null
 
     // Именованные Observer'ы для корректной отписки в onCleared() (устранение утечки памяти)
     private val orderCanceledObserver = Observer<String?> { canceledId ->
@@ -134,7 +134,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Безопасный парсинг серверного времени создания заказа (UTC) и расчет прошедших секунд.
-     * Исправляет баг часового пояса (+2/+3 часа разницы между UTC сервера и LocalDateTime телефона).
      */
     private fun calculateElapsedSecondsFromUtc(createdAtStr: String?, fallbackSec: Long = 0L): Long {
         if (createdAtStr.isNullOrBlank()) return fallbackSec
@@ -152,10 +151,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Умная синхронизация заказа:
-    // Если клиент свернул заказ кнопкой "Назад" (sessionManager.fetchActiveOrderId() == null),
-    // мы НЕ возвращаем активный заказ принудительно на главный экран (он остается в "Мої поїздки"),
-    // а показываем только завершенный (COMPLETED) заказ для расчета/оценки либо тот заказ, который выбран явно.
     fun syncActiveOrder() {
         val pinnedOrderId = sessionManager.fetchActiveOrderId()
         activeOrderId = pinnedOrderId
@@ -194,8 +189,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // 2. Если pinnedOrderId == null (клиент вышел из заказа кнопкой "Назад" на главный экран):
-                // проверяем сервер только ради финального окна COMPLETED (если поездка завершилась в фоне)
+                // 2. Если pinnedOrderId == null: проверяем сервер только ради финального окна COMPLETED
                 val response = ApiClient.instance.getActiveOrder()
                 if (response.isSuccessful) {
                     val order = response.body()
@@ -216,8 +210,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                             }
                             else -> {
-                                // Заказ активен, но клиент скрыл его с главного экрана в "Мої поїздки":
-                                // обновляем только фоновое уведомление в шторке, НЕ открывая панель заказа на карте!
                                 updateOrderStatusService(order)
                             }
                         }
@@ -229,6 +221,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Помилка синхронізації активного замовлення: ${e.message}")
             }
@@ -239,6 +233,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 ApiClient.instance.dismissOrder(orderId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Помилка dismissOrder: ${e.message}")
             }
@@ -265,7 +261,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     "COMPLETED" -> {
-                        // Когда поездка завершена водителем — всегда показываем итоговый чек и оценку
                         sessionManager.clearActiveOrderId()
                         activeOrderId = order.id
                         stopOrderStatusService(order.id)
@@ -273,8 +268,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _activeOrder.postValue(order)
                     }
                     else -> {
-                        // Обновляем шторку уведомлений всегда, но карточку на главном экране —
-                        // ТОЛЬКО если этот заказ сейчас открыт у клиента (не свернут кнопкой "Назад")
                         updateOrderStatusService(order)
                         if (isCurrentlyPinned) {
                             activeOrderId = order.id
@@ -319,6 +312,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     _activeOrder.value = loadedOrder
                     Log.d("HomeViewModel", "Принудительно синхронизирован статус заказа (ID: $orderId): ${loadedOrder?.status}")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Ошибка проверки статуса заказа: ${e.message}")
             }
@@ -329,19 +324,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (lastTrackedCompletedOrderId == order.id) return
         lastTrackedCompletedOrderId = order.id
 
-        // Инкрементируем собственный счетчик поездок клиента (вместо ошибочного order.driver?.completedRides)
         val prefs = getApplication<Application>().getSharedPreferences("taxi_session", Context.MODE_PRIVATE)
         val clientOrderNumber = prefs.getInt("client_completed_rides_count", 0) + 1
         prefs.edit().putInt("client_completed_rides_count", clientOrderNumber).apply()
 
-        // 1. Собственная аналитика
         AnalyticsManager.trackOrderCompleted(
             orderId = order.id,
             finalPrice = order.price,
             orderNumber = clientOrderNumber
         )
 
-        // 2. Отправка покупки в Meta Ads SDK
         try {
             val logger = AppEventsLogger.newLogger(getApplication())
             val params = Bundle().apply {
@@ -376,60 +368,60 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         webSocketManager?.unsubscribeFromNearbyDrivers()
     }
 
-    // --- API: Тарифы и Цена ---
-    fun loadTariffsAndCalculatePrice(routePolyline: String?, distanceMeters: Int, waypointsCount: Int = 0) {
+    // --- API: Тарифы и Цена (suspend) ---
+    fun loadTariffsAndCalculatePrice(
+        routePolyline: String?,
+        distanceMeters: Int,
+        waypointsCount: Int = 0,
+        originLat: Double? = null,
+        originLng: Double? = null
+    ) {
         _isLoading.value = true
-        activeCalculatePriceCall?.cancel()
+        calculatePriceJob?.cancel()
 
-        if (routePolyline != null && distanceMeters > 0) {
-            val fakeWaypointsList = if (waypointsCount > 0) List(waypointsCount) { "wp" } else emptyList()
-
-            val request = CalculatePriceRequestDto(
-                googleRoutePolyline = routePolyline,
-                distanceMeters = distanceMeters,
-                waypointsCount = waypointsCount,
-                waypoints = fakeWaypointsList
-            )
-
-            val call = ApiClient.instance.calculatePrice(request)
-            activeCalculatePriceCall = call
-            call.enqueue(object : Callback<List<CarTariffDto>> {
-                override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
-                    if (call.isCanceled) return
+        calculatePriceJob = viewModelScope.launch {
+            if (routePolyline != null && distanceMeters > 0) {
+                val fakeWaypointsList = if (waypointsCount > 0) List(waypointsCount) { "wp" } else emptyList()
+                val request = CalculatePriceRequestDto(
+                    googleRoutePolyline = routePolyline,
+                    distanceMeters = distanceMeters,
+                    waypointsCount = waypointsCount,
+                    waypoints = fakeWaypointsList,
+                    originLat = originLat,
+                    originLng = originLng
+                )
+                try {
+                    val response = ApiClient.instance.calculatePrice(request)
                     _isLoading.value = false
                     if (response.isSuccessful && response.body() != null) {
                         _availableTariffs.value = response.body()
                     } else {
-                        loadBaseTariffs()
+                        loadBaseTariffsSuspend()
                     }
-                }
-                override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
-                    if (call.isCanceled) return
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
                     _isLoading.value = false
-                    loadBaseTariffs()
+                    loadBaseTariffsSuspend()
                 }
-            })
-        } else {
-            loadBaseTariffs()
+            } else {
+                loadBaseTariffsSuspend()
+            }
         }
     }
 
-    private fun loadBaseTariffs() {
-        val call = ApiClient.instance.getActiveTariffs()
-        activeCalculatePriceCall = call
-        call.enqueue(object : Callback<List<CarTariffDto>> {
-            override fun onResponse(call: Call<List<CarTariffDto>>, response: Response<List<CarTariffDto>>) {
-                if (call.isCanceled) return
-                _isLoading.value = false
-                if (response.isSuccessful) {
-                    _availableTariffs.value = response.body() ?: emptyList()
-                }
+    private suspend fun loadBaseTariffsSuspend() {
+        try {
+            val response = ApiClient.instance.getActiveTariffs()
+            _isLoading.value = false
+            if (response.isSuccessful) {
+                _availableTariffs.value = response.body() ?: emptyList()
             }
-            override fun onFailure(call: Call<List<CarTariffDto>>, t: Throwable) {
-                if (call.isCanceled) return
-                _isLoading.value = false
-            }
-        })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _isLoading.value = false
+        }
     }
 
     fun startCheckingCardBinding(webSocketManager: WebSocketManager?) {
@@ -462,57 +454,51 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _cardBoundEvent.value = false
     }
 
-    // --- API: Маршрут ---
+    // --- API: Маршрут (suspend через серверный OSRM + Redis кэш) ---
     fun fetchDirections(origin: LatLng, dest: LatLng, waypoints: List<Pair<LatLng, String>>) {
         currentRoutePolyline = null
-        activeDirectionsCall?.cancel()
+        directionsJob?.cancel()
 
-        val originStr = "${origin.latitude},${origin.longitude}"
-        val destStr = "${dest.latitude},${dest.longitude}"
-        val wpStr = if (waypoints.isNotEmpty()) {
-            "optimize:false|" + waypoints.joinToString("|") { "${it.first.latitude},${it.first.longitude}" }
-        } else null
+        val wpDtos = waypoints.map { RoutePointDto(it.first.latitude, it.first.longitude) }
 
-        val myApiKey = BuildConfig.GOOGLE_PLACES_API_KEY
-
-        val call = DirectionsApiClient.instance.getDirections(originStr, destStr, wpStr, myApiKey)
-        activeDirectionsCall = call
-        call.enqueue(object : Callback<DirectionsResponse> {
-            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                if (call.isCanceled) return
-                if (response.isSuccessful && !response.body()?.routes.isNullOrEmpty()) {
-                    val route = response.body()!!.routes[0]
-                    val polylinePoints = route.overviewPolyline.points
+        directionsJob = viewModelScope.launch {
+            try {
+                val response = DirectionsApiClient.calculateRoute(
+                    originLat = origin.latitude,
+                    originLng = origin.longitude,
+                    destLat = dest.latitude,
+                    destLng = dest.longitude,
+                    waypoints = wpDtos
+                )
+                val route = response.body()
+                if (response.isSuccessful && route != null && route.polyline.isNotBlank()) {
+                    val polylinePoints = route.polyline
                     currentRoutePolyline = polylinePoints
 
-                    viewModelScope.launch(Dispatchers.Default) {
-                        var dist = 0L
-                        var dur = 0L
-                        route.legs.forEach {
-                            dist += it.distance.meters
-                            dur += it.duration.seconds
-                        }
-
-                        val finalDist = dist.toInt()
-                        val finalDur = dur.toInt()
-                        val decoded = PolyUtil.decode(polylinePoints)
-
-                        withContext(Dispatchers.Main) {
-                            _routeInfo.value = Pair(finalDist, finalDur)
-                            _decodedRoute.value = decoded
-                            loadTariffsAndCalculatePrice(polylinePoints, finalDist, waypoints.size)
-                        }
+                    val finalDist = route.distanceMeters
+                    val finalDur = route.durationSeconds
+                    val decoded = withContext(Dispatchers.Default) {
+                        PolyUtil.decode(polylinePoints)
                     }
+
+                    _routeInfo.value = Pair(finalDist, finalDur)
+                    _decodedRoute.value = decoded
+                    loadTariffsAndCalculatePrice(
+                        routePolyline = polylinePoints,
+                        distanceMeters = finalDist,
+                        waypointsCount = waypoints.size,
+                        originLat = origin.latitude,
+                        originLng = origin.longitude
+                    )
                 } else {
                     _errorMessage.value = "Маршрут не знайдено"
                 }
-            }
-
-            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
-                if (call.isCanceled) return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _errorMessage.value = "Не вдалося побудувати маршрут"
             }
-        })
+        }
     }
 
     // --- УПРАВЛЕНИЕ ВИДЖЕТОМ (СЕРВИСОМ) ---
@@ -534,12 +520,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val id = activeOrderId ?: return
         _isLoading.value = true
 
-        ApiClient.instance.cancelOrder(id, reasonText).enqueue(object : Callback<TaxiOrderDto> {
-            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+        viewModelScope.launch {
+            try {
+                val response = ApiClient.instance.cancelOrder(id, reasonText)
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
                     val order = response.body()!!
-
                     val durationSec = calculateElapsedSecondsFromUtc(order.createdAt, 0L)
 
                     AnalyticsManager.trackOrderFailed(
@@ -553,16 +539,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _errorMessage.value = "Не вдалося скасувати"
                 }
-            }
-
-            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _isLoading.value = false
                 _errorMessage.value = "Помилка мережі"
             }
-        })
+        }
     }
 
-    // Без-аргументная перегрузка для совместимости, делегирующая в полную очистку состояния
     fun cancelOrder() {
         cancelOrder(reasonText = null)
     }
@@ -570,7 +555,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun applyBoostPrice(boostAmount: Double = 20.0) {
         val order = _activeOrder.value ?: return
         val newAddedValue = order.addedValue + boostAmount
-
         val durationSec = calculateElapsedSecondsFromUtc(order.createdAt, 180L)
 
         AnalyticsManager.trackBoostClicked(
@@ -593,8 +577,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createOrder(request: CreateOrderRequestDto) {
         _isLoading.value = true
-        ApiClient.instance.createOrder(request).enqueue(object : Callback<TaxiOrderDto> {
-            override fun onResponse(call: Call<TaxiOrderDto>, response: Response<TaxiOrderDto>) {
+        viewModelScope.launch {
+            try {
+                val response = ApiClient.instance.createOrder(request)
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
                     val order = response.body()!!
@@ -604,25 +589,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     _activeOrder.value = order
                     updateOrderStatusService(order)
                 } else {
-                    val errorJson = response.errorBody()?.string()
-                    val msg = try {
-                        val jsonObject = JsonParser.parseString(errorJson).asJsonObject
-                        if (jsonObject.has("message")) {
-                            jsonObject.get("message").asString
-                        } else {
-                            "Не вдалося зарезервувати кошти. Перевірте баланс"
-                        }
-                    } catch (e: Exception) {
-                        "Помилка створення замовлення. Спробуйте інший спосіб оплати"
-                    }
+                    val msg = extractServerErrorMessage(
+                        response,
+                        "Не вдалося зарезервувати кошти. Перевірте баланс"
+                    )
                     _errorMessage.value = msg
                 }
-            }
-            override fun onFailure(call: Call<TaxiOrderDto>, t: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _isLoading.value = false
                 _errorMessage.value = "Помилка мережі"
             }
-        })
+        }
     }
 
     fun startStatusPolling() {}
@@ -643,12 +622,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- API: Смена типа оплаты "на лету" ---
+    // --- API: Смена типа оплаты "на лету" (suspend) ---
     fun updateActiveOrderPaymentMethod(method: String) {
         val id = activeOrderId ?: return
         _isLoading.value = true
-        ApiClient.instance.updatePaymentMethod(id, method).enqueue(object : Callback<MessageResponseDto> {
-            override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
+        viewModelScope.launch {
+            try {
+                val response = ApiClient.instance.updatePaymentMethod(id, method)
                 _isLoading.value = false
                 if (response.isSuccessful) {
                     sessionManager.savePaymentMethod(method)
@@ -658,19 +638,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     val serverMsg = extractServerErrorMessage(response, "Помилка зміни оплати")
                     _errorMessage.value = serverMsg
-                    // Принудительно триггерим текущий заказ, чтобы иконка оплаты вернулась к реальному значению
                     _activeOrder.value = _activeOrder.value
                 }
-            }
-            override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _isLoading.value = false
                 _errorMessage.value = "Помилка мережі"
                 _activeOrder.value = _activeOrder.value
             }
-        })
+        }
     }
 
-    // --- API: Изменение цены "на лету" ---
+    // --- API: Изменение цены "на лету" (suspend) ---
     fun updateActiveOrderPrice(addedValue: Double) {
         val id = activeOrderId ?: return
         val currentOrder = _activeOrder.value
@@ -678,8 +658,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         _isLoading.value = true
-        ApiClient.instance.updateOrderPrice(id, addedValue).enqueue(object : Callback<MessageResponseDto> {
-            override fun onResponse(call: Call<MessageResponseDto>, response: Response<MessageResponseDto>) {
+        viewModelScope.launch {
+            try {
+                val response = ApiClient.instance.updateOrderPrice(id, addedValue)
                 _isLoading.value = false
                 if (response.isSuccessful) {
                     _activeOrder.value?.let { ord ->
@@ -700,20 +681,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     val serverMsg = extractServerErrorMessage(response, "Помилка зміни ціни")
                     _errorMessage.value = serverMsg
                 }
-            }
-            override fun onFailure(call: Call<MessageResponseDto>, t: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _isLoading.value = false
                 _errorMessage.value = "Помилка мережі"
             }
-        })
+        }
     }
 
     fun stopStatusPolling() {}
 
-    /**
-     * Скрывает карточку текущего заказа с главного экрана (при нажатии "Назад" или "Нове замовлення"),
-     * оставляя сам заказ активным в "Мої поїздки" и в шторке уведомлений.
-     */
     fun hideOrderFromMainScreen() {
         activeOrderId = null
         sessionManager.clearActiveOrderId()
@@ -739,8 +717,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         OrderStatusBus.orderCanceledEvent.removeObserver(orderCanceledObserver)
         OrderStatusBus.orderUpdatedEvent.removeObserver(orderUpdatedObserver)
-        activeDirectionsCall?.cancel()
-        activeCalculatePriceCall?.cancel()
+        directionsJob?.cancel()
+        calculatePriceJob?.cancel()
         stopCheckingCardBinding()
         stopOrderSocketListening()
         observedWebSocketManager = null

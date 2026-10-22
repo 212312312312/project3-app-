@@ -308,15 +308,11 @@ class FavoriteAddressesActivity : BaseActivity() {
 
                 geocodeJob?.cancel()
                 geocodeJob = lifecycleScope.launch(Dispatchers.IO) {
-                    val addressResult = try {
-                        val lang = sessionManager.getLanguage()
-                        val geocoder = Geocoder(this@FavoriteAddressesActivity, Locale(lang))
-                        @Suppress("DEPRECATION")
-                        val addresses = geocoder.getFromLocation(target.latitude, target.longitude, 1)
-                        if (!addresses.isNullOrEmpty()) {
-                            AddressUtils.formatAddress(addresses[0].getAddressLine(0))
-                        } else null
-                    } catch (e: Exception) { null }
+                    val addressResult = com.taxiapp.client.utils.ReverseGeocoderHelper.resolveAddress(
+                        context = this@FavoriteAddressesActivity,
+                        latLng = target,
+                        languageCode = sessionManager.getLanguage()
+                    )
 
                     withContext(Dispatchers.Main) {
                         tvAddress.text = addressResult?.takeIf { it.isNotBlank() } ?: getString(R.string.point_on_map)

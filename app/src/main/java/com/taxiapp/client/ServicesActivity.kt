@@ -85,7 +85,7 @@ class ServicesActivity : BaseActivity() {
                     return@launch
                 }
 
-                val response = ApiClient.instance.getServices().execute()
+                val response = ApiClient.instance.getServices()
 
                 if (response.isSuccessful && response.body() != null) {
                     val services = response.body()!!
