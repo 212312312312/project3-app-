@@ -887,13 +887,16 @@ class MapRouteController(
 
     fun updateInProgressDestinationBadge(
         map: GoogleMap?,
-        order: TaxiOrderDto
+        order: TaxiOrderDto,
+        syncedMinutesLeft: Int? = null
     ) {
         if (map == null) return
 
-        val secondsLeft = order.durationSeconds ?: 0
-        val minutesLeft = if (secondsLeft > 0) ceil(secondsLeft.toDouble() / 60.0).toInt() else 0
-        val timeText = if (minutesLeft > 0) "$minutesLeft хв" else "?? хв"
+        val minutesLeft = syncedMinutesLeft ?: run {
+            val secondsLeft = order.durationSeconds ?: 0
+            if (secondsLeft > 0) ceil(secondsLeft.toDouble() / 60.0).toInt() else 1
+        }
+        val timeText = if (minutesLeft > 0) "$minutesLeft хв" else "1 хв"
 
         if (timeText != lastDrawnRemainingTime || destinationMarker == null) {
             lastDrawnRemainingTime = timeText
@@ -988,9 +991,17 @@ class MapRouteController(
                     return@post
                 }
 
+                val lp = bottomPanel.layoutParams as? ViewGroup.MarginLayoutParams
+                val horizontalMargins = (lp?.leftMargin ?: 0) + (lp?.rightMargin ?: 0)
+                val targetWidth = if (bottomPanel.width > 0) {
+                    bottomPanel.width
+                } else {
+                    activity.resources.displayMetrics.widthPixels - horizontalMargins
+                }
+
                 var panelHeight = bottomPanel.height
-                if (panelHeight == 0) {
-                    val widthSpec = View.MeasureSpec.makeMeasureSpec(activity.resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
+                if (panelHeight == 0 || bottomPanel.id == R.id.active_order_card) {
+                    val widthSpec = View.MeasureSpec.makeMeasureSpec(targetWidth, View.MeasureSpec.EXACTLY)
                     val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
                     bottomPanel.measure(widthSpec, heightSpec)
                     panelHeight = bottomPanel.measuredHeight
@@ -1002,7 +1013,7 @@ class MapRouteController(
                     if (detailsView != null && detailsView.visibility == View.VISIBLE) {
                         var detailsHeight = detailsView.height
                         if (detailsHeight == 0) {
-                            val widthSpec = View.MeasureSpec.makeMeasureSpec(activity.resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY)
+                            val widthSpec = View.MeasureSpec.makeMeasureSpec(targetWidth, View.MeasureSpec.EXACTLY)
                             val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
                             detailsView.measure(widthSpec, heightSpec)
                             detailsHeight = detailsView.measuredHeight
@@ -1114,10 +1125,15 @@ class MapRouteController(
         val extraBuffer = convertDpToPixel(4f).toInt()
         val topPadding = convertDpToPixel(20f).toInt()
 
-        var targetHeight = if (activeOrderCard.height > 0) activeOrderCard.height else toHeight
-        val detailsView = activeOrderCard.findViewById<View>(R.id.layout_expandable_details)
-        if (detailsView != null && detailsView.visibility == View.VISIBLE && detailsView.height > 0) {
-            targetHeight -= detailsView.height
+        var targetHeight = if (toHeight > 0) {
+            toHeight
+        } else {
+            var h = activeOrderCard.height
+            val detailsView = activeOrderCard.findViewById<View>(R.id.layout_expandable_details)
+            if (detailsView != null && detailsView.visibility == View.VISIBLE && detailsView.height > 0) {
+                h -= detailsView.height
+            }
+            h
         }
 
         val totalBottomPadding = targetHeight + marginBottom + extraBuffer

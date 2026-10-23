@@ -37,6 +37,11 @@ class OrderTimersController(private val context: Context) {
     private var activeTimerTimeSource: String? = null
     private var activeBaseElapsedRealtimeMs: Long = 0L
 
+    private val inProgressEtaHandler = Handler(Looper.getMainLooper())
+    private var inProgressEtaRunnable: Runnable? = null
+    private var activeInProgressOrderId: String? = null
+    private var activeInProgressStartElapsedMs: Long = 0L
+
     private val boostTimerHandler = Handler(Looper.getMainLooper())
     private var boostRunnable: Runnable? = null
     var boostDialog: BottomSheetDialog? = null
@@ -178,6 +183,63 @@ class OrderTimersController(private val context: Context) {
         waitingTimerHandler.post(runnable)
     }
 
+    fun startInProgressEtaTimer(
+        order: TaxiOrderDto,
+        fallbackDurationSeconds: Int,
+        onTickMinutesLeft: (minutesLeft: Int, arrivalTimeFormatted: String) -> Unit
+    ) {
+        val totalDurationSec = (order.durationSeconds?.takeIf { it > 0 } ?: fallbackDurationSeconds)
+            .coerceAtLeast(60)
+
+        val nowWallMs = System.currentTimeMillis()
+        val nowElapsedMs = SystemClock.elapsedRealtime()
+        val parsedStartedAtMs = parseServerUtcToEpochMs(order.startedAt)
+        val parsedServerNowMs = parseServerUtcToEpochMs(order.serverTime)
+
+        if (activeInProgressOrderId != order.id || activeInProgressStartElapsedMs == 0L || parsedStartedAtMs != null) {
+            val initialElapsedMs = when {
+                parsedStartedAtMs != null && parsedServerNowMs != null ->
+                    (parsedServerNowMs - parsedStartedAtMs).coerceAtLeast(0L)
+                parsedStartedAtMs != null ->
+                    (nowWallMs - parsedStartedAtMs).coerceAtLeast(0L)
+                activeInProgressOrderId == order.id && activeInProgressStartElapsedMs > 0L ->
+                    (nowElapsedMs - activeInProgressStartElapsedMs).coerceAtLeast(0L)
+                else -> 0L
+            }
+            activeInProgressOrderId = order.id
+            activeInProgressStartElapsedMs = nowElapsedMs - initialElapsedMs
+        }
+
+        inProgressEtaRunnable?.let { inProgressEtaHandler.removeCallbacks(it) }
+
+        val runnable = object : Runnable {
+            override fun run() {
+                val elapsedSec = ((SystemClock.elapsedRealtime() - activeInProgressStartElapsedMs).coerceAtLeast(0L) / 1000L).toInt()
+                val remainingSec = (totalDurationSec - elapsedSec).coerceAtLeast(60)
+                val minutesLeft = kotlin.math.ceil(remainingSec / 60.0).toInt().coerceAtLeast(1)
+
+                val cal = java.util.Calendar.getInstance().apply {
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                    add(java.util.Calendar.MINUTE, minutesLeft)
+                }
+                val sdf = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
+                onTickMinutesLeft(minutesLeft, sdf.format(cal.time))
+
+                inProgressEtaHandler.postDelayed(this, 10_000L)
+            }
+        }
+        inProgressEtaRunnable = runnable
+        inProgressEtaHandler.post(runnable)
+    }
+
+    fun stopInProgressEtaTimer() {
+        inProgressEtaRunnable?.let { inProgressEtaHandler.removeCallbacks(it) }
+        inProgressEtaRunnable = null
+        activeInProgressOrderId = null
+        activeInProgressStartElapsedMs = 0L
+    }
+
     fun stopWaitingTimer(cardWaitingTimer: View? = null) {
         waitingTimerRunnable?.let { waitingTimerHandler.removeCallbacks(it) }
         waitingTimerRunnable = null
@@ -227,6 +289,7 @@ class OrderTimersController(private val context: Context) {
 
     fun release(cardWaitingTimer: View? = null) {
         stopWaitingTimer(cardWaitingTimer)
+        stopInProgressEtaTimer()
         stopBoostTimer()
     }
 }

@@ -494,6 +494,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         geocodeJob?.cancel()
         mapPickerGeocodeJob?.cancel()
         orderTimersController.stopWaitingTimer(binding.cardWaitingTimer)
+        orderTimersController.stopInProgressEtaTimer()
         stopDriverTracking()
         stopBoostTimer()
         searchRadarController.stop()
@@ -786,7 +787,13 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
                     activeOrderUiController.updateChatBadgeUI()
                     subscribedChatOrderId = null
                     if (order.status == "COMPLETED") {
+                        restoreOrderOnMap(order)
                         showActiveOrderPanel(order)
+                        binding.activeOrderCard.post {
+                            if (!isDestroyed && !isFinishing) {
+                                updateMapPadding(binding.activeOrderCard, extraBottomDp = 4f, topPaddingDp = 20f, recenterMap = true)
+                            }
+                        }
                     } else {
                         activeOrderUiController.updateStatusUI(order, statusCallbacks)
                     }
@@ -1429,6 +1436,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         binding.btnMenuIcon.setImageResource(R.drawable.ic_menu_hamburger)
 
         orderTimersController.stopWaitingTimer(binding.cardWaitingTimer)
+        orderTimersController.stopInProgressEtaTimer()
         sessionManager.clearActiveOrderId()
         tariffAdapter.submitList(emptyList(), 0)
         tariffCustomPrices.clear()

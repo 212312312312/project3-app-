@@ -578,9 +578,8 @@ class ActiveOrderUiController(
     }
 
     fun updateHeaderEta(order: TaxiOrderDto, routeDurationSeconds: Int) {
-        val calendar = Calendar.getInstance()
         val durationSec = if (order.status == "IN_PROGRESS") {
-            order.durationSeconds ?: routeDurationSeconds
+            order.durationSeconds?.takeIf { it > 0 } ?: routeDurationSeconds
         } else {
             if (mapRouteController.pickupRoutePoints.isNotEmpty()) {
                 val meters = SphericalUtil.computeLength(mapRouteController.pickupRoutePoints)
@@ -589,7 +588,12 @@ class ActiveOrderUiController(
                 300
             }
         }
-        calendar.add(Calendar.SECOND, durationSec)
+        val minutesLeft = kotlin.math.ceil(durationSec.coerceAtLeast(60) / 60.0).toInt().coerceAtLeast(1)
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.MINUTE, minutesLeft)
+        }
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
         binding.tvHeaderEtaTime.text = sdf.format(calendar.time)
     }
@@ -702,6 +706,17 @@ class ActiveOrderUiController(
                 val transition = AutoTransition().apply {
                     duration = 250
                     interpolator = AccelerateDecelerateInterpolator()
+                    addListener(object : android.transition.TransitionListenerAdapter() {
+                        override fun onTransitionEnd(transition: android.transition.Transition) {
+                            if (!activity.isDestroyed && !activity.isFinishing && binding.activeOrderCard.visibility == View.VISIBLE) {
+                                var finalH = binding.activeOrderCard.height
+                                if (binding.layoutExpandableDetails.visibility == View.VISIBLE) {
+                                    finalH -= binding.layoutExpandableDetails.height
+                                }
+                                callbacks.onAnimateMapPadding(finalH, finalH, false)
+                            }
+                        }
+                    })
                 }
                 TransitionManager.beginDelayedTransition(cardGroup, transition)
             }
@@ -725,6 +740,10 @@ class ActiveOrderUiController(
             binding.tvScheduledTime.text = "Орієнтовний час подачі $timeStr"
         } else {
             binding.tvScheduledTime.visibility = View.GONE
+        }
+
+        if (order.status != "IN_PROGRESS") {
+            orderTimersController.stopInProgressEtaTimer()
         }
 
         when (order.status) {
@@ -902,7 +921,6 @@ class ActiveOrderUiController(
                 binding.tvDriverStatusSubtext.text = "маршрут може змінюватися залежно від дорожніх умов"
                 binding.tvDriverStatusSubtext.visibility = View.VISIBLE
                 binding.cardHeaderEtaPill.visibility = View.VISIBLE
-                updateHeaderEta(order, callbacks.routeDurationSeconds)
 
                 binding.layoutSearchControls.visibility = View.GONE
                 binding.layoutDriverFoundState.visibility = View.VISIBLE
@@ -1117,7 +1135,13 @@ class ActiveOrderUiController(
                     } catch (_: Exception) {}
                 }
 
-                mapRouteController.updateInProgressDestinationBadge(mMap, order)
+                orderTimersController.startInProgressEtaTimer(
+                    order = order,
+                    fallbackDurationSeconds = callbacks.routeDurationSeconds
+                ) { minutesLeft, arrivalTimeFormatted ->
+                    binding.tvHeaderEtaTime.text = arrivalTimeFormatted
+                    mapRouteController.updateInProgressDestinationBadge(callbacks.map, order, minutesLeft)
+                }
                 callbacks.onStartDriverTracking(order.id)
             }
 
@@ -1215,8 +1239,9 @@ class ActiveOrderUiController(
 
         var cardWidth = binding.activeOrderCard.width
         if (cardWidth == 0) {
-            val sideMargin = (binding.activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams)?.leftMargin ?: 0
-            cardWidth = activity.resources.displayMetrics.widthPixels - (sideMargin * 2)
+            val lp = binding.activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams
+            val sideMargins = (lp?.leftMargin ?: 0) + (lp?.rightMargin ?: 0)
+            cardWidth = activity.resources.displayMetrics.widthPixels - sideMargins
         }
 
         binding.activeOrderCard.measure(
@@ -1226,7 +1251,7 @@ class ActiveOrderUiController(
         var toHeight = binding.activeOrderCard.measuredHeight
 
         if (binding.layoutExpandableDetails.visibility == View.VISIBLE) {
-            toHeight -= binding.layoutExpandableDetails.height
+            toHeight -= binding.layoutExpandableDetails.measuredHeight
         }
 
         val status = order.status
