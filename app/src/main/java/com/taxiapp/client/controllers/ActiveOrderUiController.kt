@@ -20,6 +20,7 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.libraries.places.api.model.Place
 import com.google.maps.android.PolyUtil
@@ -82,6 +83,19 @@ class ActiveOrderUiController(
     private var maxDetailsHeight: Int = 0
     private var orderDetailsAnimator: ValueAnimator? = null
     private var statusBlinkAnimator: ObjectAnimator? = null
+    private var searchTiltRunnable: Runnable? = null
+    private var lastRenderedStatus: String? = null
+
+    /**
+     * Отменяет отложенный запуск 3D-наклона поиска и мгновенно выравнивает камеру в 2D (tilt = 0f).
+     */
+    private fun cancelSearchTiltAndFlattenMap(mMap: GoogleMap?) {
+        searchTiltRunnable?.let { binding.activeOrderCard.removeCallbacks(it) }
+        searchTiltRunnable = null
+        val wasFocusedOnSearch = isCameraFocusedOnSearch
+        isCameraFocusedOnSearch = false
+        mapRouteController.resetCameraTilt(mMap, forceStopAnimation = wasFocusedOnSearch)
+    }
 
     fun setupExpandableDetailsTouchListener() {
         var startY = 0f
@@ -325,7 +339,17 @@ class ActiveOrderUiController(
         callbacks: StatusCallbacks
     ): Boolean {
         if (map == null) return false
-        if (isRouteMode && activeOrderId == order.id && mapRouteController.polylineMain != null) return true
+
+        val s = order.status
+        if (s != "REQUESTED" && s != "OFFERING") {
+            cancelSearchTiltAndFlattenMap(map)
+        }
+
+        val isPickupPhase = (s == "ACCEPTED" || s == "DRIVER_ARRIVED")
+        if (isRouteMode && activeOrderId == order.id) {
+            if (!isPickupPhase && mapRouteController.polylineMain != null) return true
+            if (isPickupPhase && mapRouteController.originMarker != null && mapRouteController.polylineMain == null) return true
+        }
 
         onHidePin()
 
@@ -359,9 +383,10 @@ class ActiveOrderUiController(
             binding.bottomSheetCard.visibility = View.GONE
             binding.addressPanel.visibility = View.GONE
 
-            val s = order.status
             if (s == "ACCEPTED" || s == "DRIVER_ARRIVED") {
                 map.clear()
+                mapRouteController.clearMainRoutePolylines()
+                mapRouteController.clearDestinationAndWaypoints()
                 onClearDriverMarker()
 
                 newOriginPlace.latLng?.let { oLatLng ->
@@ -655,6 +680,9 @@ class ActiveOrderUiController(
 
     fun updateStatusUI(order: TaxiOrderDto, callbacks: StatusCallbacks) {
         val mMap = callbacks.map
+        val isStatusChanged = lastRenderedStatus != order.status
+        lastRenderedStatus = order.status
+
         val wasInSearchMode = isCameraFocusedOnSearch && order.status == "CANCELLED"
         val fromHeight = if (wasInSearchMode) {
             val marginBottom = (binding.activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
@@ -662,6 +690,11 @@ class ActiveOrderUiController(
             mapRouteController.convertDpToPixel(24f).toInt() - marginBottom - extraBuffer
         } else {
             binding.activeOrderCard.height
+        }
+
+        // Гарантированный сброс 3D-наклона карты при переходе в любой статус кроме поиска
+        if (order.status != "REQUESTED" && order.status != "OFFERING") {
+            cancelSearchTiltAndFlattenMap(mMap)
         }
 
         if (binding.activeOrderCard.visibility == View.VISIBLE && binding.activeOrderCard.height > 0) {
@@ -699,7 +732,7 @@ class ActiveOrderUiController(
                 binding.animatedBorderHeader.stopBorderAnimation()
                 searchRadarController.stop()
                 callbacks.onStopBoostTimer()
-                isCameraFocusedOnSearch = false
+                cancelSearchTiltAndFlattenMap(mMap)
 
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
@@ -801,8 +834,14 @@ class ActiveOrderUiController(
 
                 if (!isCameraFocusedOnSearch) {
                     isCameraFocusedOnSearch = true
-                    binding.activeOrderCard.postDelayed({
-                        if (!activity.isFinishing && !activity.isDestroyed && mMap != null) {
+                    searchTiltRunnable?.let { binding.activeOrderCard.removeCallbacks(it) }
+                    val runnable = Runnable {
+                        val currentStatus = viewModel.activeOrder.value?.status
+                        if (!activity.isFinishing &&
+                            !activity.isDestroyed &&
+                            mMap != null &&
+                            (currentStatus == "REQUESTED" || currentStatus == "OFFERING")
+                        ) {
                             val cameraPosition = CameraPosition.Builder()
                                 .target(originLoc)
                                 .zoom(16.0f)
@@ -811,14 +850,16 @@ class ActiveOrderUiController(
                                 .build()
                             mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition), 1000, null)
                         }
-                    }, 350)
+                    }
+                    searchTiltRunnable = runnable
+                    binding.activeOrderCard.postDelayed(runnable, 350)
                 }
             }
 
             "ACCEPTED" -> {
                 binding.animatedBorderHeader.stopBorderAnimation()
                 callbacks.onStopBoostTimer()
-                isCameraFocusedOnSearch = false
+                cancelSearchTiltAndFlattenMap(mMap)
 
                 val isPartner = (order.driver?.id == -1L)
                 AnalyticsManager.trackOrderAccepted(
@@ -880,6 +921,7 @@ class ActiveOrderUiController(
                 updateDriverInfo(order, callbacks::onShowDriverHealth)
                 orderTimersController.stopWaitingTimer(binding.cardWaitingTimer)
 
+                var focusedOnDriver = false
                 order.driver?.let { drv ->
                     val lat = drv.latitude
                     val lng = drv.longitude
@@ -891,6 +933,15 @@ class ActiveOrderUiController(
                         )
                         callbacks.onUpdateDriverMarker(initialLoc)
                         callbacks.onFocusOnPickupRoute(LatLng(lat, lng))
+                        focusedOnDriver = true
+                    }
+                }
+
+                if (!focusedOnDriver) {
+                    val fallbackOrigin = callbacks.originPlace?.latLng
+                        ?: LatLng(order.originLat ?: 0.0, order.originLng ?: 0.0)
+                    if (fallbackOrigin.latitude != 0.0 || fallbackOrigin.longitude != 0.0) {
+                        mapRouteController.animateCameraFlatZoom(mMap, fallbackOrigin, 16.0f, 600)
                     }
                 }
 
@@ -900,7 +951,7 @@ class ActiveOrderUiController(
             "DRIVER_ARRIVED" -> {
                 binding.animatedBorderHeader.stopBorderAnimation()
                 callbacks.onStopBoostTimer()
-                isCameraFocusedOnSearch = false
+                cancelSearchTiltAndFlattenMap(mMap)
 
                 mapRouteController.pickupPolyline?.remove()
                 mapRouteController.pickupPolyline = null
@@ -965,7 +1016,7 @@ class ActiveOrderUiController(
                 } ?: callbacks.originPlace?.latLng ?: LatLng(order.originLat ?: 0.0, order.originLng ?: 0.0)
 
                 if (targetLatLng.latitude != 0.0 && targetLatLng.longitude != 0.0) {
-                    mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(targetLatLng, 16.5f), 800, null)
+                    mapRouteController.animateCameraFlatZoom(mMap, targetLatLng, 16.5f, 800)
                 }
 
                 callbacks.onStartDriverTracking(order.id)
@@ -977,7 +1028,7 @@ class ActiveOrderUiController(
                 mapRouteController.pickupPolyline?.remove()
                 mapRouteController.pickupPolyline = null
                 mapRouteController.pickupRoutePoints.clear()
-                isCameraFocusedOnSearch = false
+                cancelSearchTiltAndFlattenMap(mMap)
                 searchRadarController.stop()
 
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
@@ -1039,6 +1090,33 @@ class ActiveOrderUiController(
                     }
                 }
 
+                if (isStatusChanged && mMap != null) {
+                    try {
+                        val boundsBuilder = LatLngBounds.Builder()
+                        var count = 0
+                        order.originLat?.let { lat ->
+                            order.originLng?.let { lng ->
+                                if (lat != 0.0 && lng != 0.0) {
+                                    boundsBuilder.include(LatLng(lat, lng))
+                                    count++
+                                }
+                            }
+                        }
+                        order.destLat?.let { lat ->
+                            order.destLng?.let { lng ->
+                                if (lat != 0.0 && lng != 0.0) {
+                                    boundsBuilder.include(LatLng(lat, lng))
+                                    count++
+                                }
+                            }
+                        }
+                        if (count >= 2) {
+                            val pad = mapRouteController.convertDpToPixel(80f).toInt()
+                            mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), pad), 600, null)
+                        }
+                    } catch (_: Exception) {}
+                }
+
                 mapRouteController.updateInProgressDestinationBadge(mMap, order)
                 callbacks.onStartDriverTracking(order.id)
             }
@@ -1046,7 +1124,7 @@ class ActiveOrderUiController(
             "COMPLETED" -> {
                 binding.animatedBorderHeader.stopBorderAnimation()
                 callbacks.onStopBoostTimer()
-                isCameraFocusedOnSearch = false
+                cancelSearchTiltAndFlattenMap(mMap)
                 mMap?.uiSettings?.isScrollGesturesEnabled = true
                 mMap?.uiSettings?.isZoomGesturesEnabled = true
 
@@ -1104,7 +1182,7 @@ class ActiveOrderUiController(
                 mapRouteController.pickupPolyline?.remove()
                 mapRouteController.pickupPolyline = null
                 mapRouteController.pickupRoutePoints.clear()
-                isCameraFocusedOnSearch = false
+                cancelSearchTiltAndFlattenMap(mMap)
                 stopStatusBlinking()
                 resetOrderDetailsState()
                 binding.orderStatusText.text = activity.getString(R.string.status_cancelled)
@@ -1152,7 +1230,7 @@ class ActiveOrderUiController(
         }
 
         val status = order.status
-        val recenterMap = (status == "SCHEDULED" || status == "COMPLETED" || status == "REQUESTED" || status == "OFFERING")
+        val recenterMap = (status == "SCHEDULED" || status == "COMPLETED")
 
         callbacks.onAnimateMapPadding(fromHeight, toHeight, recenterMap)
     }

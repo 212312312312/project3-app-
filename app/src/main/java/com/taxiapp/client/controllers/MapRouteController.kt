@@ -41,6 +41,7 @@ import com.taxiapp.client.utils.SessionManager
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.ceil
 
 /**
@@ -70,6 +71,11 @@ class MapRouteController(
     private var revealAnimator: ValueAnimator? = null
     private var markerRevealAnimator: ValueAnimator? = null
 
+    private var lastPadLeft: Int = -1
+    private var lastPadTop: Int = -1
+    private var lastPadRight: Int = -1
+    private var lastPadBottom: Int = -1
+
     fun convertDpToPixel(dp: Float): Float {
         val metrics = activity.resources.displayMetrics
         return dp * (metrics.densityDpi / 160f)
@@ -77,6 +83,62 @@ class MapRouteController(
 
     fun getBitmapDescriptor(resId: Int): BitmapDescriptor? {
         return BitmapHelper.vectorToBitmapDescriptor(activity, resId)
+    }
+
+    /**
+     * Мгновенно сбрасывает 3D-наклон (tilt) и поворот (bearing) камеры в 0f.
+     * Вызывается при любом выходе из состояния REQUESTED / OFFERING, чтобы
+     * последующие анимации (newLatLngBounds / newLatLngZoom) и движение водителя
+     * всегда отображались на плоской 2D-карте.
+     */
+    fun resetCameraTilt(map: GoogleMap?, forceStopAnimation: Boolean = false) {
+        if (map == null) return
+        try {
+            if (forceStopAnimation) {
+                map.stopAnimation()
+            }
+            val currentPos = map.cameraPosition
+            if (currentPos.tilt != 0f || currentPos.bearing != 0f) {
+                val flatPos = CameraPosition.Builder(currentPos)
+                    .tilt(0f)
+                    .bearing(0f)
+                    .build()
+                map.moveCamera(CameraUpdateFactory.newCameraPosition(flatPos))
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Плавное перемещение камеры к точке с гарантированным сбросом наклона (tilt = 0f).
+     * В отличие от CameraUpdateFactory.newLatLngZoom(), который сохраняет предыдущий tilt (45°),
+     * этот метод явно задает CameraPosition с tilt(0f) и bearing(0f).
+     */
+    fun animateCameraFlatZoom(
+        map: GoogleMap?,
+        target: LatLng,
+        zoom: Float,
+        durationMs: Int = 600
+    ) {
+        if (map == null) return
+        try {
+            val flatPos = CameraPosition.Builder()
+                .target(target)
+                .zoom(zoom)
+                .tilt(0f)
+                .bearing(0f)
+                .build()
+            map.animateCamera(CameraUpdateFactory.newCameraPosition(flatPos), durationMs, null)
+        } catch (_: Exception) {}
+    }
+
+    private fun applyPaddingIfChanged(map: GoogleMap, left: Int, top: Int, right: Int, bottom: Int) {
+        if (left != lastPadLeft || top != lastPadTop || right != lastPadRight || abs(bottom - lastPadBottom) > 2) {
+            lastPadLeft = left
+            lastPadTop = top
+            lastPadRight = right
+            lastPadBottom = bottom
+            map.setPadding(left, top, right, bottom)
+        }
     }
 
     fun computePickupEtaSeconds(): Int {
@@ -174,6 +236,9 @@ class MapRouteController(
         lastDrawnPathHash = pathHash
 
         val isSearchingState = (orderStatus == "REQUESTED" || orderStatus == "OFFERING")
+        if (!isSearchingState) {
+            resetCameraTilt(map)
+        }
 
         try {
             polylineMain?.remove()
@@ -345,17 +410,19 @@ class MapRouteController(
                     val paddingSide = convertDpToPixel(80f).toInt()
 
                     if (orderStatus != "CANCELLED") {
-                        map.setPadding(sideMargin, paddingTop, sideMargin, paddingBottom)
+                        applyPaddingIfChanged(map, sideMargin, paddingTop, sideMargin, paddingBottom)
                     }
 
                     if (orderStatus == "ACCEPTED" || orderStatus == "DRIVER_ARRIVED" || orderStatus == "IN_PROGRESS") {
+                        resetCameraTilt(map)
                         triggerReveal()
                     } else {
-                        map.stopAnimation()
+                        resetCameraTilt(map, forceStopAnimation = true)
 
                         visibleBottomPanel.postDelayed({
                             if (!activity.isFinishing && !activity.isDestroyed) {
                                 try {
+                                    resetCameraTilt(map)
                                     val cameraUpdate = CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), paddingSide)
                                     map.animateCamera(cameraUpdate, 500, object : GoogleMap.CancelableCallback {
                                         override fun onFinish() = triggerReveal()
@@ -667,6 +734,9 @@ class MapRouteController(
         if (map == null) return
 
         try {
+            // Всегда сбрасываем 3D-наклон перед фокусировкой на подаче автомобиля
+            resetCameraTilt(map, forceStopAnimation = true)
+
             val boundsBuilder = LatLngBounds.Builder()
             var pointsCount = 0
 
@@ -703,11 +773,22 @@ class MapRouteController(
             }
 
             if (pointsCount >= 2) {
-                val paddingSide = convertDpToPixel(90f).toInt()
                 val bounds = boundsBuilder.build()
-                map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingSide), 800, null)
-            } else if (driverPos != null) {
-                map.animateCamera(CameraUpdateFactory.newLatLngZoom(driverPos, 16f), 800, null)
+                val diagonalMeters = SphericalUtil.computeDistanceBetween(bounds.northeast, bounds.southwest)
+                if (diagonalMeters < 35.0) {
+                    // Если водитель и клиент в одной точке (например, при тесте на одном телефоне) —
+                    // не зумим до максимума через LatLngBounds, а ставим плоскую камеру с комфортным зумом
+                    val target = driverPos ?: originPos ?: bounds.center
+                    animateCameraFlatZoom(map, target, 16.0f, 800)
+                } else {
+                    val paddingSide = convertDpToPixel(90f).toInt()
+                    map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingSide), 800, null)
+                }
+            } else {
+                val target = driverPos ?: originPos
+                if (target != null) {
+                    animateCameraFlatZoom(map, target, 16.0f, 800)
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -901,7 +982,7 @@ class MapRouteController(
                             driverMarkerPos = driverMarkerPos
                         )
                     } else {
-                        map.setPadding(0, 0, 0, 0)
+                        applyPaddingIfChanged(map, 0, 0, 0, 0)
                         pinContainer?.translationY = 0f
                     }
                     return@post
@@ -942,13 +1023,12 @@ class MapRouteController(
                 val totalBottomPadding = panelHeight + marginBottom + extraBuffer
                 val topPadding = convertDpToPixel(topPaddingDp).toInt()
 
-                val mapView = supportFragmentManager.findFragmentById(R.id.map)?.view
-                if (mapView != null) {
-                    mapView.post {
-                        map.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
-                    }
-                } else {
-                    map.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
+                // Применяем паддинг синхронно (без вложенного mapView.post), чтобы не срывать анимацию камеры
+                applyPaddingIfChanged(map, sideMargin, topPadding, sideMargin, totalBottomPadding)
+
+                val currentStatus = activeOrder?.status
+                if (currentStatus != "REQUESTED" && currentStatus != "OFFERING") {
+                    resetCameraTilt(map)
                 }
 
                 if (pinContainer != null) {
@@ -963,7 +1043,6 @@ class MapRouteController(
                 if (recenterMap) {
                     try {
                         map.stopAnimation()
-                        val currentStatus = activeOrder?.status
                         when {
                             currentStatus == "REQUESTED" || currentStatus == "OFFERING" -> {
                                 val targetLoc = originPlace?.latLng
@@ -988,11 +1067,13 @@ class MapRouteController(
                             }
                             currentStatus == "DRIVER_ARRIVED" -> {
                                 val pos = driverMarkerPos ?: originPlace?.latLng
-                                if (pos != null) {
-                                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16.5f), 400, null)
+                                ?: activeOrder?.let { LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                                if (pos != null && (pos.latitude != 0.0 || pos.longitude != 0.0)) {
+                                    animateCameraFlatZoom(map, pos, 16.5f, 400)
                                 }
                             }
-                            currentStatus == "IN_PROGRESS" || activeOrderId == null -> {
+                            currentStatus == "IN_PROGRESS" || currentStatus == "SCHEDULED" || currentStatus == "COMPLETED" || activeOrderId == null -> {
+                                resetCameraTilt(map)
                                 if (originPlace?.latLng != null && destinationPlace?.latLng != null) {
                                     val boundsBuilder = LatLngBounds.Builder()
                                     boundsBuilder.include(originPlace.latLng!!)
@@ -1040,11 +1121,15 @@ class MapRouteController(
         }
 
         val totalBottomPadding = targetHeight + marginBottom + extraBuffer
-        map.setPadding(sideMargin, topPadding, sideMargin, totalBottomPadding)
+        applyPaddingIfChanged(map, sideMargin, topPadding, sideMargin, totalBottomPadding)
+
+        val currentStatus = activeOrder?.status
+        if (currentStatus != "REQUESTED" && currentStatus != "OFFERING") {
+            resetCameraTilt(map)
+        }
 
         if (recenterMap && currentRoutePolyline != null) {
             try {
-                val currentStatus = activeOrder?.status
                 when (currentStatus) {
                     "REQUESTED", "OFFERING" -> {
                         val originLoc = originPlace?.latLng
@@ -1067,11 +1152,13 @@ class MapRouteController(
                     }
                     "DRIVER_ARRIVED" -> {
                         val pos = driverMarkerPos ?: originPlace?.latLng
-                        if (pos != null) {
-                            map.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16.5f), 400, null)
+                        ?: activeOrder.let { LatLng(it.originLat ?: 0.0, it.originLng ?: 0.0) }
+                        if (pos.latitude != 0.0 || pos.longitude != 0.0) {
+                            animateCameraFlatZoom(map, pos, 16.5f, 400)
                         }
                     }
-                    "IN_PROGRESS" -> {
+                    "IN_PROGRESS", "SCHEDULED", "COMPLETED" -> {
+                        resetCameraTilt(map)
                         if (originPlace?.latLng != null && destinationPlace?.latLng != null) {
                             val boundsBuilder = LatLngBounds.Builder()
                             boundsBuilder.include(originPlace.latLng!!)

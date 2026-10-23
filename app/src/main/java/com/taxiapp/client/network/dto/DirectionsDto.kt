@@ -27,6 +27,16 @@ data class ReverseGeocodeResponseDto(
     val source: String? = null
 )
 
+data class NearbyPlaceSuggestionDto(
+    val placeId: String,
+    val title: String,
+    val subtitle: String,
+    val lat: Double,
+    val lng: Double,
+    val distanceMeters: Int? = null,
+    val category: String? = null
+)
+
 // Legacy DTOs (оставлены для обратной совместимости)
 data class DirectionsResponse(
     val routes: List<Route>

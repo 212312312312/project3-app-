@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Geocoder
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -35,12 +34,17 @@ import com.google.android.libraries.places.api.model.RectangularBounds
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
+import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.ui.PlaceSuggestion
 import com.taxiapp.client.ui.PlacesAdapter
 import com.taxiapp.client.utils.AddressUtils
 import com.taxiapp.client.utils.LocationValidator
+import com.taxiapp.client.utils.ReverseGeocoderHelper
+import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -77,6 +81,8 @@ class AddressPickerActivity : BaseActivity() {
         const val RESULT_ORIGIN_LNG = "updated_origin_lng"
 
         const val RESULT_WAYPOINTS_NAMES = "waypoints_names"
+
+        private const val MIN_SUGGESTION_DISTANCE_METERS = 2000
     }
 
     private var isOrigin: Boolean = false
@@ -114,6 +120,13 @@ class AddressPickerActivity : BaseActivity() {
     private var searchRunnable: Runnable? = null
     private var latestSearchQuery: String = ""
 
+    // Флаг защиты от ложного срабатывания TextWatcher при программной установке текста (etOrigin.setText)
+    private var isProgrammaticTextChange: Boolean = false
+
+    // Кэш 5–6 популярных адресов и главных улиц (от 2 км) для пустого состояния поля ввода
+    private var cachedNearbySuggestions: List<PlaceSuggestion> = emptyList()
+    private var nearbySuggestionsJob: Job? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try { ViewUtils.makeImmersive(this) } catch (e: Exception) {}
@@ -146,7 +159,19 @@ class AddressPickerActivity : BaseActivity() {
             cityLng = lngParam
         }
 
+        val initialAnchor = userLatLng ?: LatLng(cityLat, cityLng)
+        // Мгновенно (за 0 мс, еще до отрисовки первого кадра) берем предзагруженные на главном экране улицы
+        cachedNearbySuggestions = ReverseGeocoderHelper.getInstantSuggestions(initialAnchor)
+
         initUI(isOrigin, shouldHideLocation, currentAddressA, currentLatA, currentLngA)
+
+        if (cachedNearbySuggestions.isNotEmpty() && latestSearchQuery.length < 2) {
+            adapter.submitList(cachedNearbySuggestions)
+        }
+
+        // При необходимости догружаем/обновляем в фоне
+        loadNearbySuggestions(initialAnchor)
+        refreshUserLocationSilentlyIfNeeded()
 
         // Обработка Insets для плавного прижатия кнопки к клавиатуре
         val keyboardAccessory = findViewById<View>(R.id.layout_keyboard_accessory)
@@ -172,14 +197,24 @@ class AddressPickerActivity : BaseActivity() {
 
     override fun onDestroy() {
         searchHandler.removeCallbacksAndMessages(null)
+        nearbySuggestionsJob?.cancel()
         super.onDestroy()
+    }
+
+    private fun setFieldTextSafely(editText: EditText, text: String) {
+        isProgrammaticTextChange = true
+        try {
+            editText.setText(text)
+        } finally {
+            isProgrammaticTextChange = false
+        }
     }
 
     private fun initUI(isOriginMode: Boolean, hideMyLocation: Boolean, currentAddressA: String?, currentLatA: Double, currentLngA: Double) {
         rvSuggestions = findViewById(R.id.places_recycler_view)
         rvSuggestions.layoutManager = LinearLayoutManager(this)
         adapter = PlacesAdapter { suggestion ->
-            fetchPlaceDetails(suggestion.placeId, suggestion.title)
+            onSuggestionClicked(suggestion)
         }
         rvSuggestions.adapter = adapter
 
@@ -201,9 +236,8 @@ class AddressPickerActivity : BaseActivity() {
         val btnBack = findViewById<View>(R.id.btn_back)
         btnBack.setOnClickListener { finish() }
 
-        setupFocusListener(etOrigin)
-        setupFocusListener(etDestination)
-
+        // Сначала предзаполняем поля в configureStandardMode, и только ПОТОМ вешаем слушатели фокуса и текста,
+        // чтобы программный etOrigin.setText(currentAddressA) НЕ запускал performSearch() по текущему адресу под ногами!
         val mode = intent.getIntExtra(EXTRA_PICKER_MODE, MODE_STANDARD)
 
         when (mode) {
@@ -220,6 +254,12 @@ class AddressPickerActivity : BaseActivity() {
                 configureStandardMode(isOriginMode, currentAddressA, currentLatA, currentLngA)
             }
         }
+
+        setupFocusListener(etOrigin)
+        setupFocusListener(etDestination)
+
+        // Гарантированно отображаем начальные предложения после настройки полей и фокуса
+        showNearbySuggestionsForEmptyField()
 
         btnMyLocation.setOnClickListener { detectMyLocation() }
 
@@ -290,6 +330,114 @@ class AddressPickerActivity : BaseActivity() {
         updateButtonsVisibility(hideMyLocation)
     }
 
+    /**
+     * Загружает с нашего бэкенда 5–6 популярных адресов и главных улиц (от 2.0 км),
+     * если они еще не были предзагружены на главном экране или точка сдвинулась > 350 м.
+     */
+    private fun loadNearbySuggestions(anchor: LatLng) {
+        if (anchor.latitude == 0.0 && anchor.longitude == 0.0) return
+
+        val lang = SessionManager(this).getLanguage().let { if (it == "ua") "uk" else it }
+        if (ReverseGeocoderHelper.isCacheFreshFor(anchor, lang) && cachedNearbySuggestions.size >= 4) {
+            cachedNearbySuggestions = ReverseGeocoderHelper.getInstantSuggestions(anchor)
+            if (latestSearchQuery.length < 2 && ::adapter.isInitialized) {
+                adapter.submitList(cachedNearbySuggestions)
+            }
+            return
+        }
+
+        nearbySuggestionsJob?.cancel()
+        nearbySuggestionsJob = lifecycleScope.launch {
+            try {
+                val response = ApiClient.instance.getNearbySuggestions(
+                    lat = anchor.latitude,
+                    lng = anchor.longitude,
+                    lang = lang,
+                    limit = 6
+                )
+                if (response.isSuccessful && response.body() != null) {
+                    val dtos = response.body()!!
+                    val mapped = dtos.map { dto ->
+                        PlaceSuggestion(
+                            placeId = dto.placeId,
+                            title = dto.title,
+                            subtitle = dto.subtitle,
+                            distanceMeters = dto.distanceMeters,
+                            lat = dto.lat,
+                            lng = dto.lng,
+                            category = dto.category
+                        )
+                    }
+                    // Приоритетно берем адреса >= 2000 м, но никогда не оставляем список пустым,
+                    // если сервер отдал валидные элементы
+                    val over2km = mapped.filter { (it.distanceMeters ?: 0) >= MIN_SUGGESTION_DISTANCE_METERS }
+                    val finalSuggestions = if (over2km.isNotEmpty()) over2km else mapped
+
+                    if (finalSuggestions.isNotEmpty()) {
+                        cachedNearbySuggestions = finalSuggestions
+                        ReverseGeocoderHelper.updateMemoryCache(anchor, lang, finalSuggestions)
+
+                        if (latestSearchQuery.length < 2 && ::adapter.isInitialized) {
+                            adapter.submitList(cachedNearbySuggestions)
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // При отсутствии сети оставляем уже предзагруженный кэш
+            }
+        }
+    }
+
+    private fun refreshUserLocationSilentlyIfNeeded() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        try {
+            LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
+                if (!isFinishing && !isDestroyed && loc != null && LocationValidator.isValidLocation(loc.latitude, loc.longitude)) {
+                    val freshLatLng = LatLng(loc.latitude, loc.longitude)
+                    userLatLng = freshLatLng
+                    loadNearbySuggestions(freshLatLng)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun showNearbySuggestionsForEmptyField() {
+        searchRunnable?.let { searchHandler.removeCallbacks(it) }
+        latestSearchQuery = ""
+        val anchor = userLatLng ?: fieldCoordinates[etOrigin] ?: LatLng(cityLat, cityLng)
+        val instant = ReverseGeocoderHelper.getInstantSuggestions(anchor)
+        if (instant.isNotEmpty()) {
+            cachedNearbySuggestions = instant
+        }
+        if (::adapter.isInitialized) {
+            adapter.submitList(cachedNearbySuggestions)
+        }
+        if (cachedNearbySuggestions.size < 4) {
+            loadNearbySuggestions(anchor)
+        }
+    }
+
+    private fun onSuggestionClicked(suggestion: PlaceSuggestion) {
+        val sLat = suggestion.lat
+        val sLng = suggestion.lng
+        // Если у подсказки уже есть точные координаты с нашего сервера — применяем мгновенно без платного запроса к Google Places
+        if (sLat != null && sLng != null && (sLat != 0.0 || sLng != 0.0)) {
+            val finalName = AddressUtils.formatAddress(suggestion.title)
+            if (activeEditText != null) {
+                saveCoordinateForField(activeEditText!!, finalName, LatLng(sLat, sLng))
+                if (isFinishConditionMet()) returnResultData()
+            }
+            return
+        }
+        fetchPlaceDetails(suggestion.placeId, suggestion.title)
+    }
+
     private fun configureSingleFieldMode(targetEt: EditText, iconRes: Int, hint: String) {
         val originContainer = findViewById<View>(R.id.container_origin_layout) ?: etOrigin.parent as View
         originContainer.visibility = View.GONE
@@ -322,7 +470,7 @@ class AddressPickerActivity : BaseActivity() {
             } else {
                 ""
             }
-            etOrigin.setText(addressText)
+            setFieldTextSafely(etOrigin, addressText)
 
             if (latA != 0.0 && lngA != 0.0) {
                 fieldCoordinates[etOrigin] = LatLng(latA, lngA)
@@ -341,7 +489,7 @@ class AddressPickerActivity : BaseActivity() {
             activeEditText = etDestination
 
             val originText = AddressUtils.formatAddress(currentAddressA ?: "Поточне місце")
-            etOrigin.setText(originText)
+            setFieldTextSafely(etOrigin, originText)
             if (latA != 0.0 && lngA != 0.0) {
                 fieldCoordinates[etOrigin] = LatLng(latA, lngA)
             }
@@ -359,7 +507,7 @@ class AddressPickerActivity : BaseActivity() {
             if (!prefillDestName.isNullOrEmpty()) {
                 val lat = intent.getDoubleExtra("prefill_dest_lat", 0.0)
                 val lng = intent.getDoubleExtra("prefill_dest_lng", 0.0)
-                etDestination.setText(prefillDestName)
+                setFieldTextSafely(etDestination, prefillDestName)
                 if (lat != 0.0 && lng != 0.0) {
                     fieldCoordinates[etDestination] = LatLng(lat, lng)
                 }
@@ -379,7 +527,7 @@ class AddressPickerActivity : BaseActivity() {
                     val etWaypoint = view.findViewById<EditText>(R.id.et_waypoint)
 
                     if (i < wNames.size && wNames[i].isNotEmpty()) {
-                        etWaypoint.setText(wNames[i])
+                        setFieldTextSafely(etWaypoint, wNames[i])
                         if (wLats[i] != 0.0) {
                             fieldCoordinates[etWaypoint] = LatLng(wLats[i], wLngs[i])
                             if (!isOriginMode) {
@@ -470,14 +618,16 @@ class AddressPickerActivity : BaseActivity() {
         editText.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 activeEditText = editText
+                searchRunnable?.let { searchHandler.removeCallbacks(it) }
 
                 if (editText.text.isNotEmpty()) {
                     editText.setSelection(editText.text.length)
                 }
 
                 updateButtonsVisibility(intent.getBooleanExtra(EXTRA_HIDE_MY_LOCATION, false))
-                if (editText.text.isEmpty()) adapter.submitList(emptyList())
-                else {
+                if (editText.text.isEmpty() || fieldCoordinates.containsKey(editText)) {
+                    showNearbySuggestionsForEmptyField()
+                } else {
                     layoutQuickActions.visibility = View.GONE
                     performSearch(editText.text.toString())
                 }
@@ -488,8 +638,9 @@ class AddressPickerActivity : BaseActivity() {
             override fun afterTextChanged(s: Editable?) {}
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                if (editText.hasFocus()) {
-                    val query = s.toString()
+                if (isProgrammaticTextChange) return
+                if (editText.hasFocus() && editText == activeEditText) {
+                    val query = s.toString().trim()
                     fieldCoordinates.remove(editText)
 
                     updateButtonsVisibility(intent.getBooleanExtra(EXTRA_HIDE_MY_LOCATION, false))
@@ -499,8 +650,7 @@ class AddressPickerActivity : BaseActivity() {
                         searchRunnable = Runnable { performSearch(query) }
                         searchHandler.postDelayed(searchRunnable!!, 300)
                     } else {
-                        latestSearchQuery = ""
-                        adapter.submitList(emptyList())
+                        showNearbySuggestionsForEmptyField()
                     }
                 }
             }
@@ -545,6 +695,7 @@ class AddressPickerActivity : BaseActivity() {
         waypointViews.add(view)
         activeEditText = etWaypoint
         etWaypoint.requestFocus()
+        showNearbySuggestionsForEmptyField()
         checkAddButtonState()
     }
 
@@ -590,7 +741,7 @@ class AddressPickerActivity : BaseActivity() {
     }
 
     private fun saveCoordinateForField(editText: EditText, name: String, latLng: LatLng) {
-        editText.setText(name)
+        setFieldTextSafely(editText, name)
         editText.clearFocus()
         fieldCoordinates[editText] = latLng
     }

@@ -46,11 +46,27 @@ data class TaxiOrderDto(
     val services: List<OrderServiceDto> = emptyList(),
 
     val isRatedByClient: Boolean = false,
+
+    @SerializedName(value = "arrivedAt", alternate = ["arrived_at", "driverArrivedAt", "driver_arrived_at"])
     val arrivedAt: String? = null,
+
+    @SerializedName(value = "startedAt", alternate = ["started_at", "inProgressAt"])
     val startedAt: String? = null,
+
+    @SerializedName(value = "waitingStartTime", alternate = ["waiting_start_time", "waitingStartedAt"])
     val waitingStartTime: String? = null,
+
+    @SerializedName(value = "waitingElapsedSeconds", alternate = ["waiting_elapsed_seconds", "elapsedWaitingSeconds"])
+    val waitingElapsedSeconds: Long? = null,
+
+    @SerializedName(value = "serverTime", alternate = ["server_time", "serverNow"])
+    val serverTime: String? = null,
+
     val waitingPrice: Double = 0.0,
+
+    @SerializedName(value = "freeWaitingMinutes", alternate = ["free_waiting_minutes"])
     val freeWaitingMinutes: Int = 3,
+
     val pricePerWaitingMinute: Double = 0.0,
     val cancellationReason: String? = null,
     val scheduledAt: String? = null,

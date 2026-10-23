@@ -17,6 +17,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.gson.JsonParser
 import com.google.maps.android.PolyUtil
 import com.taxiapp.client.analytics.AnalyticsManager
+import com.taxiapp.client.controllers.OrderTimersController
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.DirectionsApiClient
 import com.taxiapp.client.network.OrderStatusBus
@@ -33,10 +34,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import retrofit2.Response
 import java.math.BigDecimal
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import java.util.Currency
 import java.util.UUID
 
@@ -133,26 +130,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Безопасный парсинг серверного времени создания заказа (UTC) и расчет прошедших секунд.
+     * Безопасный парсинг серверного времени создания заказа и расчет прошедших секунд.
      */
     private fun calculateElapsedSecondsFromUtc(createdAtStr: String?, fallbackSec: Long = 0L): Long {
-        if (createdAtStr.isNullOrBlank()) return fallbackSec
-        return try {
-            val createdEpochMs = when {
-                createdAtStr.endsWith("Z", ignoreCase = true) -> Instant.parse(createdAtStr).toEpochMilli()
-                createdAtStr.contains("+") || (createdAtStr.length > 19 && createdAtStr.substring(19).contains("-")) ->
-                    OffsetDateTime.parse(createdAtStr).toInstant().toEpochMilli()
-                else -> LocalDateTime.parse(createdAtStr.take(19)).toInstant(ZoneOffset.UTC).toEpochMilli()
-            }
-            val diffSec = (System.currentTimeMillis() - createdEpochMs) / 1000L
-            diffSec.coerceAtLeast(0L)
-        } catch (e: Exception) {
-            fallbackSec
-        }
+        val createdEpochMs = OrderTimersController.parseServerUtcToEpochMs(createdAtStr) ?: return fallbackSec
+        val diffSec = (System.currentTimeMillis() - createdEpochMs) / 1000L
+        return diffSec.coerceAtLeast(0L)
     }
 
     fun syncActiveOrder() {
-        val pinnedOrderId = sessionManager.fetchActiveOrderId()
+        val pinnedOrderId = sessionManager.fetchActiveOrderId() ?: activeOrderId
         activeOrderId = pinnedOrderId
 
         viewModelScope.launch {
@@ -189,7 +176,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // 2. Если pinnedOrderId == null: проверяем сервер только ради финального окна COMPLETED
+                // 2. Если pinnedOrderId == null: проверяем сервер ради активного или финального окна COMPLETED
                 val response = ApiClient.instance.getActiveOrder()
                 if (response.isSuccessful) {
                     val order = response.body()
@@ -250,8 +237,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         webSocketManager?.subscribeToClientOrders(clientId) { messageDto ->
             val order = messageDto.order
             if (order != null) {
-                val isCurrentlyPinned = activeOrderId != null &&
-                        (activeOrderId == order.id || activeOrderId == order.idLong?.toString())
+                val trackedId = activeOrderId ?: _activeOrder.value?.id ?: sessionManager.fetchActiveOrderId()
+                val isCurrentlyPinned = trackedId != null &&
+                        (trackedId == order.id || trackedId == order.idLong?.toString())
 
                 when (order.status) {
                     "CANCELLED" -> {

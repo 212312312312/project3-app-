@@ -452,6 +452,11 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         viewModel.startOrderSocketListening(webSocketManager)
         viewModel.syncActiveOrder()
 
+        val currentStatus = viewModel.activeOrder.value?.status
+        if (currentStatus != null && currentStatus != "REQUESTED" && currentStatus != "OFFERING") {
+            mapRouteController.resetCameraTilt(mMap)
+        }
+
         val savedLanguage = sessionManager.getLanguage()
         if (currentActiveLanguage != savedLanguage) {
             currentActiveLanguage = savedLanguage
@@ -618,6 +623,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         binding.btnRecenterRoute.setOnClickListener {
             if (viewModel.currentRoutePolyline != null && originPlace != null && destinationPlace != null) {
                 try {
+                    mapRouteController.resetCameraTilt(mMap)
                     val boundsBuilder = LatLngBounds.Builder()
                     boundsBuilder.include(originPlace!!.latLng!!)
                     boundsBuilder.include(destinationPlace!!.latLng!!)
@@ -770,6 +776,10 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         viewModel.activeOrder.observe(this) { order ->
             if (order != null) {
                 activeOrderId = order.id
+                if (order.status != "REQUESTED" && order.status != "OFFERING") {
+                    mapRouteController.resetCameraTilt(mMap)
+                }
+
                 if (order.status == "COMPLETED" || order.status == "CANCELLED") {
                     activeOrderUiController.unreadChatMessages = 0
                     ChatEventBus.clearUnreadCount()
@@ -870,6 +880,9 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 mMap?.isMyLocationEnabled = true
             }
+            if (activeOrder.status != "REQUESTED" && activeOrder.status != "OFFERING") {
+                mapRouteController.resetCameraTilt(mMap)
+            }
             restoreOrderOnMap(activeOrder)
             showActiveOrderPanel(activeOrder)
 
@@ -907,6 +920,11 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         }
 
         mMap?.setOnCameraIdleListener {
+            val currentStatus = viewModel.activeOrder.value?.status
+            if (currentStatus != "REQUESTED" && currentStatus != "OFFERING" && (mMap?.cameraPosition?.tilt ?: 0f) > 0.1f) {
+                mapRouteController.resetCameraTilt(mMap)
+            }
+
             val target = mMap!!.cameraPosition.target
             val currentTime = System.currentTimeMillis()
             val distanceMoved = lastLocationSent?.let { SphericalUtil.computeDistanceBetween(it, target) } ?: 1000.0
@@ -1112,14 +1130,14 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
             if (LocationValidator.isValidLocation(loc)) {
                 val userLatLng = LatLng(loc!!.latitude, loc.longitude)
-                mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(userLatLng, 16f))
+                mapRouteController.animateCameraFlatZoom(mMap, userLatLng, 16f)
                 lastLocationUpdateTime = System.currentTimeMillis()
                 lastLocationSent = userLatLng
                 viewModel.updateClientLocation(webSocketManager, userLatLng.latitude, userLatLng.longitude)
             } else {
                 showToast("Неточний GPS (можливий РЕБ). Вкажіть точку на карті")
                 currentCity?.let { city ->
-                    mMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(city.lat, city.lng), city.zoom))
+                    mapRouteController.animateCameraFlatZoom(mMap, LatLng(city.lat, city.lng), city.zoom)
                 }
             }
         }
@@ -1395,9 +1413,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
 
         mMap?.uiSettings?.isScrollGesturesEnabled = true
         mMap?.uiSettings?.isZoomGesturesEnabled = true
-        mMap?.cameraPosition?.let { currentPos ->
-            mMap?.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(currentPos).tilt(0f).build()))
-        }
+        mapRouteController.resetCameraTilt(mMap, forceStopAnimation = true)
 
         binding.bottomSheetCard.visibility = View.VISIBLE
         binding.activeOrderCard.visibility = View.GONE
@@ -1466,11 +1482,15 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
     }
 
     private fun updateDriverMarker(loc: TrackingLocationDto) {
+        val currentStatus = viewModel.activeOrder.value?.status
+        if (currentStatus != "REQUESTED" && currentStatus != "OFFERING" && (mMap?.cameraPosition?.tilt ?: 0f) > 0.1f) {
+            mapRouteController.resetCameraTilt(mMap)
+        }
         homeUiController.updateDriverMarker(
             map = mMap,
             loc = loc,
             isMapPickingMode = isMapPickingMode,
-            currentOrderStatus = viewModel.activeOrder.value?.status,
+            currentOrderStatus = currentStatus,
             onTrimPickupRoute = { latLng ->
                 if (mapRouteController.pickupPolyline != null && mapRouteController.pickupRoutePoints.isNotEmpty()) {
                     mapRouteController.trimPickupRoute(latLng)

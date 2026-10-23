@@ -81,6 +81,14 @@ interface ApiService {
         @Query("lang") lang: String = "uk"
     ): Response<ReverseGeocodeResponseDto>
 
+    @GET("public/nearby-suggestions")
+    suspend fun getNearbySuggestions(
+        @Query("lat") lat: Double,
+        @Query("lng") lng: Double,
+        @Query("lang") lang: String = "uk",
+        @Query("limit") limit: Int = 6
+    ): Response<List<NearbyPlaceSuggestionDto>>
+
     // --- АКЦІЇ ТА ПРОМОКОДИ ---
     @GET("client/promos")
     suspend fun getClientPromos(): Response<List<ClientPromoProgressDto>>
