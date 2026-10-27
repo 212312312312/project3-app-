@@ -158,10 +158,12 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
     private val statusCallbacks = object : ActiveOrderUiController.StatusCallbacks {
         override val map: GoogleMap? get() = mMap
         override val originPlace: Place? get() = this@HomeActivity.originPlace
+        override val decodedRoutePoints: List<LatLng>? get() = this@HomeActivity.decodedRoutePoints
+        override val routeDistanceMeters: Int get() = this@HomeActivity.routeDistanceMeters
         override val routeDurationSeconds: Int get() = this@HomeActivity.routeDurationSeconds
         override val isDarkMode: Boolean get() = sessionManager.isDarkMode()
 
-        override fun onSetDecodedRoutePoints(points: List<LatLng>?) { decodedRoutePoints = points }
+        override fun onSetDecodedRoutePoints(points: List<LatLng>?) { this@HomeActivity.decodedRoutePoints = points }
         override fun onDrawStylishRoute(points: List<LatLng>, status: String) { drawStylishRoute(points, status) }
         override fun onDrawPickupRoute(polyline: String?) { drawPickupRoute(polyline) }
         override fun onFocusOnPickupRoute(carLatLng: LatLng) { focusOnPickupRoute(carLatLng) }
@@ -195,7 +197,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
             currentWaypoints.clear()
             isRouteMode = false
             viewModel.currentRoutePolyline = null
-            decodedRoutePoints = null
+            this@HomeActivity.decodedRoutePoints = null
             binding.centerPin.translationY = 0f
             binding.centerPin.animate().cancel()
             binding.centerPin.alpha = 1f
@@ -482,6 +484,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
 
     override fun onStop() {
         super.onStop()
+        if (!::sessionManager.isInitialized) return
         val currentOrder = viewModel.activeOrder.value
         if (currentOrder?.status == "COMPLETED") {
             val targetOrderId = currentOrder.id ?: activeOrderId
@@ -493,14 +496,19 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         super.onDestroy()
         geocodeJob?.cancel()
         mapPickerGeocodeJob?.cancel()
-        orderTimersController.stopWaitingTimer(binding.cardWaitingTimer)
-        orderTimersController.stopInProgressEtaTimer()
+        if (::orderTimersController.isInitialized) {
+            val waitingCard = if (::binding.isInitialized) binding.cardWaitingTimer else null
+            orderTimersController.stopWaitingTimer(waitingCard)
+            orderTimersController.stopInProgressEtaTimer()
+        }
         stopDriverTracking()
         stopBoostTimer()
         searchRadarController.stop()
         markerAnimationController.cancelAll()
         stopPeriodicNearbyDriversRefresh()
-        viewModel.stopOrderSocketListening()
+        if (::sessionManager.isInitialized) {
+            viewModel.stopOrderSocketListening()
+        }
         lastScreenshot?.let { if (!it.isRecycled) it.recycle() }
         lastScreenshot = null
     }
@@ -508,6 +516,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (!::sessionManager.isInitialized) return
         val savedId = sessionManager.fetchActiveOrderId()
         if (!savedId.isNullOrEmpty()) {
             activeOrderId = savedId
@@ -590,6 +599,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         activeOrderUiController.setupExpandableDetailsTouchListener()
 
         binding.activeOrderCard.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, oldTop, oldBottom ->
+            if (activeOrderUiController.isAnimatingOrDraggingDetails) return@addOnLayoutChangeListener
             val newHeight = bottom - top
             val oldHeight = oldBottom - oldTop
             if (binding.activeOrderCard.visibility == View.VISIBLE && newHeight > 0 && newHeight != oldHeight) {
@@ -1486,13 +1496,23 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         if (!isDriverTrackingActive) return
         isDriverTrackingActive = false
         webSocketManager?.unsubscribeFromDriverLocation()
-        homeUiController.removeDriverMarker()
+        if (::homeUiController.isInitialized) {
+            homeUiController.removeDriverMarker()
+        }
     }
 
     private fun updateDriverMarker(loc: TrackingLocationDto) {
-        val currentStatus = viewModel.activeOrder.value?.status
+        val currentOrder = viewModel.activeOrder.value
+        val currentStatus = currentOrder?.status
         if (currentStatus != "REQUESTED" && currentStatus != "OFFERING" && (mMap?.cameraPosition?.tilt ?: 0f) > 0.1f) {
             mapRouteController.resetCameraTilt(mMap)
+        }
+        if (loc.lat != null && loc.lng != null && (loc.lat != 0.0 || loc.lng != 0.0)) {
+            activeOrderUiController.lastKnownDriverLatLng = LatLng(loc.lat, loc.lng)
+            activeOrderUiController.lastKnownDriverBearing = loc.bearing ?: 0f
+            if (currentStatus == "IN_PROGRESS") {
+                orderTimersController.refreshInProgressEtaIfNeeded()
+            }
         }
         homeUiController.updateDriverMarker(
             map = mMap,
@@ -1502,6 +1522,9 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
             onTrimPickupRoute = { latLng ->
                 if (mapRouteController.pickupPolyline != null && mapRouteController.pickupRoutePoints.isNotEmpty()) {
                     mapRouteController.trimPickupRoute(latLng)
+                    if (currentStatus == "ACCEPTED" && currentOrder != null) {
+                        activeOrderUiController.updateHeaderEta(currentOrder, routeDurationSeconds)
+                    }
                 }
             },
             onFocusOnPickupRoute = { latLng -> focusOnPickupRoute(latLng) }

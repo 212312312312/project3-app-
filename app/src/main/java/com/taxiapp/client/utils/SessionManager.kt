@@ -380,4 +380,14 @@ class SessionManager(context: Context) {
             apply()
         }
     }
+
+    fun isWelcomeDiscountShown(userId: Long): Boolean {
+        val key = if (userId > 0L) "welcome_discount_shown_$userId" else "welcome_discount_shown_default"
+        return prefs.getBoolean(key, false)
+    }
+
+    fun setWelcomeDiscountShown(userId: Long, shown: Boolean = true) {
+        val key = if (userId > 0L) "welcome_discount_shown_$userId" else "welcome_discount_shown_default"
+        prefs.edit().putBoolean(key, shown).apply()
+    }
 }

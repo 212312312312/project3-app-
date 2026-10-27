@@ -24,9 +24,11 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.auth.api.phone.SmsRetriever
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -35,24 +37,33 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.gson.JsonParser
 import com.taxiapp.client.analytics.AnalyticsManager
 import com.taxiapp.client.network.ApiClient
 import com.taxiapp.client.network.GoogleAuthRequestDto
-import com.taxiapp.client.network.MessageResponse
 import com.taxiapp.client.network.dto.LoginResponseDto
 import com.taxiapp.client.network.dto.SmsRequestDto
 import com.taxiapp.client.network.dto.SmsVerifyDto
 import com.taxiapp.client.utils.AppSignatureHelper
 import com.taxiapp.client.utils.SessionManager
 import com.taxiapp.client.utils.ViewUtils
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import retrofit2.Response
 
 class MainActivity : BaseActivity() {
+
+    companion object {
+        private const val PREFS_SMS_STATE = "sms_pending_state"
+        private const val KEY_PENDING_PHONE = "pending_phone"
+        private const val KEY_PENDING_TIMESTAMP = "pending_timestamp"
+        private const val KEY_PENDING_IS_LINKING = "pending_is_linking"
+        private const val SMS_COOLDOWN_MS = 60_000L
+        private const val SMS_VALIDITY_MS = 180_000L // 3 минуты авто-восстановления экрана ввода кода при перезапуске
+    }
 
     private lateinit var sessionManager: SessionManager
 
@@ -132,11 +143,12 @@ class MainActivity : BaseActivity() {
         val token = sessionManager.fetchAuthToken()
         val phone = sessionManager.getUserPhone()
         if (token != null && phone.isNotEmpty()) {
+            clearPendingSmsState()
             updateFcmTokenOnServer()
             goToHomeActivity()
             return
         } else if (token != null) {
-            if (savedInstanceState == null) {
+            if (savedInstanceState == null && !hasValidPendingLinkingState()) {
                 sessionManager.clearSession()
             }
         }
@@ -181,6 +193,7 @@ class MainActivity : BaseActivity() {
         }
 
         initUI()
+        setupBackNavigation()
 
         btnGetCode.setOnClickListener {
             val rawNumber = etPhoneNumber.text.toString()
@@ -190,6 +203,17 @@ class MainActivity : BaseActivity() {
             }
             fullPhoneNumber = "0$rawNumber"
             isLinkingPhoneState = false
+
+            // Если для этого номера уже был отправлен код менее 60 секунд назад —
+            // сразу открываем экран ввода кода с оставшимся таймером без лишнего запроса
+            val remainingCooldownMs = getRemainingCooldownMs(fullPhoneNumber)
+            if (remainingCooldownMs > 0L) {
+                showSmsScreen(fullPhoneNumber)
+                startResendTimer(remainingCooldownMs)
+                startSmsRetriever()
+                return@setOnClickListener
+            }
+
             requestSms(fullPhoneNumber)
         }
 
@@ -201,6 +225,15 @@ class MainActivity : BaseActivity() {
             }
             fullPhoneNumber = "0$rawNumber"
             isLinkingPhoneState = true
+
+            val remainingCooldownMs = getRemainingCooldownMs(fullPhoneNumber)
+            if (remainingCooldownMs > 0L) {
+                showSmsScreen(fullPhoneNumber)
+                startResendTimer(remainingCooldownMs)
+                startSmsRetriever()
+                return@setOnClickListener
+            }
+
             requestSms(fullPhoneNumber)
         }
 
@@ -223,12 +256,103 @@ class MainActivity : BaseActivity() {
             }
         }
 
-        tvResendCode.setOnClickListener { requestSms(fullPhoneNumber) }
+        tvResendCode.setOnClickListener { requestSms(fullPhoneNumber, isResend = true) }
 
         setupOtpInputs()
+
+        // Автоматически восстанавливаем экран ввода СМС, если пользователь случайно свернул/закрыл приложение после запроса кода
+        restorePendingSmsStateIfNeeded()
+    }
+
+    private fun setupBackNavigation() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    layoutSms.visibility == View.VISIBLE -> {
+                        // Позволяем пользователю вернуться с экрана ввода СМС к вводу номера телефона (например, если ошибся цифрой)
+                        resendTimer?.cancel()
+                        otpEdits.forEach { it.text.clear() }
+                        layoutSms.visibility = View.GONE
+                        if (isLinkingPhoneState) {
+                            layoutLinkPhone.visibility = View.VISIBLE
+                        } else {
+                            layoutPhone.visibility = View.VISIBLE
+                        }
+                    }
+                    layoutLinkPhone.visibility == View.VISIBLE -> {
+                        clearPendingSmsState()
+                        sessionManager.clearSession()
+                        layoutLinkPhone.visibility = View.GONE
+                        layoutPhone.visibility = View.VISIBLE
+                    }
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
+                }
+            }
+        })
+    }
+
+    private fun savePendingSmsState(phone: String, isLinking: Boolean) {
+        getSharedPreferences(PREFS_SMS_STATE, Context.MODE_PRIVATE).edit()
+            .putString(KEY_PENDING_PHONE, phone)
+            .putLong(KEY_PENDING_TIMESTAMP, System.currentTimeMillis())
+            .putBoolean(KEY_PENDING_IS_LINKING, isLinking)
+            .apply()
+    }
+
+    private fun clearPendingSmsState() {
+        getSharedPreferences(PREFS_SMS_STATE, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
+    private fun hasValidPendingLinkingState(): Boolean {
+        val prefs = getSharedPreferences(PREFS_SMS_STATE, Context.MODE_PRIVATE)
+        val ts = prefs.getLong(KEY_PENDING_TIMESTAMP, 0L)
+        val isLinking = prefs.getBoolean(KEY_PENDING_IS_LINKING, false)
+        return isLinking && (System.currentTimeMillis() - ts in 1..SMS_VALIDITY_MS)
+    }
+
+    private fun getRemainingCooldownMs(phone: String): Long {
+        val prefs = getSharedPreferences(PREFS_SMS_STATE, Context.MODE_PRIVATE)
+        val savedPhone = prefs.getString(KEY_PENDING_PHONE, null)
+        val savedTs = prefs.getLong(KEY_PENDING_TIMESTAMP, 0L)
+        if (savedPhone != phone || savedTs <= 0L) return 0L
+        val elapsed = System.currentTimeMillis() - savedTs
+        return (SMS_COOLDOWN_MS - elapsed).coerceAtLeast(0L)
+    }
+
+    private fun restorePendingSmsStateIfNeeded() {
+        val prefs = getSharedPreferences(PREFS_SMS_STATE, Context.MODE_PRIVATE)
+        val savedPhone = prefs.getString(KEY_PENDING_PHONE, null) ?: return
+        val savedTs = prefs.getLong(KEY_PENDING_TIMESTAMP, 0L)
+        val savedIsLinking = prefs.getBoolean(KEY_PENDING_IS_LINKING, false)
+
+        val elapsed = System.currentTimeMillis() - savedTs
+        if (elapsed in 0..SMS_VALIDITY_MS) {
+            fullPhoneNumber = savedPhone
+            isLinkingPhoneState = savedIsLinking
+            val rawDigits = savedPhone.removePrefix("0")
+            if (savedIsLinking) {
+                etLinkPhoneNumber.setText(rawDigits)
+            } else {
+                etPhoneNumber.setText(rawDigits)
+            }
+            showSmsScreen(savedPhone)
+            val remainingCooldown = (SMS_COOLDOWN_MS - elapsed).coerceAtLeast(0L)
+            if (remainingCooldown > 0L) {
+                startResendTimer(remainingCooldown)
+            } else {
+                enableResendButtonImmediately()
+            }
+            startSmsRetriever()
+        } else {
+            clearPendingSmsState()
+        }
     }
 
     private fun saveLoginSessionData(body: LoginResponseDto) {
+        clearPendingSmsState()
         sessionManager.saveAuthToken(body.token)
         sessionManager.saveUserId(body.userId)
         if (!body.refreshToken.isNullOrEmpty()) {
@@ -307,7 +431,7 @@ class MainActivity : BaseActivity() {
                             goToHomeActivity()
                         }
                     } else {
-                        handleSmsError(response.code())
+                        handleSmsError(response)
                     }
                 } else {
                     val response = ApiClient.instance.verifySmsCode(request)
@@ -328,7 +452,7 @@ class MainActivity : BaseActivity() {
                             checkWhereToGo(body.isNewUser)
                         }
                     } else {
-                        handleSmsError(response.code())
+                        handleSmsError(response)
                     }
                 }
             } catch (e: CancellationException) {
@@ -341,9 +465,37 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun handleSmsError(code: Int) {
-        if (code == 409) showToast("Цей номер вже зайнятий")
-        else showToast("Невірний код")
+    private fun extractErrorMessage(response: Response<*>, fallback: String): String {
+        return try {
+            val raw = response.errorBody()?.string()
+            if (raw.isNullOrBlank()) return fallback
+            val json = JsonParser.parseString(raw).asJsonObject
+            when {
+                json.has("message") && !json.get("message").isJsonNull -> json.get("message").asString
+                json.has("reason") && !json.get("reason").isJsonNull -> json.get("reason").asString
+                json.has("error") && !json.get("error").isJsonNull -> json.get("error").asString
+                else -> fallback
+            }
+        } catch (_: Exception) {
+            fallback
+        }
+    }
+
+    private fun handleSmsError(response: Response<*>) {
+        val code = response.code()
+        val serverMsg = extractErrorMessage(
+            response,
+            if (code == 409) "Цей номер вже зайнятий" else "Невірний код"
+        )
+        showToast(serverMsg)
+        // Если код аннулирован (превышены 3 попытки) или устарел — сбрасываем локальный кулдаун, чтобы клиент мог сразу запросить новый
+        if (serverMsg.contains("анульовано", ignoreCase = true) ||
+            serverMsg.contains("застарів", ignoreCase = true) ||
+            serverMsg.contains("не знайдено", ignoreCase = true)
+        ) {
+            clearPendingSmsState()
+            enableResendButtonImmediately()
+        }
         otpEdits.forEach { it.text.clear() }
         otpEdits[0].requestFocus()
     }
@@ -398,21 +550,26 @@ class MainActivity : BaseActivity() {
         super.onDestroy()
     }
 
-    private fun startResendTimer() {
+    private fun enableResendButtonImmediately() {
+        resendTimer?.cancel()
+        tvResendCode.text = "Відправити повторно"
+        tvResendCode.isClickable = true
+        tvResendCode.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.taxi_yellow))
+    }
+
+    private fun startResendTimer(durationMs: Long = SMS_COOLDOWN_MS) {
         resendTimer?.cancel()
         tvResendCode.isClickable = false
         tvResendCode.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
 
-        resendTimer = object : CountDownTimer(60000, 1000) {
+        resendTimer = object : CountDownTimer(durationMs, 1000) {
             override fun onTick(millisUntilFinished: Long) {
-                val seconds = millisUntilFinished / 1000
+                val seconds = (millisUntilFinished / 1000).coerceAtLeast(1L)
                 tvResendCode.text = "Відправити повторно через $seconds"
             }
 
             override fun onFinish() {
-                tvResendCode.text = "Відправити повторно"
-                tvResendCode.isClickable = true
-                tvResendCode.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.taxi_yellow))
+                enableResendButtonImmediately()
             }
         }.start()
     }
@@ -443,7 +600,7 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun requestSms(phone: String) {
+    private fun requestSms(phone: String, isResend: Boolean = false) {
         setLoading(true)
         val request = SmsRequestDto(phoneNumber = phone)
         lifecycleScope.launch {
@@ -452,13 +609,40 @@ class MainActivity : BaseActivity() {
                 if (isFinishing || isDestroyed) return@launch
                 setLoading(false)
                 if (response.isSuccessful) {
+                    val existingRemainingMs = getRemainingCooldownMs(phone)
+                    if (isResend || existingRemainingMs <= 0L) {
+                        savePendingSmsState(phone, isLinkingPhoneState)
+                        startResendTimer(SMS_COOLDOWN_MS)
+                        showToast("Код надіслано!")
+                    } else {
+                        startResendTimer(existingRemainingMs)
+                    }
                     showSmsScreen(phone)
-                    showToast("Код надіслано!")
-                    startResendTimer()
                     startSmsRetriever()
+                } else if (response.code() == 429) {
+                    val serverMsg = extractErrorMessage(response, "Зачекайте 60 секунд перед повторним запитом СМС")
+                    // Если это 60-секундный кулдаун (а не 5-минутный лимит спама), все равно открываем экран ввода уже отправленного кода!
+                    if (!serverMsg.contains("5 хвилин", ignoreCase = true) && !serverMsg.contains("ліміт", ignoreCase = true)) {
+                        val remainingMs = getRemainingCooldownMs(phone).let { if (it > 0L) it else SMS_COOLDOWN_MS }
+                        if (getRemainingCooldownMs(phone) <= 0L) {
+                            savePendingSmsState(phone, isLinkingPhoneState)
+                        }
+                        showSmsScreen(phone)
+                        startResendTimer(remainingMs)
+                        startSmsRetriever()
+                        if (isResend) {
+                            showToast(serverMsg)
+                        }
+                    } else {
+                        showToast(serverMsg)
+                    }
                 } else {
-                    if (response.code() == 403) showToast("Доступ заборонено (Блок/Бан)")
-                    else showToast("Помилка: ${response.message()}")
+                    if (response.code() == 403) {
+                        showToast("Доступ заборонено (Блок/Бан)")
+                    } else {
+                        val serverMsg = extractErrorMessage(response, "Помилка відправки СМС")
+                        showToast(serverMsg)
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -628,7 +812,11 @@ class MainActivity : BaseActivity() {
                 msg.contains("Error", true) ||
                 msg.contains("заборонено") ||
                 msg.contains("Невірний") ||
-                msg.contains("зайнятий")
+                msg.contains("зайнятий") ||
+                msg.contains("Зачекайте", true) ||
+                msg.contains("Перевищено", true) ||
+                msg.contains("застарів", true) ||
+                msg.contains("анульовано", true)
         showTopMessage(msg, isError)
     }
 }

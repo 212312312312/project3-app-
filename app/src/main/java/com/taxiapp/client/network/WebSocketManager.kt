@@ -130,7 +130,15 @@ class WebSocketManager(
         currentNearbyDriversSub?.let { subscribeToNearbyDrivers(it.first, it.second, forceResubscribe = true) }
         currentCardBindSub?.let { subscribeToCardBinding(it.first, it.second, forceResubscribe = true) }
 
-        pendingLocationRequest?.let { sendClientLocation(it) }
+        // Отправляем отложенный запрос координат пина с небольшой задержкой (350 мс),
+        // чтобы STOMP-брокер на сервере гарантированно успел зарегистрировать фрейм SUBSCRIBE для /topic/nearby-drivers/{clientId}
+        pendingLocationRequest?.let { req ->
+            reconnectHandler.postDelayed({
+                if (isConnected()) {
+                    sendClientLocation(req)
+                }
+            }, 350L)
+        }
     }
 
     @SuppressLint("CheckResult")

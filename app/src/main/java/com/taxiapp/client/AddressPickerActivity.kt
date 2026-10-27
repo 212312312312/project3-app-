@@ -349,44 +349,21 @@ class AddressPickerActivity : BaseActivity() {
         nearbySuggestionsJob?.cancel()
         nearbySuggestionsJob = lifecycleScope.launch {
             try {
-                val response = ApiClient.instance.getNearbySuggestions(
-                    lat = anchor.latitude,
-                    lng = anchor.longitude,
+                val finalSuggestions = ReverseGeocoderHelper.fetchOrGenerateSuggestions(
+                    context = applicationContext,
+                    anchor = anchor,
                     lang = lang,
                     limit = 6
                 )
-                if (response.isSuccessful && response.body() != null) {
-                    val dtos = response.body()!!
-                    val mapped = dtos.map { dto ->
-                        PlaceSuggestion(
-                            placeId = dto.placeId,
-                            title = dto.title,
-                            subtitle = dto.subtitle,
-                            distanceMeters = dto.distanceMeters,
-                            lat = dto.lat,
-                            lng = dto.lng,
-                            category = dto.category
-                        )
-                    }
-                    // Приоритетно берем адреса >= 2000 м, но никогда не оставляем список пустым,
-                    // если сервер отдал валидные элементы
-                    val over2km = mapped.filter { (it.distanceMeters ?: 0) >= MIN_SUGGESTION_DISTANCE_METERS }
-                    val finalSuggestions = if (over2km.isNotEmpty()) over2km else mapped
-
-                    if (finalSuggestions.isNotEmpty()) {
-                        cachedNearbySuggestions = finalSuggestions
-                        ReverseGeocoderHelper.updateMemoryCache(anchor, lang, finalSuggestions)
-
-                        if (latestSearchQuery.length < 2 && ::adapter.isInitialized) {
-                            adapter.submitList(cachedNearbySuggestions)
-                        }
+                if (!isFinishing && !isDestroyed && finalSuggestions.isNotEmpty()) {
+                    cachedNearbySuggestions = finalSuggestions
+                    if (latestSearchQuery.length < 2 && ::adapter.isInitialized) {
+                        adapter.submitList(cachedNearbySuggestions)
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                // При отсутствии сети оставляем уже предзагруженный кэш
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -474,6 +451,8 @@ class AddressPickerActivity : BaseActivity() {
 
             if (latA != 0.0 && lngA != 0.0) {
                 fieldCoordinates[etOrigin] = LatLng(latA, lngA)
+            } else if (addressText.isNotEmpty()) {
+                fieldCoordinates[etOrigin] = LatLng(cityLat, cityLng)
             }
 
             etOrigin.requestFocus()

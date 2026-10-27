@@ -150,6 +150,69 @@ class MapRouteController(
         }
     }
 
+    /**
+     * Локальный гео-расчет оставшегося времени поездки (в секундах) по реальному положению
+     * водителя относительно полилинии маршрута и точки назначения (0 сетевых запросов к серверу).
+     */
+    fun computeRemainingTripDurationSeconds(
+        driverPos: LatLng?,
+        destPos: LatLng?,
+        routePoints: List<LatLng>?,
+        totalDistanceMeters: Int,
+        totalDurationSeconds: Int
+    ): Int? {
+        if (driverPos == null || (driverPos.latitude == 0.0 && driverPos.longitude == 0.0)) {
+            return null
+        }
+
+        if (!routePoints.isNullOrEmpty() && routePoints.size >= 2) {
+            var closestSegmentIndex = 0
+            var closestPointOnSegment = routePoints[0]
+            var minDistanceToRoute = Double.MAX_VALUE
+
+            for (i in 0 until routePoints.size - 1) {
+                val p = findNearestPointOnSegment(driverPos, routePoints[i], routePoints[i + 1])
+                val d = SphericalUtil.computeDistanceBetween(driverPos, p)
+                if (d < minDistanceToRoute) {
+                    minDistanceToRoute = d
+                    closestSegmentIndex = i
+                    closestPointOnSegment = p
+                }
+            }
+
+            if (minDistanceToRoute <= 200.0) {
+                var remainingMeters = SphericalUtil.computeDistanceBetween(
+                    closestPointOnSegment,
+                    routePoints[closestSegmentIndex + 1]
+                )
+                for (i in (closestSegmentIndex + 1) until (routePoints.size - 1)) {
+                    remainingMeters += SphericalUtil.computeDistanceBetween(routePoints[i], routePoints[i + 1])
+                }
+
+                val fullRouteMeters = if (totalDistanceMeters > 0) {
+                    totalDistanceMeters.toDouble()
+                } else {
+                    SphericalUtil.computeLength(routePoints)
+                }
+
+                val avgSpeedMps = if (fullRouteMeters > 50.0 && totalDurationSeconds > 0) {
+                    (fullRouteMeters / totalDurationSeconds.toDouble()).coerceIn(5.0, 22.0)
+                } else {
+                    9.7
+                }
+
+                return (remainingMeters / avgSpeedMps).toInt().coerceAtLeast(60)
+            }
+        }
+
+        val targetDest = destPos ?: routePoints?.lastOrNull() ?: return null
+        if (targetDest.latitude == 0.0 && targetDest.longitude == 0.0) return null
+
+        val straightMeters = SphericalUtil.computeDistanceBetween(driverPos, targetDest)
+        val estimatedRoadMeters = straightMeters * 1.3
+        return (estimatedRoadMeters / 9.7).toInt().coerceAtLeast(60)
+    }
+
     fun clearMainRoutePolylines() {
         routeAnimator?.cancel()
         routeAnimator = null

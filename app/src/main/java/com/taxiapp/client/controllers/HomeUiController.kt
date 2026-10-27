@@ -759,7 +759,9 @@ class HomeUiController(
         }
 
         val mapCenter = map.cameraPosition.target
-        val searchRadiusMeters = 750.0
+        // Синхронизировано с серверным радиусом (2000 м + буфер 500 м на смещение камеры),
+        // чтобы клиент не отсекал машины в 800–2000 м от пина
+        val searchRadiusMeters = 2500.0
         val driversInRange = drivers.filter { driver ->
             val driverPos = LatLng(driver.lat, driver.lng)
             val distance = SphericalUtil.computeDistanceBetween(mapCenter, driverPos)

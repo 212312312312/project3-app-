@@ -41,6 +41,7 @@ class OrderTimersController(private val context: Context) {
     private var inProgressEtaRunnable: Runnable? = null
     private var activeInProgressOrderId: String? = null
     private var activeInProgressStartElapsedMs: Long = 0L
+    private var lastGeoEtaRefreshRealtimeMs: Long = 0L
 
     private val boostTimerHandler = Handler(Looper.getMainLooper())
     private var boostRunnable: Runnable? = null
@@ -183,9 +184,15 @@ class OrderTimersController(private val context: Context) {
         waitingTimerHandler.post(runnable)
     }
 
+    /**
+     * Запускает синхронизированный расчет времени прибытия (в шапке и на маркере карты) для статуса IN_PROGRESS.
+     * Приоритетно опирается на реальный остаток маршрута по GPS водителя (geoRemainingSecondsProvider),
+     * не создавая сетевой нагрузки на сервер. Если GPS водителя еще не поступил — использует время от startedAt.
+     */
     fun startInProgressEtaTimer(
         order: TaxiOrderDto,
         fallbackDurationSeconds: Int,
+        geoRemainingSecondsProvider: (() -> Int?)? = null,
         onTickMinutesLeft: (minutesLeft: Int, arrivalTimeFormatted: String) -> Unit
     ) {
         val totalDurationSec = (order.durationSeconds?.takeIf { it > 0 } ?: fallbackDurationSeconds)
@@ -214,8 +221,14 @@ class OrderTimersController(private val context: Context) {
 
         val runnable = object : Runnable {
             override fun run() {
-                val elapsedSec = ((SystemClock.elapsedRealtime() - activeInProgressStartElapsedMs).coerceAtLeast(0L) / 1000L).toInt()
-                val remainingSec = (totalDurationSec - elapsedSec).coerceAtLeast(60)
+                val geoRemSec = geoRemainingSecondsProvider?.invoke()
+                val remainingSec = if (geoRemSec != null && geoRemSec > 0) {
+                    geoRemSec.coerceAtLeast(60)
+                } else {
+                    val elapsedSec = ((SystemClock.elapsedRealtime() - activeInProgressStartElapsedMs).coerceAtLeast(0L) / 1000L).toInt()
+                    (totalDurationSec - elapsedSec).coerceAtLeast(60)
+                }
+
                 val minutesLeft = kotlin.math.ceil(remainingSec / 60.0).toInt().coerceAtLeast(1)
 
                 val cal = java.util.Calendar.getInstance().apply {
@@ -226,11 +239,26 @@ class OrderTimersController(private val context: Context) {
                 val sdf = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
                 onTickMinutesLeft(minutesLeft, sdf.format(cal.time))
 
-                inProgressEtaHandler.postDelayed(this, 10_000L)
+                inProgressEtaHandler.postDelayed(this, 15_000L)
             }
         }
         inProgressEtaRunnable = runnable
+        lastGeoEtaRefreshRealtimeMs = nowElapsedMs
         inProgressEtaHandler.post(runnable)
+    }
+
+    /**
+     * Вызывается при приходе новых GPS-координат водителя по WebSocket (с троттлингом раз в 5 сек),
+     * чтобы время до финиша обновлялось плавно по мере реального приближения авто к точке Б.
+     */
+    fun refreshInProgressEtaIfNeeded() {
+        val runnable = inProgressEtaRunnable ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastGeoEtaRefreshRealtimeMs >= 5_000L) {
+            lastGeoEtaRefreshRealtimeMs = now
+            inProgressEtaHandler.removeCallbacks(runnable)
+            inProgressEtaHandler.post(runnable)
+        }
     }
 
     fun stopInProgressEtaTimer() {
@@ -238,6 +266,7 @@ class OrderTimersController(private val context: Context) {
         inProgressEtaRunnable = null
         activeInProgressOrderId = null
         activeInProgressStartElapsedMs = 0L
+        lastGeoEtaRefreshRealtimeMs = 0L
     }
 
     fun stopWaitingTimer(cardWaitingTimer: View? = null) {

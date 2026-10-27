@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -56,6 +57,8 @@ class ActiveOrderUiController(
     interface StatusCallbacks {
         val map: GoogleMap?
         val originPlace: Place?
+        val decodedRoutePoints: List<LatLng>?
+        val routeDistanceMeters: Int
         val routeDurationSeconds: Int
         val isDarkMode: Boolean
         fun onSetDecodedRoutePoints(points: List<LatLng>?)
@@ -75,12 +78,14 @@ class ActiveOrderUiController(
     }
 
     var isOrderDetailsExpanded: Boolean = false
+    var isAnimatingOrDraggingDetails: Boolean = false
     var isCameraFocusedOnSearch: Boolean = false
     var unreadChatMessages: Int = 0
     var lastKnownDriverLatLng: LatLng? = null
     var lastKnownDriverBearing: Float = 0f
 
     private var maxDetailsHeight: Int = 0
+    private var isDetailsHeightMeasured: Boolean = false
     private var orderDetailsAnimator: ValueAnimator? = null
     private var statusBlinkAnimator: ObjectAnimator? = null
     private var searchTiltRunnable: Runnable? = null
@@ -97,9 +102,45 @@ class ActiveOrderUiController(
         mapRouteController.resetCameraTilt(mMap, forceStopAnimation = wasFocusedOnSearch)
     }
 
+    private fun ensureMaxDetailsHeightMeasured() {
+        if (isDetailsHeightMeasured && maxDetailsHeight > 0) return
+
+        val cardWidth = if (binding.activeOrderCard.width > 0) {
+            binding.activeOrderCard.width
+        } else {
+            val lp = binding.activeOrderCard.layoutParams as? ViewGroup.MarginLayoutParams
+            val sideMargins = (lp?.leftMargin ?: 0) + (lp?.rightMargin ?: 0)
+            activity.resources.displayMetrics.widthPixels - sideMargins
+        }
+        val innerMargins = (binding.layoutExpandableDetails.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+            it.leftMargin + it.rightMargin
+        } ?: 0
+        val targetWidth = (cardWidth - innerMargins).coerceAtLeast(1)
+
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(targetWidth, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        binding.layoutExpandableDetails.measure(widthSpec, heightSpec)
+        maxDetailsHeight = binding.layoutExpandableDetails.measuredHeight
+        isDetailsHeightMeasured = true
+    }
+
+    private fun setDetailsHardwareLayer(enabled: Boolean) {
+        val layerType = if (enabled) View.LAYER_TYPE_HARDWARE else View.LAYER_TYPE_NONE
+        if (binding.layoutExpandableDetails.layerType != layerType) {
+            binding.layoutExpandableDetails.setLayerType(layerType, null)
+        }
+        if (binding.mapSolidOverlay.layerType != layerType) {
+            binding.mapSolidOverlay.setLayerType(layerType, null)
+        }
+    }
+
     fun setupExpandableDetailsTouchListener() {
         var startY = 0f
         var startHeight = 0
+
+        // Отключаем конфликтующий системный LayoutTransition (animateLayoutChanges="true" в XML),
+        // чтобы он не перехватывал кадры у ручного свайпа и ValueAnimator.
+        (binding.layoutExpandableDetails.parent?.parent as? ViewGroup)?.layoutTransition = null
 
         binding.handleTouchZone.setOnTouchListener { v, event ->
             val order = viewModel.activeOrder.value
@@ -109,31 +150,29 @@ class ActiveOrderUiController(
 
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    orderDetailsAnimator?.cancel()
                     startY = event.rawY
                     v.parent.requestDisallowInterceptTouchEvent(true)
 
-                    val cardWidth = if (binding.activeOrderCard.width > 0) {
-                        binding.activeOrderCard.width
-                    } else {
-                        activity.resources.displayMetrics.widthPixels
-                    }
-                    val widthSpec = View.MeasureSpec.makeMeasureSpec(cardWidth, View.MeasureSpec.EXACTLY)
-                    val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-                    binding.layoutExpandableDetails.measure(widthSpec, heightSpec)
-                    maxDetailsHeight = binding.layoutExpandableDetails.measuredHeight
+                    ensureMaxDetailsHeightMeasured()
+                    isAnimatingOrDraggingDetails = true
+                    setDetailsHardwareLayer(true)
 
-                    startHeight = binding.layoutExpandableDetails.height
+                    startHeight = if (binding.layoutExpandableDetails.visibility == View.VISIBLE) {
+                        binding.layoutExpandableDetails.height
+                    } else {
+                        0
+                    }
                     val params = binding.layoutExpandableDetails.layoutParams
-                    params.height = startHeight
-                    binding.layoutExpandableDetails.layoutParams = params
+                    if (params.height != startHeight) {
+                        params.height = startHeight
+                        binding.layoutExpandableDetails.layoutParams = params
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val diffY = startY - event.rawY
-                    var newHeight = (startHeight + diffY).toInt()
-
-                    if (newHeight < 0) newHeight = 0
-                    if (newHeight > maxDetailsHeight) newHeight = maxDetailsHeight
+                    val newHeight = (startHeight + diffY).toInt().coerceIn(0, maxDetailsHeight)
 
                     if (newHeight > 0 && binding.layoutExpandableDetails.visibility != View.VISIBLE) {
                         binding.layoutExpandableDetails.visibility = View.VISIBLE
@@ -144,11 +183,13 @@ class ActiveOrderUiController(
                     }
 
                     val params = binding.layoutExpandableDetails.layoutParams
-                    params.height = newHeight
-                    binding.layoutExpandableDetails.layoutParams = params
+                    if (params.height != newHeight) {
+                        params.height = newHeight
+                        binding.layoutExpandableDetails.layoutParams = params
+                    }
 
                     if (maxDetailsHeight > 0) {
-                        val progress = newHeight.toFloat() / maxDetailsHeight.toFloat()
+                        val progress = (newHeight.toFloat() / maxDetailsHeight.toFloat()).coerceIn(0f, 1f)
                         binding.mapSolidOverlay.alpha = progress
                     }
                     true
@@ -156,7 +197,11 @@ class ActiveOrderUiController(
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     v.parent.requestDisallowInterceptTouchEvent(false)
 
-                    val currentHeight = binding.layoutExpandableDetails.height
+                    val currentHeight = if (binding.layoutExpandableDetails.visibility == View.VISIBLE) {
+                        binding.layoutExpandableDetails.height
+                    } else {
+                        0
+                    }
 
                     if (Math.abs(startY - event.rawY) < 20) {
                         v.performClick()
@@ -189,52 +234,61 @@ class ActiveOrderUiController(
     }
 
     fun toggleOrderDetails(onUpdateMapPadding: () -> Unit) {
-        isOrderDetailsExpanded = !isOrderDetailsExpanded
-
-        val autoTransition = AutoTransition().apply { duration = 250 }
-        TransitionManager.beginDelayedTransition(binding.activeOrderCard as ViewGroup, autoTransition)
-
-        binding.layoutExpandableDetails.visibility = if (isOrderDetailsExpanded) View.VISIBLE else View.GONE
-
-        if (!activity.isDestroyed && !activity.isFinishing) {
-            onUpdateMapPadding()
-        }
+        animateOrderDetailsToState(!isOrderDetailsExpanded)
     }
 
     fun animateOrderDetailsToState(expand: Boolean) {
         val overlay = binding.mapSolidOverlay
+        ensureMaxDetailsHeightMeasured()
 
-        val cardWidth = if (binding.activeOrderCard.width > 0) {
-            binding.activeOrderCard.width
+        val startHeight = if (binding.layoutExpandableDetails.visibility == View.VISIBLE) {
+            binding.layoutExpandableDetails.height
         } else {
-            activity.resources.displayMetrics.widthPixels
+            0
         }
-        val widthSpec = View.MeasureSpec.makeMeasureSpec(cardWidth, View.MeasureSpec.EXACTLY)
-        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        binding.layoutExpandableDetails.measure(widthSpec, heightSpec)
-
-        maxDetailsHeight = binding.layoutExpandableDetails.measuredHeight
-        val startHeight = binding.layoutExpandableDetails.height
         val targetHeight = if (expand) maxDetailsHeight else 0
 
         isOrderDetailsExpanded = expand
+        isAnimatingOrDraggingDetails = true
+        setDetailsHardwareLayer(true)
 
         if (expand) {
-            binding.layoutExpandableDetails.visibility = View.VISIBLE
+            if (binding.layoutExpandableDetails.visibility != View.VISIBLE) {
+                val params = binding.layoutExpandableDetails.layoutParams
+                params.height = startHeight
+                binding.layoutExpandableDetails.layoutParams = params
+                binding.layoutExpandableDetails.visibility = View.VISIBLE
+            }
             overlay.visibility = View.VISIBLE
         }
 
         orderDetailsAnimator?.cancel()
 
+        if (startHeight == targetHeight) {
+            if (!expand) {
+                binding.layoutExpandableDetails.visibility = View.GONE
+                overlay.visibility = View.GONE
+                overlay.alpha = 0f
+            } else {
+                overlay.alpha = 1f
+            }
+            setDetailsHardwareLayer(false)
+            isAnimatingOrDraggingDetails = false
+            return
+        }
+
         val animator = ValueAnimator.ofInt(startHeight, targetHeight)
         orderDetailsAnimator = animator
 
-        animator.duration = 250
+        animator.duration = 220
+        animator.interpolator = FastOutSlowInInterpolator()
         animator.addUpdateListener { animation ->
             val h = animation.animatedValue as Int
             val params = binding.layoutExpandableDetails.layoutParams
-            params.height = h
-            binding.layoutExpandableDetails.layoutParams = params
+            if (params.height != h) {
+                params.height = h
+                binding.layoutExpandableDetails.layoutParams = params
+            }
 
             if (maxDetailsHeight > 0) {
                 overlay.alpha = (h.toFloat() / maxDetailsHeight.toFloat()).coerceIn(0f, 1f)
@@ -243,17 +297,26 @@ class ActiveOrderUiController(
 
         animator.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
+                setDetailsHardwareLayer(false)
                 if (expand) {
                     val params = binding.layoutExpandableDetails.layoutParams
-                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    params.height = maxDetailsHeight
                     binding.layoutExpandableDetails.layoutParams = params
+                    overlay.alpha = 1f
                 } else {
                     binding.layoutExpandableDetails.visibility = View.GONE
                     overlay.visibility = View.GONE
+                    overlay.alpha = 0f
                     val params = binding.layoutExpandableDetails.layoutParams
                     params.height = 0
                     binding.layoutExpandableDetails.layoutParams = params
                 }
+                isAnimatingOrDraggingDetails = false
+            }
+
+            override fun onAnimationCancel(animation: Animator) {
+                setDetailsHardwareLayer(false)
+                isAnimatingOrDraggingDetails = false
             }
         })
         animator.start()
@@ -264,6 +327,9 @@ class ActiveOrderUiController(
         orderDetailsAnimator = null
 
         isOrderDetailsExpanded = false
+        isAnimatingOrDraggingDetails = false
+        isDetailsHeightMeasured = false
+        setDetailsHardwareLayer(false)
 
         binding.layoutExpandableDetails.visibility = View.GONE
         val params = binding.layoutExpandableDetails.layoutParams
@@ -546,6 +612,7 @@ class ActiveOrderUiController(
             binding.layoutOrderCommentCard.visibility = View.GONE
         }
 
+        isDetailsHeightMeasured = false
         updateStatusUI(order, callbacks)
     }
 
@@ -701,7 +768,7 @@ class ActiveOrderUiController(
             cancelSearchTiltAndFlattenMap(mMap)
         }
 
-        if (binding.activeOrderCard.visibility == View.VISIBLE && binding.activeOrderCard.height > 0) {
+        if (binding.activeOrderCard.visibility == View.VISIBLE && binding.activeOrderCard.height > 0 && isStatusChanged) {
             (binding.activeOrderCard as? ViewGroup)?.let { cardGroup ->
                 val transition = AutoTransition().apply {
                     duration = 250
@@ -1137,7 +1204,24 @@ class ActiveOrderUiController(
 
                 orderTimersController.startInProgressEtaTimer(
                     order = order,
-                    fallbackDurationSeconds = callbacks.routeDurationSeconds
+                    fallbackDurationSeconds = callbacks.routeDurationSeconds,
+                    geoRemainingSecondsProvider = {
+                        val driverPos = lastKnownDriverLatLng ?: order.driver?.let { drv ->
+                            if (drv.latitude != null && drv.longitude != null && drv.latitude != 0.0 && drv.longitude != 0.0) {
+                                LatLng(drv.latitude, drv.longitude)
+                            } else null
+                        }
+                        val destPos = if (order.destLat != null && order.destLng != null && order.destLat != 0.0 && order.destLng != 0.0) {
+                            LatLng(order.destLat, order.destLng)
+                        } else null
+                        mapRouteController.computeRemainingTripDurationSeconds(
+                            driverPos = driverPos,
+                            destPos = destPos,
+                            routePoints = callbacks.decodedRoutePoints,
+                            totalDistanceMeters = order.distanceMeters ?: callbacks.routeDistanceMeters,
+                            totalDurationSeconds = order.durationSeconds ?: callbacks.routeDurationSeconds
+                        )
+                    }
                 ) { minutesLeft, arrivalTimeFormatted ->
                     binding.tvHeaderEtaTime.text = arrivalTimeFormatted
                     mapRouteController.updateInProgressDestinationBadge(callbacks.map, order, minutesLeft)

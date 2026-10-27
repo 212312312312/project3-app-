@@ -28,11 +28,17 @@ data class ReverseGeocodeResponseDto(
 )
 
 data class NearbyPlaceSuggestionDto(
-    val placeId: String,
-    val title: String,
-    val subtitle: String,
-    val lat: Double,
-    val lng: Double,
+    @SerializedName(value = "placeId", alternate = ["id", "place_id"])
+    val placeId: String? = null,
+    @SerializedName(value = "title", alternate = ["name", "street", "address"])
+    val title: String? = null,
+    @SerializedName(value = "subtitle", alternate = ["city", "district", "description", "secondaryText"])
+    val subtitle: String? = null,
+    @SerializedName(value = "lat", alternate = ["latitude"])
+    val lat: Double? = null,
+    @SerializedName(value = "lng", alternate = ["longitude", "lon"])
+    val lng: Double? = null,
+    @SerializedName(value = "distanceMeters", alternate = ["distance", "distance_meters"])
     val distanceMeters: Int? = null,
     val category: String? = null
 )
