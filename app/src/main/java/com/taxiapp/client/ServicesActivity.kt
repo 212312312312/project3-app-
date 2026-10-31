@@ -22,6 +22,11 @@ import kotlinx.coroutines.withContext
 
 class ServicesActivity : BaseActivity() {
 
+    companion object {
+        @Volatile
+        private var cachedServices: List<TaxiService>? = null
+    }
+
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ServicesAdapter
     private lateinit var btnApply: MaterialButton
@@ -72,7 +77,30 @@ class ServicesActivity : BaseActivity() {
         }
     }
 
+    private fun bindServicesToAdapter(rawServices: List<TaxiService>) {
+        val mapped = rawServices.map { service ->
+            service.copy(isSelected = preSelectedIds.contains(service.id))
+        }
+        servicesList.clear()
+        servicesList.addAll(mapped)
+
+        adapter = ServicesAdapter(servicesList) { clickedService ->
+            clickedService.isSelected = !clickedService.isSelected
+            val idx = servicesList.indexOf(clickedService)
+            if (idx != -1) {
+                adapter.notifyItemChanged(idx)
+            }
+        }
+        recyclerView.adapter = adapter
+    }
+
     private fun loadServices() {
+        val cached = cachedServices
+        if (!cached.isNullOrEmpty()) {
+            bindServicesToAdapter(cached)
+            return
+        }
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val token = sessionManager.fetchAuthToken()
@@ -89,26 +117,11 @@ class ServicesActivity : BaseActivity() {
 
                 if (response.isSuccessful && response.body() != null) {
                     val services = response.body()!!
-
-                    services.forEach { service ->
-                        if (preSelectedIds.contains(service.id)) {
-                            service.isSelected = true
-                        }
-                    }
+                    cachedServices = services
 
                     withContext(Dispatchers.Main) {
                         if (isFinishing || isDestroyed) return@withContext
-                        servicesList.clear()
-                        servicesList.addAll(services)
-
-                        adapter = ServicesAdapter(servicesList) { clickedService ->
-                            clickedService.isSelected = !clickedService.isSelected
-                            val idx = servicesList.indexOf(clickedService)
-                            if (idx != -1) {
-                                adapter.notifyItemChanged(idx)
-                            }
-                        }
-                        recyclerView.adapter = adapter
+                        bindServicesToAdapter(services)
                     }
                 } else {
                     withContext(Dispatchers.Main) {

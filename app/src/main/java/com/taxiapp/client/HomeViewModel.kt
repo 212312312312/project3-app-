@@ -86,9 +86,32 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     var currentCity: CityData? = null
     var currentRoutePolyline: String? = null
 
+    data class RouteCalculationKey(
+        val routePolyline: String?,
+        val distanceMeters: Int,
+        val waypointsCount: Int,
+        val originLat: Double?,
+        val originLng: Double?
+    )
+
+    companion object {
+        private const val PRICE_CACHE_TTL_MS = 120_000L // 2 минуты кэша для одного и того же маршрута
+    }
+
+    private var lastCalculatedKey: RouteCalculationKey? = null
+    private var lastCalculatedTariffs: List<CarTariffDto>? = null
+    private var lastCalculationTimeMs: Long = 0L
+    private var cachedBaseTariffs: List<CarTariffDto>? = null
+
     private var observedWebSocketManager: WebSocketManager? = null
     private var directionsJob: Job? = null
     private var calculatePriceJob: Job? = null
+
+    fun invalidateTariffCalculationCache() {
+        lastCalculatedKey = null
+        lastCalculatedTariffs = null
+        lastCalculationTimeMs = 0L
+    }
 
     // Именованные Observer'ы для корректной отписки в onCleared() (устранение утечки памяти)
     private val orderCanceledObserver = Observer<String?> { canceledId ->
@@ -362,13 +385,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         distanceMeters: Int,
         waypointsCount: Int = 0,
         originLat: Double? = null,
-        originLng: Double? = null
+        originLng: Double? = null,
+        force: Boolean = false
     ) {
-        _isLoading.value = true
-        calculatePriceJob?.cancel()
+        if (routePolyline != null && distanceMeters > 0) {
+            val newKey = RouteCalculationKey(
+                routePolyline = routePolyline,
+                distanceMeters = distanceMeters,
+                waypointsCount = waypointsCount,
+                originLat = originLat,
+                originLng = originLng
+            )
+            val now = System.currentTimeMillis()
+            val cachedRouteTariffs = lastCalculatedTariffs
+            val isCacheFresh = (now - lastCalculationTimeMs) < PRICE_CACHE_TTL_MS
 
-        calculatePriceJob = viewModelScope.launch {
-            if (routePolyline != null && distanceMeters > 0) {
+            if (!force && newKey == lastCalculatedKey && !cachedRouteTariffs.isNullOrEmpty() && isCacheFresh) {
+                _isLoading.value = false
+                if (_availableTariffs.value != cachedRouteTariffs) {
+                    _availableTariffs.value = cachedRouteTariffs
+                }
+                return
+            }
+
+            _isLoading.value = true
+            calculatePriceJob?.cancel()
+
+            calculatePriceJob = viewModelScope.launch {
                 val fakeWaypointsList = if (waypointsCount > 0) List(waypointsCount) { "wp" } else emptyList()
                 val request = CalculatePriceRequestDto(
                     googleRoutePolyline = routePolyline,
@@ -381,29 +424,56 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val response = ApiClient.instance.calculatePrice(request)
                     _isLoading.value = false
-                    if (response.isSuccessful && response.body() != null) {
-                        _availableTariffs.value = response.body()
+                    val body = response.body()
+                    if (response.isSuccessful && !body.isNullOrEmpty()) {
+                        lastCalculatedKey = newKey
+                        lastCalculatedTariffs = body
+                        lastCalculationTimeMs = System.currentTimeMillis()
+                        _availableTariffs.value = body
                     } else {
-                        loadBaseTariffsSuspend()
+                        loadBaseTariffsSuspend(forceNetwork = false)
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     _isLoading.value = false
-                    loadBaseTariffsSuspend()
+                    loadBaseTariffsSuspend(forceNetwork = false)
                 }
-            } else {
-                loadBaseTariffsSuspend()
+            }
+        } else {
+            val baseCached = cachedBaseTariffs
+            if (!force && !baseCached.isNullOrEmpty()) {
+                _isLoading.value = false
+                if (_availableTariffs.value != baseCached) {
+                    _availableTariffs.value = baseCached
+                }
+                return
+            }
+
+            _isLoading.value = true
+            calculatePriceJob?.cancel()
+            calculatePriceJob = viewModelScope.launch {
+                loadBaseTariffsSuspend(forceNetwork = force)
             }
         }
     }
 
-    private suspend fun loadBaseTariffsSuspend() {
+    private suspend fun loadBaseTariffsSuspend(forceNetwork: Boolean = false) {
+        val baseCached = cachedBaseTariffs
+        if (!forceNetwork && !baseCached.isNullOrEmpty()) {
+            _isLoading.value = false
+            _availableTariffs.value = baseCached
+            return
+        }
         try {
             val response = ApiClient.instance.getActiveTariffs()
             _isLoading.value = false
             if (response.isSuccessful) {
-                _availableTariffs.value = response.body() ?: emptyList()
+                val tariffs = response.body() ?: emptyList()
+                if (tariffs.isNotEmpty()) {
+                    cachedBaseTariffs = tariffs
+                }
+                _availableTariffs.value = tariffs
             }
         } catch (e: CancellationException) {
             throw e

@@ -315,9 +315,14 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
             } ?: ArrayList()
 
             tariffAdapter.updateExtraCost(servicesExtraCost)
-            binding.btnOrderTaxi.isEnabled = false
-            binding.btnOrderTaxi.text = "Оберіть тариф"
-            selectedTariffItem = null
+            selectedTariffItem = tariffAdapter.getSelectedTariff()
+            if (selectedTariffItem != null) {
+                binding.btnOrderTaxi.isEnabled = true
+                homeUiController.updateOrderButtonWithTime(scheduledDate, true)
+            } else {
+                binding.btnOrderTaxi.isEnabled = false
+                binding.btnOrderTaxi.text = "Оберіть тариф"
+            }
             showToast(if (selectedServiceIds.isNotEmpty()) "Послугу додано" else "Послугу вилучено")
         }
     }
@@ -471,7 +476,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         updatePaymentMethodFromSession()
         startPeriodicNearbyDriversRefresh()
 
-        if (binding.tariffsPanel.visibility == View.VISIBLE) {
+        if (binding.tariffsPanel.visibility == View.VISIBLE && availableTariffs.isEmpty()) {
             fetchTariffsAndShowPanel()
         }
 
@@ -1327,13 +1332,9 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         homeUiController.clearNearbyDrivers()
         stopDriverTracking()
         binding.addressPanel.visibility = View.GONE
-        homeUiController.setButtonsLoadingState(true)
         binding.tariffsPanel.layoutParams.height = (resources.displayMetrics.heightPixels * 0.45).toInt()
         binding.tariffsPanel.visibility = View.VISIBLE
         hasTrackedTariffsView = false
-        binding.tariffsRecyclerView.visibility = View.GONE
-        binding.tariffsShimmerContainer.visibility = View.VISIBLE
-        binding.tariffsShimmerContainer.startShimmer()
         binding.btnRecenterLocation.visibility = View.GONE
         homeUiController.setRecenterRouteButtonAnchor(R.id.tariffs_panel, convertDpToPixel(16f).toInt())
         binding.btnRecenterRoute.visibility = View.GONE
@@ -1341,8 +1342,24 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         binding.btnMenuIcon.setImageResource(R.drawable.ic_arrow_back_black)
         binding.btnMenuIcon.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
 
+        val hasCalculatedRouteTariffs = viewModel.currentRoutePolyline != null &&
+                availableTariffs.any { (it.calculatedPrice ?: 0.0) > 0.0 }
+
+        if (!hasCalculatedRouteTariffs) {
+            homeUiController.setButtonsLoadingState(true)
+            binding.tariffsRecyclerView.visibility = View.GONE
+            binding.tariffsShimmerContainer.visibility = View.VISIBLE
+            binding.tariffsShimmerContainer.startShimmer()
+        }
+
         viewModel.currentRoutePolyline?.let { route ->
-            viewModel.loadTariffsAndCalculatePrice(route, viewModel.routeInfo.value?.first ?: 0)
+            viewModel.loadTariffsAndCalculatePrice(
+                routePolyline = route,
+                distanceMeters = viewModel.routeInfo.value?.first ?: routeDistanceMeters,
+                waypointsCount = currentWaypoints.size,
+                originLat = originPlace?.latLng?.latitude,
+                originLng = originPlace?.latLng?.longitude
+            )
         }
         stopPeriodicNearbyDriversRefresh()
     }
@@ -1747,6 +1764,7 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
     private fun resetUI() {
         tariffCustomPrices.clear()
         tariffAdapter.clearCustomPrices()
+        viewModel.invalidateTariffCalculationCache()
     }
     private fun showCitySelectorDialog() = cityPickerLauncher.launch(Intent(this, CityPickerActivity::class.java))
     override fun onCreateOptionsMenu(menu: Menu?): Boolean = true

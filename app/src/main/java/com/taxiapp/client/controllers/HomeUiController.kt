@@ -1116,26 +1116,14 @@ class HomeUiController(
                 ?: availableTariffs.firstOrNull()
 
             if (defaultTariff != null) {
-                val finalPrice = tariffCustomPrices[defaultTariff.id] ?: defaultTariff.basePrice
-                updatedSelection = TariffItem(
-                    tariff = defaultTariff,
-                    priceString = String.format("%.0f", finalPrice),
-                    priceValue = finalPrice,
-                    addedValue = 0.0
-                )
                 tariffAdapter.setSelectedTariffId(defaultTariff.id)
+                updatedSelection = tariffAdapter.getSelectedTariff()
                 binding.btnOrderTaxi.isEnabled = true
                 updateOrderButtonWithTime(scheduledDate, true)
             }
         } else {
-            val newBasePrice = tariffCustomPrices[updatedSelection.tariff.id]
-            if (newBasePrice != null) {
-                updatedSelection = updatedSelection.copy(
-                    priceValue = newBasePrice,
-                    priceString = String.format("%.0f", newBasePrice)
-                )
-            }
             tariffAdapter.setSelectedTariffId(updatedSelection.tariff.id)
+            updatedSelection = tariffAdapter.getSelectedTariff() ?: updatedSelection
             binding.btnOrderTaxi.isEnabled = true
             updateOrderButtonWithTime(scheduledDate, true)
         }
