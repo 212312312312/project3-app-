@@ -35,4 +35,8 @@
     <color name="toast_background">#212121</color>      <color name="toast_text">#FFFFFF</color>            <color name="toast_shadow">#80FFFFFF</color>
     <color name="route_main">#3A3C3F</color> <color name="route_border">#2D2E30</color> <color name="route_pulse">#9CA3AF</color>
     <color name="shadow_start">#90FFFFFF</color> <color name="shadow_center">#30FFFFFF</color> <color name="shadow_end">#00FFFFFF</color>
-    <color name="taxi_text_dark">#F3F4F6</color>  <color name="taxi_text_light">#1F2937</color> <color name="info_window_bg">#222426</color>   <color name="info_window_text">#F3F4F6</color> </resources>
+    <color name="taxi_text_dark">#F3F4F6</color>  <color name="taxi_text_light">#1F2937</color> <color name="info_window_bg">#222426</color>   <color name="info_window_text">#F3F4F6</color>
+    <color name="tariff_fade_start">#FF1B1B1B</color>
+    <color name="tariff_fade_center">#D91B1B1B</color>
+    <color name="tariff_fade_end">#001B1B1B</color>
+</resources>

@@ -10,7 +10,6 @@
         <item name="android:fontFamily">@font/montserrat</item>
     </style>
 
-
     <style name="OtpBox">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">56dp</item>
@@ -21,13 +20,15 @@
         <item name="android:maxLength">1</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">#FFFFFF</item> </style>
+        <item name="android:textColor">#FFFFFF</item>
+    </style>
+
     <style name="RatingBarNoRipple" parent="Widget.AppCompat.RatingBar">
         <item name="colorControlNormal">#CCCCCC</item>
         <item name="colorControlActivated">#FFD700</item>
         <item name="android:background">@android:color/transparent</item>
-        <item name="android:colorControlHighlight">@android:color/transparent</item> </style>
-
+        <item name="android:colorControlHighlight">@android:color/transparent</item>
+    </style>
 
     <style name="BottomSheetDialogTheme" parent="Theme.MaterialComponents.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
@@ -38,6 +39,7 @@
         <item name="android:navigationBarColor">@color/almost_black</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o">false</item>
     </style>
+
     <style name="CustomBottomSheetStyle" parent="Widget.Design.BottomSheet.Modal">
         <item name="android:background">@android:color/transparent</item>
     </style>

@@ -1109,6 +1109,7 @@ class HomeUiController(
         var updatedSelection = currentSelectedItem
         if (updatedSelection == null) {
             binding.tariffsRecyclerView.scrollToPosition(0)
+            binding.tariffsScrollView.scrollTo(0, 0)
             val defaultTariff = availableTariffs.find { it.name.contains("Standard", ignoreCase = true) }
                 ?: availableTariffs.firstOrNull()
 
