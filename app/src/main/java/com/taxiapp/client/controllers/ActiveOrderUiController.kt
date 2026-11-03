@@ -947,12 +947,8 @@ class ActiveOrderUiController(
                 callbacks.onStopBoostTimer()
                 cancelSearchTiltAndFlattenMap(mMap)
 
-                val isPartner = (order.driver?.id == -1L)
-                AnalyticsManager.trackOrderAccepted(
-                    orderId = order.id,
-                    driverSource = if (isPartner) "evos_exchange" else "own_fleet",
-                    searchDurationSec = 45L
-                )
+                // ИСПРАВЛЕНО (фикс x2/x3 order_accepted): дедупликация по order.id и расчет реального времени поиска
+                viewModel.trackOrderAcceptedSafely(order)
 
                 mapRouteController.polylineMain?.remove()
                 mapRouteController.polylineMain = null
@@ -1296,10 +1292,12 @@ class ActiveOrderUiController(
                 binding.orderStatusText.text = activity.getString(R.string.status_cancelled)
                 binding.orderStatusText.setTextColor(ContextCompat.getColor(activity, R.color.taxi_red_cancel))
 
-                AnalyticsManager.trackOrderFailed(
+                // ИСПРАВЛЕНО (фикс x2 order_failed): дедупликация по order.id и расчет реального времени до отмены
+                viewModel.trackOrderFailedSafely(
                     orderId = order.id,
                     reason = order.cancellationReason ?: "Скасовано клієнтом",
-                    searchDurationSec = 60L
+                    createdAtStr = order.createdAt,
+                    fallbackSec = 60L
                 )
 
                 binding.layoutSearchControls.visibility = View.GONE

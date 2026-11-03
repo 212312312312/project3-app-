@@ -1054,11 +1054,8 @@ class HomeUiController(
         val endDistrict = destinationPlace.name?.split(",")?.getOrNull(1)?.trim() ?: "Місто"
         val deviceId = sessionManager.fetchDeviceId()
 
-        AnalyticsManager.trackOrderCreated(
-            orderId = "temp_${System.currentTimeMillis()}",
-            district = startDistrict,
-            basePrice = tariff.basePrice
-        )
+        // ИСПРАВЛЕНО (фикс фейковых/x2 order_created): событие order_created теперь отправляется в HomeViewModel
+        // строго после успешного ответа сервера с реальным ID заказа
 
         return CreateOrderRequestDto(
             fromAddress = originPlace.name ?: "А",

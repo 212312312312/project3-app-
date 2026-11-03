@@ -1369,7 +1369,12 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
             showToast("Немає тарифів")
             return
         }
-        if (!hasTrackedTariffsView) {
+        // ИСПРАВЛЕНО (фикс x2 tariffs_view): отправляем событие только когда панель тарифов реально открыта
+        // и маршрут построен (игнорируем фоновую предзагрузку базовых тарифов в onCreate/showAddressPanel)
+        val isRouteTariffsReady = binding.tariffsPanel.visibility == View.VISIBLE &&
+                !viewModel.currentRoutePolyline.isNullOrBlank() &&
+                availableTariffs.any { (it.calculatedPrice ?: 0.0) > 0.0 }
+        if (isRouteTariffsReady && !hasTrackedTariffsView) {
             AnalyticsManager.trackCustomEvent("tariffs_view", "${availableTariffs.size} тарифи(ів)")
             hasTrackedTariffsView = true
         }
@@ -1677,7 +1682,10 @@ class HomeActivity : BaseActivity(), OnMapReadyCallback {
         if (isFinishing || isDestroyed) return
         ChangePriceBottomSheet(basePrice, currentAddedValue) { newAddedValue ->
             viewModel.activeOrder.value?.let { order ->
-                AnalyticsManager.trackBoostClicked(order.id, newAddedValue, 30L)
+                if (newAddedValue > currentAddedValue) {
+                    val elapsedSec = viewModel.calculateElapsedSecondsFromUtc(order.createdAt, 30L)
+                    AnalyticsManager.trackBoostClicked(order.id, newAddedValue, elapsedSec)
+                }
             }
             viewModel.updateActiveOrderPrice(newAddedValue)
         }.show(supportFragmentManager, "ChangePriceActiveOrderBottomSheet")

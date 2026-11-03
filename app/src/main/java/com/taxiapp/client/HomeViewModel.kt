@@ -72,6 +72,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val orderStatus: LiveData<String> get() = _orderStatus
 
     private var lastTrackedCompletedOrderId: String? = null
+    private var lastTrackedAcceptedOrderId: String? = null
+    private var lastTrackedFailedOrderId: String? = null
 
     private val _routeInfo = MutableLiveData<Pair<Int, Int>>()
     val routeInfo: LiveData<Pair<Int, Int>> get() = _routeInfo
@@ -155,7 +157,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Безопасный парсинг серверного времени создания заказа и расчет прошедших секунд.
      */
-    private fun calculateElapsedSecondsFromUtc(createdAtStr: String?, fallbackSec: Long = 0L): Long {
+    fun calculateElapsedSecondsFromUtc(createdAtStr: String?, fallbackSec: Long = 0L): Long {
         val createdEpochMs = OrderTimersController.parseServerUtcToEpochMs(createdAtStr) ?: return fallbackSec
         val diffSec = (System.currentTimeMillis() - createdEpochMs) / 1000L
         return diffSec.coerceAtLeast(0L)
@@ -329,6 +331,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e("HomeViewModel", "Ошибка проверки статуса заказа: ${e.message}")
             }
         }
+    }
+
+    fun trackOrderAcceptedSafely(order: TaxiOrderDto) {
+        if (order.id.isBlank() || lastTrackedAcceptedOrderId == order.id) return
+        lastTrackedAcceptedOrderId = order.id
+
+        val isPartner = (order.driver?.id == -1L)
+        val durationSec = calculateElapsedSecondsFromUtc(order.createdAt, 45L)
+        AnalyticsManager.trackOrderAccepted(
+            orderId = order.id,
+            driverSource = if (isPartner) "evos_exchange" else "own_fleet",
+            searchDurationSec = durationSec
+        )
+    }
+
+    fun trackOrderFailedSafely(orderId: String, reason: String?, createdAtStr: String?, fallbackSec: Long = 0L) {
+        if (orderId.isBlank() || lastTrackedFailedOrderId == orderId) return
+        lastTrackedFailedOrderId = orderId
+
+        val durationSec = calculateElapsedSecondsFromUtc(createdAtStr, fallbackSec)
+        AnalyticsManager.trackOrderFailed(
+            orderId = orderId,
+            reason = reason ?: "Скасовано клієнтом",
+            searchDurationSec = durationSec
+        )
     }
 
     private fun trackOrderCompletedSafely(order: TaxiOrderDto) {
@@ -584,12 +611,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
                     val order = response.body()!!
-                    val durationSec = calculateElapsedSecondsFromUtc(order.createdAt, 0L)
-
-                    AnalyticsManager.trackOrderFailed(
-                        orderId = id,
-                        reason = reasonText ?: "Скасовано клієнтом",
-                        searchDurationSec = durationSec
+                    trackOrderFailedSafely(
+                        orderId = order.id.ifBlank { id },
+                        reason = reasonText ?: order.cancellationReason ?: "Скасовано клієнтом",
+                        createdAtStr = order.createdAt,
+                        fallbackSec = 0L
                     )
 
                     stopOrderStatusService(id)
@@ -641,6 +667,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoading.value = false
                 if (response.isSuccessful && response.body() != null) {
                     val order = response.body()!!
+
+                    AnalyticsManager.trackOrderCreated(
+                        orderId = order.id,
+                        district = request.districtStart ?: "Місто",
+                        basePrice = order.price
+                    )
 
                     activeOrderId = order.id
                     sessionManager.saveActiveOrderId(order.id)
