@@ -102,12 +102,6 @@ class MapRouteController(
     private var lockedDestOffsetX: Float = 0f
     private var lockedDestOffsetY: Float = 0f
 
-    private var cachedOrigWidthPx: Float = 0f
-    private var cachedOrigHeightPx: Float = 0f
-    private var cachedDestWidthPx: Float = 0f
-    private var cachedDestHeightPx: Float = 0f
-    private var cachedMinCardGapPx: Float = 0f
-
     // Единые рассчитанные границы маршрута (включающие вылет статичных плашек) для 1-го показа и кнопки btnRecenterRoute
     private var cachedIdealRouteBounds: LatLngBounds? = null
     private var cachedIdealRoutePaddingPx: Int = 0
@@ -115,13 +109,9 @@ class MapRouteController(
 
     // =========================================================================
     // БЫСТРАЯ МАТЕМАТИЧЕСКАЯ ПРОЕКЦИЯ MERCATOR (0 BINDER IPC ВЫЗОВОВ ПРИ ДВИЖЕНИИ КАМЕРЫ)
-    // И РАЗВЕДЕНИЕ ПО КАДРАМ VSYNC С НЕПРЕРЫВНОЙ АНИМАЦИЕЙ МАРШРУТА (60-120 FPS)
     // =========================================================================
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isProjectionCalibrated: Boolean = false
-    private var isIdleCalibrationScheduled: Boolean = false
-    private var lastCameraMoveUptimeMs: Long = 0L
-
     private var calibFocalScreenX: Float = 0f
     private var calibFocalScreenY: Float = 0f
     private var calibPadLeft: Int = -1
@@ -152,33 +142,25 @@ class MapRouteController(
     private var lastIdleSyncOverlayDest: View? = null
     private var lastBtnRecenterRouteRef: View? = null
 
-    private val cameraIdleCalibrationRunnable = object : Runnable {
-        override fun run() {
-            val elapsed = SystemClock.uptimeMillis() - lastCameraMoveUptimeMs
-            if (elapsed < 150L) {
-                mainHandler.postDelayed(this, 160L - elapsed)
-                return
+    private val cameraIdleCalibrationRunnable = Runnable {
+        try {
+            val map = lastIdleSyncMap
+            val ovOrig = lastIdleSyncOverlayOrigin
+            val ovDest = lastIdleSyncOverlayDest
+            if (map != null && ovOrig != null && ovDest != null) {
+                isProjectionCalibrated = false
+                updateSmartLabelsInternal(
+                    map = map,
+                    currentStatus = lastIdleSyncStatus,
+                    originPlace = lastIdleSyncOriginPlace,
+                    destinationPlace = lastIdleSyncDestPlace,
+                    decodedRoutePoints = lastIdleSyncRoutePoints,
+                    overlayOrigin = ovOrig,
+                    overlayDest = ovDest,
+                    forceExactIpcProjection = true
+                )
             }
-            isIdleCalibrationScheduled = false
-            try {
-                val map = lastIdleSyncMap
-                val ovOrig = lastIdleSyncOverlayOrigin
-                val ovDest = lastIdleSyncOverlayDest
-                if (map != null && ovOrig != null && ovDest != null) {
-                    isProjectionCalibrated = false
-                    updateSmartLabelsInternal(
-                        map = map,
-                        currentStatus = lastIdleSyncStatus,
-                        originPlace = lastIdleSyncOriginPlace,
-                        destinationPlace = lastIdleSyncDestPlace,
-                        decodedRoutePoints = lastIdleSyncRoutePoints,
-                        overlayOrigin = ovOrig,
-                        overlayDest = ovDest,
-                        forceExactIpcProjection = true
-                    )
-                }
-            } catch (_: Exception) {}
-        }
+        } catch (_: Exception) {}
     }
 
     private data class LabelCandidate(
@@ -196,23 +178,6 @@ class MapRouteController(
 
     fun getBitmapDescriptor(resId: Int): BitmapDescriptor? {
         return BitmapHelper.vectorToBitmapDescriptor(activity, resId)
-    }
-
-    /**
-     * O(1) быстрый отпечаток маршрута (вместо тяжелого O(N) List.hashCode() на 1000 точек в каждом кадре).
-     */
-    private fun fastPathFingerprint(points: List<LatLng>?): Int {
-        if (points.isNullOrEmpty()) return 0
-        val first = points.first()
-        val last = points.last()
-        val mid = points[points.size ushr 1]
-        var h = points.size
-        h = 31 * h + first.latitude.hashCode()
-        h = 31 * h + first.longitude.hashCode()
-        h = 31 * h + mid.latitude.hashCode()
-        h = 31 * h + last.latitude.hashCode()
-        h = 31 * h + last.longitude.hashCode()
-        return h
     }
 
     /**
@@ -343,7 +308,6 @@ class MapRouteController(
 
     fun clearMainRoutePolylines() {
         mainHandler.removeCallbacks(cameraIdleCalibrationRunnable)
-        isIdleCalibrationScheduled = false
         routeAnimator?.cancel()
         routeAnimator = null
         revealAnimator?.cancel()
@@ -499,7 +463,7 @@ class MapRouteController(
 
         lastBtnRecenterRouteRef = btnRecenterRoute
 
-        val pathHash = fastPathFingerprint(path)
+        val pathHash = path.hashCode()
         if (pathHash == lastDrawnPathHash && polylineMain != null) {
             return
         }
@@ -546,20 +510,8 @@ class MapRouteController(
         val transparentMain = Color.argb(0, Color.red(colorMain), Color.green(colorMain), Color.blue(colorMain))
         val transparentBorder = Color.argb(0, Color.red(colorBorder), Color.green(colorBorder), Color.blue(colorBorder))
 
-        // Упрощаем избыточные коллинеарные точки OSRM (с допуском 1.8 метра — меньше 0.4 пикселя на экране),
-        // чтобы GL-поток карты рендерил основную полилинию без лишней вершинной нагрузки при зуме/свайпе.
-        val renderMainPath = if (path.size > 110) {
-            try {
-                PolyUtil.simplify(path, 1.8)
-            } catch (_: Exception) {
-                path
-            }
-        } else {
-            path
-        }
-
         val borderOpts = PolylineOptions()
-            .addAll(renderMainPath)
+            .addAll(path)
             .width(20f)
             .color(transparentBorder)
             .startCap(RoundCap())
@@ -568,7 +520,7 @@ class MapRouteController(
         polylineBorder = map.addPolyline(borderOpts)
 
         val mainOpts = PolylineOptions()
-            .addAll(renderMainPath)
+            .addAll(path)
             .width(14f)
             .color(transparentMain)
             .startCap(RoundCap())
@@ -603,9 +555,7 @@ class MapRouteController(
             } else {
                 overlayOrigin.alpha = 0f
                 overlayOrigin.visibility = View.VISIBLE
-                val (ow, oh) = prepareOverlayHardwareAndMeasure(overlayOrigin)
-                cachedOrigWidthPx = ow
-                cachedOrigHeightPx = oh
+                prepareOverlayHardwareAndMeasure(overlayOrigin)
             }
         }
 
@@ -634,9 +584,7 @@ class MapRouteController(
 
             overlayDest.alpha = 0f
             overlayDest.visibility = View.VISIBLE
-            val (dw, dh) = prepareOverlayHardwareAndMeasure(overlayDest)
-            cachedDestWidthPx = dw
-            cachedDestHeightPx = dh
+            prepareOverlayHardwareAndMeasure(overlayDest)
         }
 
         if (!isSearchingState) {
@@ -692,7 +640,7 @@ class MapRouteController(
                     map = map,
                     colorMain = colorMain,
                     colorBorder = colorBorder,
-                    path = renderMainPath,
+                    path = path,
                     overlayOrigin = overlayOrigin,
                     overlayDest = overlayDest,
                     currentRoutePolylineProvider = currentRoutePolylineProvider,
@@ -896,19 +844,13 @@ class MapRouteController(
 
     /**
      * Анимация линии маршрута в стиле "гонки" (плавное прогрессивное заполнение от точки А до точки Б)
-     * с сохранением всех оригинальных параметров (ширина 8f, zIndex 2.5f, RoundCap, цикл 5500ms, те же цвета).
+     * с сохранением всех оригинальных параметров (ширина 8f, zIndex 2.5f, RoundCap, цикл 5500ms, те же цвета):
+     * - 0..3000 мс: Линия свечения (colorGlow) плавно и равномерно бежит/заполняет маршрут от старта А до финиша Б.
+     * - 3000..4500 мс: Заполненная линия плавно растворяется в базовый цвет маршрута (colorBase).
+     * - 4500..5500 мс: Короткая пауза перед следующим стартом от точки А.
      *
-     * КАК ДОСТИГАЕТСЯ 60+ FPS ПРИ НЕПРЕРЫВНОЙ РАБОТЕ АНИМАЦИИ ВО ВРЕМЯ ДВИЖЕНИЯ КАРТЫ (КАК В UKLON):
-     * 1) Упрощение геометрии Дугласа-Пекера (PolyUtil.simplify) для внутренней линии свечения (width 8f внутри 14f):
-     *    вместо передачи 500-1500 точек OSRM через Binder IPC в каждом кадре, маршрут сжимается до ~35-55 ключевых
-     *    поворотных вершин (прямые проспекты заменяются одним отрезком, по которому плавно скользит кончик линии).
-     *    Размер Parcel и число вершин для OpenGL уменьшаются в 15-25 раз!
-     * 2) Использование стандартного типа сопряжения вершин (как у основной линии polylineMain и polylineBorder)
-     *    вместо тяжелого JointType.ROUND, который заставлял GL-поток карты строить веер из 12 треугольников на каждую вершину.
-     * 3) Полный предрасчет всех кадров прогрессивного заполнения (prebuiltFrames) и цветов затухания (prebuiltFadeColors)
-     *    1 раз при старте — внутри ValueAnimator 0 аллокаций памяти, 0 циклов копирования и 0 бинарных поисков.
-     * 4) Разведение по фазе VSYNC с жестом карты: анимация никогда не останавливается при движении карты,
-     *    но если в текущую миллисекунду уже выполнился onCameraMove, отправка кадра полилинии сдвигается на следующий тик VSYNC.
+     * Анимация работает непрерывно (в том числе во время движения карты), а частота IPC-обновлений
+     * оптимизирована интервалом 28 мс (~36 FPS), чтобы карта одновременно выдавала стабильные 60+ FPS.
      */
     fun animateRouteDrawing(
         map: GoogleMap?,
@@ -926,27 +868,12 @@ class MapRouteController(
         val colorBase = ContextCompat.getColor(activity, R.color.route_main)
         val colorGlow = if (isDark) Color.rgb(240, 240, 240) else Color.rgb(112, 112, 112)
 
-        // Сжимаем избыточные точки на прямых участках для 8px-линии внутри 14px-маршрута до ~45 ключевых вершин
-        var animPath: List<LatLng> = try {
-            if (path.size > 48) PolyUtil.simplify(path, 4.5) else path
-        } catch (_: Exception) {
-            path
-        }
-        if (animPath.size > 56) {
-            animPath = try {
-                PolyUtil.simplify(animPath, 8.5)
-            } catch (_: Exception) {
-                animPath
-            }
-        }
-        if (animPath.size < 2) animPath = path
-
-        val n = animPath.size
+        val n = path.size
         val cumulativeDist = DoubleArray(n)
         var totalLength = 0.0
         for (i in 1 until n) {
-            val dLat = animPath[i].latitude - animPath[i - 1].latitude
-            val dLng = (animPath[i].longitude - animPath[i - 1].longitude) * 0.64
+            val dLat = path[i].latitude - path[i - 1].latitude
+            val dLng = (path[i].longitude - path[i - 1].longitude) * 0.64
             val segLen = hypot(dLat, dLng)
             totalLength += segLen
             cumulativeDist[i] = totalLength
@@ -954,74 +881,27 @@ class MapRouteController(
 
         if (totalLength <= 1e-9) return
 
-        // Предвычисляем 84 дискретных кадра заполнения маршрута (0 аллокаций и 0 циклов во время работы ValueAnimator!)
-        val totalFillFrames = 84
-        val prebuiltFrames = Array<List<LatLng>>(totalFillFrames) { frameIdx ->
-            val rawFill = frameIdx.toFloat() / (totalFillFrames - 1).toFloat()
-            val fillFraction = rawFill * (2f - rawFill) * 0.35f + rawFill * 0.65f
-            val targetDist = fillFraction * totalLength
-
-            val framePoints = ArrayList<LatLng>(n + 1)
-            framePoints.add(animPath[0])
-
-            var low = 0
-            var high = n - 1
-            while (low < high) {
-                val mid = (low + high + 1) ushr 1
-                if (cumulativeDist[mid] <= targetDist) {
-                    low = mid
-                } else {
-                    high = mid - 1
-                }
-            }
-
-            for (idx in 1..low) {
-                framePoints.add(animPath[idx])
-            }
-
-            if (low < n - 1) {
-                val segStartDist = cumulativeDist[low]
-                val segEndDist = cumulativeDist[low + 1]
-                val segSpan = segEndDist - segStartDist
-                if (segSpan > 1e-9) {
-                    val segT = ((targetDist - segStartDist) / segSpan).coerceIn(0.0, 1.0)
-                    val pStart = animPath[low]
-                    val pEnd = animPath[low + 1]
-                    val interpLat = pStart.latitude + (pEnd.latitude - pStart.latitude) * segT
-                    val interpLng = pStart.longitude + (pEnd.longitude - pStart.longitude) * segT
-                    framePoints.add(LatLng(interpLat, interpLng))
-                }
-            }
-            framePoints
-        }
-
-        val singleStartFrame = listOf(animPath[0])
-
-        val argbEvaluator = ArgbEvaluator()
-        val totalFadeSteps = 30
-        val prebuiltFadeColors = IntArray(totalFadeSteps) { step ->
-            val fadeFraction = 1f - (step.toFloat() / (totalFadeSteps - 1).toFloat()).coerceIn(0f, 1f)
-            argbEvaluator.evaluate(fadeFraction, colorBase, colorGlow) as Int
-        }
-
         val animOpts = PolylineOptions()
-            .add(animPath[0])
+            .add(path[0])
             .width(8f)
             .color(colorGlow)
             .zIndex(2.5f)
             .startCap(RoundCap())
             .endCap(RoundCap())
+            .jointType(JointType.ROUND)
 
         polylineAnim = map.addPolyline(animOpts)
 
         val totalDurationMs = 5500f
         val raceFillDurationMs = 3000f
         val fadeOutEndMs = 4500f
+        val argbEvaluator = ArgbEvaluator()
+        val reusableSubPath = ArrayList<LatLng>(n + 1)
 
         var lastColor = colorGlow
-        var lastFrameIdx = -1
         var wasCleared = false
         var lastIpcUpdateMs = 0L
+        val minIpcIntervalMs = 28L // Плавное непрерывное обновление (~36 FPS) без перегрузки Binder IPC
 
         routeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = totalDurationMs.toLong()
@@ -1038,51 +918,73 @@ class MapRouteController(
                     }
 
                     val nowMs = SystemClock.uptimeMillis()
-                    val sinceCameraMoveMs = nowMs - lastCameraMoveUptimeMs
-                    // Если в эту же миллисекунду (этот же кадр VSYNC) обрабатывается движение камеры —
-                    // пропускаем ровно 1 тик (8-16 мс), чтобы не складывать два IPC-вызова в один кадр.
-                    if (sinceCameraMoveMs in 0L..5L) {
-                        return@addUpdateListener
-                    }
-
-                    val minIntervalMs = if (sinceCameraMoveMs < 90L) 36L else 28L
                     val progress = animator.animatedValue as Float
                     val timeMs = progress * totalDurationMs
 
                     when {
                         // Фаза 1: Гонка — плавное заполнение маршрута от точки А (0%) до точки Б (100%)
                         timeMs <= raceFillDurationMs -> {
-                            wasCleared = false
-                            val rawFill = (timeMs / raceFillDurationMs).coerceIn(0f, 1f)
-                            val frameIdx = (rawFill * (totalFillFrames - 1)).toInt().coerceIn(0, totalFillFrames - 1)
-
-                            if (frameIdx == lastFrameIdx) return@addUpdateListener
-                            if (nowMs - lastIpcUpdateMs < minIntervalMs && frameIdx < totalFillFrames - 1) {
+                            if (wasCleared) {
+                                wasCleared = false
+                            } else if (nowMs - lastIpcUpdateMs < minIpcIntervalMs && timeMs < raceFillDurationMs - 24f) {
                                 return@addUpdateListener
                             }
-
-                            lastFrameIdx = frameIdx
                             lastIpcUpdateMs = nowMs
+
+                            val rawFill = (timeMs / raceFillDurationMs).coerceIn(0f, 1f)
+                            val fillFraction = rawFill * (2f - rawFill) * 0.35f + rawFill * 0.65f
+                            val targetDist = fillFraction * totalLength
+
+                            reusableSubPath.clear()
+                            reusableSubPath.add(path[0])
+
+                            var low = 0
+                            var high = n - 1
+                            while (low < high) {
+                                val mid = (low + high + 1) ushr 1
+                                if (cumulativeDist[mid] <= targetDist) {
+                                    low = mid
+                                } else {
+                                    high = mid - 1
+                                }
+                            }
+
+                            for (idx in 1..low) {
+                                reusableSubPath.add(path[idx])
+                            }
+
+                            if (low < n - 1) {
+                                val segStartDist = cumulativeDist[low]
+                                val segEndDist = cumulativeDist[low + 1]
+                                val segSpan = segEndDist - segStartDist
+                                if (segSpan > 1e-9) {
+                                    val segT = ((targetDist - segStartDist) / segSpan).coerceIn(0.0, 1.0)
+                                    val pStart = path[low]
+                                    val pEnd = path[low + 1]
+                                    val interpLat = pStart.latitude + (pEnd.latitude - pStart.latitude) * segT
+                                    val interpLng = pStart.longitude + (pEnd.longitude - pStart.longitude) * segT
+                                    reusableSubPath.add(LatLng(interpLat, interpLng))
+                                }
+                            }
 
                             if (lastColor != colorGlow) {
                                 lastColor = colorGlow
                                 currentPoly.color = colorGlow
                             }
-                            currentPoly.points = prebuiltFrames[frameIdx]
+                            currentPoly.points = reusableSubPath
                         }
 
                         // Фаза 2: Плавное затухание заполненной линии после достижения финиша Б
                         timeMs <= fadeOutEndMs -> {
-                            if (lastFrameIdx != totalFillFrames - 1) {
-                                lastFrameIdx = totalFillFrames - 1
-                                currentPoly.points = prebuiltFrames[totalFillFrames - 1]
+                            if (nowMs - lastIpcUpdateMs < minIpcIntervalMs && timeMs < fadeOutEndMs - 24f) {
+                                return@addUpdateListener
                             }
-                            val fadeProgress = ((timeMs - raceFillDurationMs) / (fadeOutEndMs - raceFillDurationMs)).coerceIn(0f, 1f)
-                            val fadeStep = (fadeProgress * (totalFadeSteps - 1)).toInt().coerceIn(0, totalFadeSteps - 1)
-                            val currentColor = prebuiltFadeColors[fadeStep]
+                            lastIpcUpdateMs = nowMs
+
+                            val fadeFraction = 1f - ((timeMs - raceFillDurationMs) / (fadeOutEndMs - raceFillDurationMs)).coerceIn(0f, 1f)
+                            val currentColor = argbEvaluator.evaluate(fadeFraction, colorBase, colorGlow) as Int
                             if (currentColor != lastColor) {
                                 lastColor = currentColor
-                                lastIpcUpdateMs = nowMs
                                 currentPoly.color = currentColor
                             }
                         }
@@ -1091,9 +993,10 @@ class MapRouteController(
                         else -> {
                             if (!wasCleared) {
                                 wasCleared = true
-                                lastFrameIdx = -1
                                 lastIpcUpdateMs = nowMs
-                                currentPoly.points = singleStartFrame
+                                reusableSubPath.clear()
+                                reusableSubPath.add(path[0])
+                                currentPoly.points = reusableSubPath
                                 if (lastColor != colorBase) {
                                     lastColor = colorBase
                                     currentPoly.color = colorBase
@@ -1403,7 +1306,7 @@ class MapRouteController(
         val destVisible = destLoc != null && overlayDest.visibility == View.VISIBLE
         if (!originVisible && !destVisible) return
 
-        val routeHash = fastPathFingerprint(decodedRoutePoints)
+        val routeHash = decodedRoutePoints?.hashCode() ?: 0
         if (!isSmartLabelsLocked || (routeHash != 0 && routeHash != lockedForPathHash)) {
             buildAndLockRouteBoundsAndLabels(
                 originPlace = originPlace,
@@ -1426,7 +1329,6 @@ class MapRouteController(
             lastCamLat = camPos.target.latitude
             lastCamLng = camPos.target.longitude
             lastCamZoom = camPos.zoom
-            lastCameraMoveUptimeMs = SystemClock.uptimeMillis()
 
             lastIdleSyncMap = map
             lastIdleSyncStatus = currentStatus
@@ -1436,10 +1338,8 @@ class MapRouteController(
             lastIdleSyncOverlayOrigin = overlayOrigin
             lastIdleSyncOverlayDest = overlayDest
 
-            if (!isIdleCalibrationScheduled) {
-                isIdleCalibrationScheduled = true
-                mainHandler.postDelayed(cameraIdleCalibrationRunnable, 160L)
-            }
+            mainHandler.removeCallbacks(cameraIdleCalibrationRunnable)
+            mainHandler.postDelayed(cameraIdleCalibrationRunnable, 180L)
         }
 
         val padChanged = calibPadLeft != lastPadLeft ||
@@ -1512,13 +1412,13 @@ class MapRouteController(
             var destX = destPtX + lockedDestOffsetX
             var destY = destPtY + lockedDestOffsetY
 
-            val origW = if ( overlayOrigin.width > 0) overlayOrigin.width.toFloat() else cachedOrigWidthPx
-            val origH = if ( overlayOrigin.height > 0) overlayOrigin.height.toFloat() else cachedOrigHeightPx
-            val destW = if ( overlayDest.width > 0) overlayDest.width.toFloat() else cachedDestWidthPx
-            val destH = if ( overlayDest.height > 0) overlayDest.height.toFloat() else cachedDestHeightPx
+            val origW = (if (overlayOrigin.width > 0) overlayOrigin.width else overlayOrigin.measuredWidth).toFloat()
+            val origH = (if (overlayOrigin.height > 0) overlayOrigin.height else overlayOrigin.measuredHeight).toFloat()
+            val destW = (if (overlayDest.width > 0) overlayDest.width else overlayDest.measuredWidth).toFloat()
+            val destH = (if (overlayDest.height > 0) overlayDest.height else overlayDest.measuredHeight).toFloat()
 
             if (origW > 0f && origH > 0f && destW > 0f && destH > 0f) {
-                val minGap = if (cachedMinCardGapPx > 0f) cachedMinCardGapPx else convertDpToPixel(10f).also { cachedMinCardGapPx = it }
+                val minGap = convertDpToPixel(10f)
                 val overlapX = min(origX + origW, destX + destW) - max(origX, destX) + minGap
                 val overlapY = min(origY + origH, destY + destH) - max(origY, destY) + minGap
 
@@ -1624,7 +1524,6 @@ class MapRouteController(
 
         val baseSidePaddingPx = convertDpToPixel(42f)
         cachedIdealRoutePaddingPx = baseSidePaddingPx.toInt()
-        cachedMinCardGapPx = convertDpToPixel(10f)
 
         val topSafeY = convertDpToPixel(56f)
         val bottomSafeY = (screenH - padBottom - convertDpToPixel(10f)).coerceAtLeast(topSafeY + convertDpToPixel(140f))
@@ -1686,7 +1585,7 @@ class MapRouteController(
         expandRouteBox(origPin)
         expandRouteBox(dstPin)
 
-        val currentHash = fastPathFingerprint(decodedRoutePoints).let { if (it != 0) it else rawBounds.hashCode() }
+        val currentHash = decodedRoutePoints?.hashCode() ?: rawBounds.hashCode()
         if (!isSmartLabelsLocked || lockedForPathHash != currentHash) {
             val routeScreenPts = ArrayList<PointF>(128)
             if (!decodedRoutePoints.isNullOrEmpty()) {
@@ -1739,19 +1638,13 @@ class MapRouteController(
             val dp1 = convertDpToPixel(1f).coerceAtLeast(0.5f)
 
             val (origW, origH) = if (overlayOrigin != null) {
-                prepareOverlayHardwareAndMeasure(overlayOrigin).also {
-                    cachedOrigWidthPx = it.first
-                    cachedOrigHeightPx = it.second
-                }
+                prepareOverlayHardwareAndMeasure(overlayOrigin)
             } else {
                 Pair(convertDpToPixel(156f), convertDpToPixel(54f))
             }
 
             val (destW, destH) = if (overlayDest != null) {
-                prepareOverlayHardwareAndMeasure(overlayDest).also {
-                    cachedDestWidthPx = it.first
-                    cachedDestHeightPx = it.second
-                }
+                prepareOverlayHardwareAndMeasure(overlayDest)
             } else {
                 Pair(convertDpToPixel(156f), convertDpToPixel(54f))
             }
@@ -1793,7 +1686,7 @@ class MapRouteController(
                     )
                 }
 
-                val minCardGap = cachedMinCardGapPx
+                val minCardGap = convertDpToPixel(10f)
                 val repulsionRadius = convertDpToPixel(28f)
                 val maxResolvableOverlapPx = convertDpToPixel(34f)
                 val pinsDist = hypot(origPin.x - dstPin.x, origPin.y - dstPin.y)
@@ -2030,8 +1923,11 @@ class MapRouteController(
         expandedBoundsBuilder.include(rawBounds.northeast)
 
         if (originLoc != null && (overlayOrigin == null || overlayOrigin.visibility == View.VISIBLE)) {
-            val origW = if (cachedOrigWidthPx > 0f) cachedOrigWidthPx else convertDpToPixel(156f)
-            val origH = if (cachedOrigHeightPx > 0f) cachedOrigHeightPx else convertDpToPixel(54f)
+            val (origW, origH) = if (overlayOrigin != null) {
+                prepareOverlayHardwareAndMeasure(overlayOrigin)
+            } else {
+                Pair(convertDpToPixel(156f), convertDpToPixel(54f))
+            }
             val origPinPt = origPin ?: toVirtualScreen(originLoc)
             val l = origPinPt.x + lockedOriginOffsetX
             val t = origPinPt.y + lockedOriginOffsetY
@@ -2042,8 +1938,11 @@ class MapRouteController(
         }
 
         if (destLoc != null && (overlayDest == null || overlayDest.visibility == View.VISIBLE)) {
-            val destW = if (cachedDestWidthPx > 0f) cachedDestWidthPx else convertDpToPixel(156f)
-            val destH = if (cachedDestHeightPx > 0f) cachedDestHeightPx else convertDpToPixel(54f)
+            val (destW, destH) = if (overlayDest != null) {
+                prepareOverlayHardwareAndMeasure(overlayDest)
+            } else {
+                Pair(convertDpToPixel(156f), convertDpToPixel(54f))
+            }
             val dstPinPt = dstPin ?: toVirtualScreen(destLoc)
             val l = dstPinPt.x + lockedDestOffsetX
             val t = dstPinPt.y + lockedDestOffsetY

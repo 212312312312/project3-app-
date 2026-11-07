@@ -57,7 +57,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // 3. Обработка тихого пуша со сменой статуса заказа
+        // 3. Обработка пуша со сменой статуса заказа
         if (type == "ORDER_STATUS_UPDATE") {
             val orderIdStr = remoteMessage.data["orderId"]
             val status = remoteMessage.data["status"]
@@ -66,18 +66,29 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
             if (!orderIdStr.isNullOrEmpty() && !status.isNullOrEmpty()) {
                 if (status == "COMPLETED" || status == "CANCELLED") {
-                    val stopIntent = Intent(this, OrderStatusService::class.java).apply {
-                        action = OrderStatusService.ACTION_STOP
-                        putExtra(OrderStatusService.EXTRA_ORDER_ID, orderIdStr)
-                    }
-                    startService(stopIntent)
+                    try {
+                        stopService(Intent(this, OrderStatusService::class.java))
+                    } catch (_: Exception) {}
+
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    manager.cancel(orderIdStr.hashCode())
 
                     if (status == "COMPLETED") {
                         OrderStatusBus.notifyOrderUpdated(orderIdStr)
+                        if (body.isNotBlank()) {
+                            showNotification(title, body)
+                        }
                     } else {
                         val sessionManager = SessionManager(applicationContext)
+                        sessionManager.fetchActiveOrderId()?.let { activeUuid ->
+                            manager.cancel(activeUuid.hashCode())
+                        }
                         sessionManager.clearActiveOrderId()
                         OrderStatusBus.notifyOrderCanceled(orderIdStr)
+
+                        // Показываем клиенту пуш-уведомление об отмене заказа диспетчером
+                        val cancelBody = body.ifBlank { "Ваше замовлення було скасовано диспетчером." }
+                        showNotification(title, cancelBody)
                     }
                 } else {
                     val updateIntent = Intent(this, OrderStatusService::class.java).apply {
@@ -86,10 +97,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         putExtra("custom_title", title)
                         putExtra("custom_body", body)
                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(updateIntent)
-                    } else {
-                        startService(updateIntent)
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(updateIntent)
+                        } else {
+                            startService(updateIntent)
+                        }
+                    } catch (_: Exception) {
+                        if (body.isNotBlank()) {
+                            showNotification(title, body)
+                        }
                     }
 
                     OrderStatusBus.notifyOrderUpdated(orderIdStr)
@@ -148,6 +165,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setColor(ContextCompat.getColor(this, R.color.notification_icon_bg))
             .setContentTitle(title)
             .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
